@@ -36,3 +36,8 @@ tmp_*.json
 .joycode/
 .trae/
 .playwright-cli/
+
+# ============ 临时调试产物（2026-09-07 已清理，防止再生） ============
+ui*.xml
+tmp_*.json
+test_*.json
