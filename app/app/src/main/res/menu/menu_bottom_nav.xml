@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/nav_bookshelf"
+        android:icon="@drawable/ic_bookshelf"
+        android:title="书架" />
+
+    <item
+        android:id="@+id/nav_bookstore"
+        android:icon="@drawable/ic_bookstore"
+        android:title="书城" />
+
+    <item
+        android:id="@+id/nav_discussion"
+        android:icon="@drawable/ic_discussion"
+        android:title="讨论"/>
+
+    <item
+        android:id="@+id/nav_mine"
+        android:icon="@drawable/ic_mine"
+        android:title="我的" />
+
+</menu>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--底部导航菜单-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_shelf"
+        android:title="书架"/>
+    <item
+        android:id="@+id/nav_store"
+        android:title="书城"/>
+    <item
+        android:id="@+id/nav_discussion"
+        android:title="讨论"/>
+    <item
+        android:id="@+id/nav_mine"
+        android:title="我的"/>
+</menu>

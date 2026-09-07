@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <color name="bg_dark">#121212</color>
+    <color name="primary_dark">#42A5F5</color>
+    <color name="accent_dark">#FFA726</color>
+    <color name="text_primary_dark">#FFFFFF</color>
+    <color name="text_secondary_dark">#BDBDBD</color>
+
+    <!-- 海滨主题色 -->
+    <color name="cyan_200">#B2EBF2</color>
+    <color name="cyan_300">#80DEEA</color>
+    <color name="cyan_400">#4DD0E1</color>
+    <color name="cyan_600">#00ACC1</color>
+    <color name="cyan_700">#0097A7</color>
+    <color name="seaside_bg">#F0F9FA</color>
+    <color name="seaside_card_bg">#FFFFFF</color>
+    <color name="seaside_text_primary">#212121</color>
+    <color name="seaside_text_secondary">#757575</color>
+    <color name="gray">#757575</color>
+    <color name="bg_light">#F7F9FC</color>
+
+    <color name="nav_bg">#FFF5E6</color>       <!-- 导航栏浅米色背景 -->
+    <color name="yellow_highlight">#FFD166</color> <!-- 选中黄色背景 -->
+    <color name="gray_666">#666666</color>    <!-- 未选中灰色 -->
+    <color name="nav_ripple">#CCFFD166</color> <!-- 点击水波纹（半透黄） -->
+
+    <!-- ===== iOS 浅色磨砂玻璃设计 Token ===== -->
+    <color name="ios_blue">#FF007AFF</color>              <!-- 主色/选中态 -->
+    <color name="ios_blue_dark">#FF0A84FF</color>         <!-- 深色模式主色 -->
+    <color name="ios_system_orange">#FFFF9500</color>     <!-- 系统橙 -->
+    <color name="ios_bg">#FFFFFFFF</color>               <!-- 主背景 -->
+    <color name="ios_bg_grouped">#FFF2F2F7</color>        <!-- 分组/二级背景 -->
+    <color name="ios_bg_grouped_2">#FFEFEFF4</color>     <!-- 二级分组背景 -->
+    <color name="ios_text_primary">#FF1D1D1F</color>      <!-- 主文字（近黑） -->
+    <color name="ios_text_secondary">#FF8E8E93</color>    <!-- 次文字 -->
+    <color name="ios_text_tertiary">#FFC7C7CC</color>     <!-- 占位/禁用 -->
+    <color name="ios_separator">#FFE5E5EA</color>         <!-- 0.5dp 分隔线 -->
+    <color name="ios_separator_opaque">#FFC6C6C8</color>  <!-- 不透明分隔线 -->
+    <color name="ios_tab_bar">#F0F9F9F9</color>          <!-- 毛玻璃底栏（94%白） -->
+    <color name="ios_card_bg">#FFFFFFFF</color>           <!-- 卡片白底 -->
+    <color name="ios_nav_bg">#FFF7F7F7</color>           <!-- 导航栏背景 -->
+
+    <!-- ===== 底部导航 · 磨砂玻璃 ===== -->
+    <color name="nav_frost_tint">#40FFFFFF</color>     <!-- 磨砂叠加：25% 白，避免亮背景变成白条 -->
+    <color name="nav_frost_base">#80F2F2F7</color>     <!-- 磨砂兜底底色：50% 浅灰 -->
+    <color name="nav_frost_sheen">#1AFFFFFF</color>    <!-- 顶部玻璃高光：弱 -->
+    <color name="nav_frost_stroke">#33FFFFFF</color>    <!-- 玻璃描边：20% 白 -->
+
+    <!-- iOS 夜间模式 -->
+    <color name="ios_bg_dark">#FF000000</color>
+    <color name="ios_bg_grouped_dark">#FF1C1C1E</color>
+    <color name="ios_text_primary_dark">#FFFFFFFF</color>
+    <color name="ios_text_secondary_dark">#FF8E8E93</color>
+    <color name="ios_separator_dark">#FF38383A</color>
+    <color name="ios_tab_bar_dark">#F0171718</color>
+    <color name="ios_card_bg_dark">#FF1C1C1E</color>
+
+    <!-- 阁檐墨韵 · 国风开屏配色 -->
+    <color name="splash_bg">#F5F0E6</color>           <!-- 宣纸底色 -->
+    <color name="splash_title">#3C2415</color>          <!-- 浓墨深棕 -->
+    <color name="splash_subtitle">#5C4033</color>       <!-- 淡墨棕 -->
+    <color name="splash_accent">#8B2500</color>         <!-- 朱砂红 -->
+    <color name="splash_decoration">#D4C5A9</color>     <!-- 金粉/绢边 -->
+    <color name="splash_mountain_far">#DDD5C3</color>   <!-- 远山淡影 -->
+    <color name="splash_mountain_near">#C9B99A</color>  <!-- 近山浓黛 -->
+    <color name="splash_version">#A09080</color>         <!-- 版本号灰棕 -->
+</resources>

@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 书城模式选择弹窗：本站藏书 / 外站书城 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog_rounded"
+    android:padding="16dp">
+
+    <!-- 顶部：标题 + 关闭 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="14dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="切换书城"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/ios_text_primary"/>
+
+        <ImageView
+            android:id="@+id/iv_close"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@drawable/ic_close_grey"
+            android:contentDescription="@null"
+            android:padding="4dp"/>
+    </LinearLayout>
+
+    <!-- 选项 A：📚 本站藏书 -->
+    <LinearLayout
+        android:id="@+id/opt_local"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_option_card"
+        android:clickable="true"
+        android:focusable="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="#FFF3EE"
+                android:gravity="center"
+                android:text="📚"
+                android:textSize="20sp"/>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="本站藏书"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/ios_text_primary"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="服务器数据库内的书籍"
+                    android:textSize="12sp"
+                    android:textColor="@color/ios_text_secondary"
+                    android:layout_marginTop="2dp"/>
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/iv_radio_local"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_checkbox_unchecked"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 选项 B：🌐 外站书城 -->
+    <LinearLayout
+        android:id="@+id/opt_external"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:background="@drawable/bg_option_card"
+        android:clickable="true"
+        android:focusable="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="#E8F4FD"
+                android:gravity="center"
+                android:text="🌐"
+                android:textSize="20sp"/>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="外站书城"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/ios_text_primary"/>
+
+                <!-- 「选择书源」按钮：放到原说明位置，点击单独打开书源选择弹窗 -->
+                <TextView
+                    android:id="@+id/tv_select_source"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="选择书源 →"
+                    android:textSize="12sp"
+                    android:textColor="@color/ios_blue"
+                    android:layout_marginTop="4dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:paddingHorizontal="2dp"
+                    android:paddingVertical="2dp"/>
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/iv_radio_external"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_checkbox_unchecked"/>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

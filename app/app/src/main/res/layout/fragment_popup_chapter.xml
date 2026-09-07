@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--目录 popup 布局（iOS 分组列表风）-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ios_bg_grouped">
+
+    <!-- 章节计数 header（iOS 分组标题：灰底小字） -->
+    <TextView
+        android:id="@+id/tv_chapter_count"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:text="共 0 章"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:textColor="@color/ios_text_secondary"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:background="@color/ios_bg_grouped" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:background="@color/ios_separator" />
+
+    <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/rv_fastscroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:fastScrollAutoHide="true"
+        app:fastScrollAutoHideDelay="2000"
+        app:fastScrollThumbColor="@color/ios_blue"
+        app:fastScrollTrackColor="@android:color/transparent" />
+</LinearLayout>

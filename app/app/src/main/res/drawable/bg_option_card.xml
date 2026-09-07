@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- iOS 选项卡片：白底、12dp 圆角、分隔线描边 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/ios_card_bg"/>
+    <corners android:radius="12dp"/>
+    <stroke android:width="0.5dp" android:color="@color/ios_separator"/>
+</shape>

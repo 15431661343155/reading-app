@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--自定义主题属性-->
+<resources>
+    <attr name="navBg" format="color" />
+    <attr name="navSelectedColor" format="color" />
+    <attr name="navUnselectedColor" format="color" />
+    <attr name="navRipple" format="color" />
+    <attr name="navTextSelectedColor" format="color" />
+    <attr name="navTextUnselectedColor" format="color" />
+
+    <!-- 磨砂玻璃容器 FrostedNavCardView -->
+    <declare-styleable name="FrostedNavCardView">
+        <!-- 背景采样源：采集该 View 位于本控件下方的区域做模糊 -->
+        <attr name="frostBackdrop" format="reference" />
+        <!-- 磨砂叠加色（决定通透度，alpha 越小越透） -->
+        <attr name="frostTint" format="color" />
+        <!-- 采样区底色：背后内容透明时的兜底填充 -->
+        <attr name="frostBaseColor" format="color" />
+        <!-- 顶部玻璃高光色 -->
+        <attr name="frostSheen" format="color" />
+        <!-- 模糊半径（真实像素空间的 dp 值） -->
+        <attr name="frostBlurRadius" format="dimension" />
+        <!-- 降采样倍率，越大越快、越糊 -->
+        <attr name="frostDownscale" format="integer" />
+        <!-- 磨砂颗粒强度 0~255 -->
+        <attr name="frostNoiseAlpha" format="integer" />
+        <!-- 圆角（缺省时跟随 cardCornerRadius） -->
+        <attr name="frostCornerRadius" format="dimension" />
+        <!-- 关闭实时模糊时退化为纯半透明色块 -->
+        <attr name="frostEnabled" format="boolean" />
+    </declare-styleable>
+</resources>

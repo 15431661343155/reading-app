@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- iOS 药丸形 Tab Bar：圆角 + 较高不透明度白 + 细描边 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FAFFFFFF" />
+    <corners android:radius="28dp" />
+    <stroke android:width="0.5dp" android:color="#2AE5E5EA" />
+</shape>

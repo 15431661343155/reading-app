@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- iOS 列表卡片：白底 + 12dp 圆角 + 细描边（替代 elevation，Android 低版本兼容） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <corners android:radius="12dp" />
+    <stroke android:width="0.5dp" android:color="#1AE5E5EA" />
+</shape>

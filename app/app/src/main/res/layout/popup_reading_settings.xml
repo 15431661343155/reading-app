@@ -1,0 +1,369 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@color/ios_bg"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
+
+    <!-- ========== 亮度调节 ========== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="70dp"
+            android:layout_height="wrap_content"
+            android:text="亮度"
+            android:textSize="14sp"
+            android:textColor="@color/ios_text_primary"
+            android:paddingStart="20dp" />
+
+        <SeekBar
+            android:id="@+id/seekbar_brightness"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:max="250"
+            android:progress="128"
+            android:progressTint="@color/ios_blue"
+            android:thumbTint="@color/ios_blue" />
+
+        <TextView
+            android:id="@+id/tv_brightness_value"
+            android:layout_width="36dp"
+            android:layout_height="wrap_content"
+            android:text="50%"
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_secondary" />
+
+        <ImageView
+            android:id="@+id/iv_follow_system"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_brightness_auto"
+            app:tint="#666666"
+            android:padding="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="跟随系统亮度" />
+
+    </LinearLayout>
+
+    <!-- ========== 字号调节 ========== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="70dp"
+            android:layout_height="wrap_content"
+            android:text="字号"
+            android:textSize="14sp"
+            android:textColor="@color/ios_text_primary"
+            android:paddingStart="20dp" />
+
+        <TextView
+            android:id="@+id/tv_font_minus"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:text="A-"
+            android:textSize="16sp"
+            android:textColor="@color/ios_text_secondary"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/tv_font_size_display"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:text="18"
+            android:textSize="16sp"
+            android:textColor="@color/ios_text_primary"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/tv_font_plus"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:text="A+"
+            android:textSize="20sp"
+            android:textColor="@color/ios_text_secondary"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/tv_switch_font"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="切换字体 >"
+            android:textSize="14sp"
+            android:textColor="@color/ios_blue"
+            android:gravity="end"
+            android:paddingEnd="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground" />
+
+    </LinearLayout>
+
+    <!-- ========== 背景选择 ========== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="70dp"
+            android:layout_height="wrap_content"
+            android:text="背景"
+            android:textSize="14sp"
+            android:textColor="@color/ios_text_primary"
+            android:paddingStart="20dp" />
+
+        <!-- 米黄(0) -->
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="4dp">
+            <View
+                android:id="@+id/bg_color_0"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
+            <View
+                android:id="@+id/bg_color_ring_0"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_color_ring"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- 护眼绿(1) -->
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="4dp">
+            <View
+                android:id="@+id/bg_color_1"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
+            <View
+                android:id="@+id/bg_color_ring_1"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_color_ring"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- 羊皮纸(2) -->
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="4dp">
+            <View
+                android:id="@+id/bg_color_2"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
+            <View
+                android:id="@+id/bg_color_ring_2"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_color_ring"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- 夜间(3) -->
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp">
+            <View
+                android:id="@+id/bg_color_3"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
+            <View
+                android:id="@+id/bg_color_ring_3"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_color_ring"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/tv_bg_more"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="更多 >"
+            android:textSize="14sp"
+            android:textColor="@color/ios_blue"
+            android:gravity="center_vertical|end"
+            android:paddingEnd="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground" />
+
+    </LinearLayout>
+
+    <!-- ========== 翻页动画 ========== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="70dp"
+            android:layout_height="wrap_content"
+            android:text="翻页"
+            android:textSize="14sp"
+            android:textColor="@color/ios_text_primary"
+            android:paddingStart="20dp" />
+
+        <TextView
+            android:id="@+id/tv_page_cover"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="覆盖"
+            android:textSize="14sp"
+            android:textColor="@color/ios_blue"
+            android:gravity="center"
+            android:background="@drawable/bg_search_radius"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/tv_page_simulation"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="仿真"
+            android:textSize="14sp"
+            android:textColor="@color/ios_text_secondary"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/tv_page_translate"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="平移"
+            android:textSize="14sp"
+            android:textColor="@color/ios_text_secondary"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/tv_page_updown"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="上下"
+            android:textSize="14sp"
+            android:textColor="@color/ios_text_secondary"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/tv_page_fade"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="淡入"
+            android:textSize="14sp"
+            android:textColor="@color/ios_text_secondary"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+
+    </LinearLayout>
+
+    <!-- ========== 自动翻页 ========== -->
+    <LinearLayout
+        android:id="@+id/layout_auto_page"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
+        android:gravity="center_vertical"
+        android:clickable="true"
+        android:focusable="true"
+        android:background="?attr/selectableItemBackground">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:paddingStart="20dp"
+            android:text="开启自动翻页"
+            android:textColor="@color/ios_text_primary"
+            android:textSize="14sp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_auto_page"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+    </LinearLayout>
+
+    <!-- ========== 更多阅读设置 ========== -->
+    <TextView
+        android:id="@+id/tv_more_settings"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:text="更多阅读设置 >"
+        android:textSize="14sp"
+        android:textColor="@color/ios_text_secondary"
+        android:gravity="center_vertical"
+        android:paddingStart="46dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true" />
+
+</LinearLayout>

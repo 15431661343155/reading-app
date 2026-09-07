@@ -1,0 +1,59 @@
+<!--主页布局（iOS 浅色磨砂玻璃风）-->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ios_bg_grouped"
+    android:fitsSystemWindows="true">
+
+    <!-- 内容区域：全屏铺满（顶部避开状态栏、底部避开系统导航栏由窗口装饰处理） -->
+    <FrameLayout
+        android:id="@+id/fragment_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 底部导航栏（实时磨砂玻璃：采样背后内容做模糊 + 半透明叠加 + 颗粒 + 高光） -->
+    <com.example.myapplication.widget.FrostedNavCardView
+        android:id="@+id/nav_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="14dp"
+        android:layout_marginEnd="14dp"
+        android:layout_marginBottom="11dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="8dp"
+        app:strokeWidth="0.5dp"
+        app:strokeColor="@color/nav_frost_stroke"
+        app:frostBackdrop="@id/fragment_container"
+        app:frostTint="@color/nav_frost_tint"
+        app:frostBaseColor="@color/nav_frost_base"
+        app:frostSheen="@color/nav_frost_sheen"
+        app:frostBlurRadius="16dp"
+        app:frostDownscale="4"
+        app:frostNoiseAlpha="55"
+        app:frostEnabled="true">
+
+        <!-- 四个 tab：书架 / 书城 / 讨论 / 我的，选中主色蓝、未选中次级灰 -->
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/bottom_navigation"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@null"
+            app:backgroundTint="@android:color/transparent"
+            app:menu="@menu/menu_bottom_nav"
+            app:labelVisibilityMode="labeled"
+            app:itemIconTint="@color/nav_item_color"
+            app:itemTextColor="@color/nav_item_text_color"
+            app:itemIconSize="24dp"
+            app:itemTextAppearance="@style/NavTextAppearance"
+            app:itemHorizontalTranslationEnabled="false"
+            app:itemBackground="@null"
+            app:itemActiveIndicatorStyle="@null"
+            app:itemRippleColor="@android:color/transparent"
+            app:elevation="0dp" />
+
+    </com.example.myapplication.widget.FrostedNavCardView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

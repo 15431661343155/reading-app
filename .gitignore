@@ -1,0 +1,38 @@
+# ============ 构建产物 ============
+app/app/build/
+app/build/
+app/.gradle/
+app/captures/
+app/.cxx/
+app/.externalNativeBuild/
+reading-app-backend/target/
+*.apk
+*.aab
+*.dex
+
+# ============ 敏感配置（务必不要提交真实值） ============
+# 真实配置请使用下面的 example 模板自行创建
+reading-app-backend/src/main/resources/application.properties
+app/local.properties
+local.properties
+
+# ============ 开发过程产物 ============
+screenshots/
+ppt_work/*.jpg
+*.log
+build_err.txt
+build_out.txt
+tap.txt
+tmp_*.json
+
+# ============ IDE 与 AI 工具目录 ============
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+.workbuddy/
+.joycode/
+.trae/
+.playwright-cli/

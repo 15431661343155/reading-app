@@ -1,0 +1,53 @@
+{
+  "bookSourceName": "猫眼看书",
+  "bookSourceUrl": "http://api.jmlldsc.com##@曦灵",
+  "bookSourceType": 0,
+  "enabled": true,
+  "enabledExplore": true,
+  "header": "{\"User-Agent\":\"okhttp\",\"client-device\":\"android-device-id\",\"client-version\":\"2.0.0\",\"client-brand\":\"android\",\"client-source\":\"maoyan\",\"client-name\":\"maoyan\",\"Authorization\":\"Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3NzQ0NjMiLCJpc3MiOiJhdXRoMCIsInNjb3BlIjoiYXBpIiwiZXhwIjoxNzY3MjQ0ODAwLCJpYXQiOjE3MjU4MDQ4MDB9.uGvVjEJ3GzLZvX7K8pQ1R2sT5wY8xN0cA4bD6fH9iMk\"}",
+  "loginUrl": "http://api.jmlldsc.com/auth/login,{\"method\":\"POST\",\"body\":\"{\\\"account\\\":\\\"{{username}}\\\",\\\"password\\\":\\\"{{password}}\\\"}\",\"headers\":{\"Content-Type\":\"application/json\"}}",
+  "loginUi": "[{\"name\":\"username\",\"type\":\"text\",\"hint\":\"手机号\"},{\"name\":\"password\",\"type\":\"password\",\"hint\":\"密码\"}]",
+  "loginCheckJs": "var d=JSON.parse(result);d.data&&(d.data.token||d.data.access_token||d.data.accessToken)||d.token||''",
+  "searchUrl": "http://api.jmlldsc.com/search?keyword={{key}}&page={{page}}",
+  "ruleSearch": {
+    "bookList": "$.data[*]",
+    "name": "$.novelName",
+    "author": "$.authorName",
+    "coverUrl": "$.cover",
+    "intro": "$.summary",
+    "kind": "$.categoryNames[*].className",
+    "lastChapter": "",
+    "wordCount": "$.wordNum",
+    "bookUrl": "@js:'http://api.jmlldsc.com/novel/'+{{$.id}}"
+  },
+  "ruleBookInfo": {
+    "init": "",
+    "name": "$.data.novelName",
+    "author": "$.data.authorName",
+    "intro": "$.data.summary",
+    "kind": "$.data.categoryNames[*].className",
+    "lastChapter": "",
+    "coverUrl": "$.data.cover",
+    "wordCount": "$.data.wordNum",
+    "tocUrl": "@js:var d=JSON.parse(result);'http://api.jmlldsc.com/novel/'+d.data.id+'/chapters'"
+  },
+  "ruleToc": {
+    "chapterList": "$.data.list[*]",
+    "chapterName": "$.chapterName",
+    "chapterUrl": "@js:var m=baseUrl.match(/\\/novel\\/(\\d+)/);'http://api.jmlldsc.com/novel/read?novelId='+(m?m[1]:'')+'&chapterId='+{{$.chapterId}}",
+    "isVolume": "",
+    "isVip": "",
+    "isPay": "",
+    "updateTime": "",
+    "nextTocUrl": ""
+  },
+  "ruleContent": {
+    "content": "$.data.content",
+    "nextContentUrl": "",
+    "webJs": "",
+    "sourceRegex": "",
+    "replaceRegex": ""
+  },
+  "ruleExplore": {},
+  "exploreUrl": "[{\"title\":\"男频推荐\",\"url\":\"http://api.jmlldsc.com/explore/male/recommend?page={{page}}\"}]"
+}

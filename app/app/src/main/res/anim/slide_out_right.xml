@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 当前页面向屏幕右侧滑出（返回时与 slide_in_left 配对） -->
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromXDelta="0%"
+    android:toXDelta="100%"
+    android:duration="240"
+    android:interpolator="@android:anim/accelerate_interpolator" />

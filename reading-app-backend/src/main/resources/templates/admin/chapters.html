@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>章节管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a href="/admin" class="navbar-brand">📚 阅读App管理后台</a>
+    <div>
+      <a href="/admin" class="btn btn-outline-light btn-sm me-2">🏠 首页</a>
+      <a href="/admin/books" class="btn btn-outline-light btn-sm me-2">书籍管理</a>
+      <a href="/admin/chapters" class="btn btn-outline-light btn-sm me-2">章节管理</a>
+      <a href="/admin/import" class="btn btn-outline-light btn-sm me-2">数据导入</a>
+      <a href="/admin/online-source" class="btn btn-outline-light btn-sm me-2">🌐 在线书源</a>
+      <a href="/admin/book-source" class="btn btn-outline-light btn-sm me-2">⚙️ 书源管理</a>
+      <a href="/admin/users" class="btn btn-outline-light btn-sm me-2">用户管理</a>
+      <a href="/admin/resource" class="btn btn-outline-light btn-sm me-2">📦 资源管理</a>
+      <a href="/admin/feedback" class="btn btn-outline-light btn-sm">💬 意见反馈</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-3">
+  <div class="row">
+    <div class="col-md-3">
+      <h5>选择书籍</h5>
+      <select id="bookSelect" class="form-select" onchange="loadChapters()">
+        <option value="">-- 请选择书籍 --</option>
+      </select>
+    </div>
+    <div class="col-md-9">
+      <div class="d-flex justify-content-between mb-3">
+        <h5 id="bookTitle">章节列表</h5>
+        <div>
+          <button class="btn btn-warning me-2" onclick="reorderChapters(false)">🔄排序</button>
+          <button class="btn btn-success me-2" onclick="showBatchImportModal()">📋 批量导入</button>
+          <button class="btn btn-primary" onclick="showAddModal()">+ 添加章节</button>
+        </div>
+      </div>
+      <table class="table table-striped">
+        <thead>
+        <tr>
+          <th>序号</th>
+          <th>章节标题</th>
+          <th>字数</th>
+          <th>创建时间</th>
+          <th>操作</th>
+        </tr>
+        </thead>
+        <tbody id="chapterTable">
+        <tr><td colspan="5" class="text-center">请先选择一本书</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑/添加弹窗 -->
+<div class="modal fade" id="chapterModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitle">添加章节</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editId">
+        <input type="hidden" id="editBookId">
+        
+        <!-- 添加模式选择（仅添加新章节时显示） -->
+        <div class="mb-3" id="addModeGroup" style="display:none;">
+          <label class="form-label">添加模式</label>
+          <div class="d-flex gap-3">
+            <label class="radio-inline">
+              <input type="radio" name="addMode" value="append" checked> 更新章节（自动添加到末尾）
+            </label>
+            <label class="radio-inline">
+              <input type="radio" name="addMode" value="insert"> 补充章节（插入到指定位置）
+            </label>
+          </div>
+        </div>
+        
+        <div class="mb-3">
+          <label class="form-label">章节标题</label>
+          <input type="text" class="form-control" id="editTitle">
+        </div>
+        <div class="mb-3" id="sortOrderGroup">
+          <label class="form-label">排序序号</label>
+          <input type="number" class="form-control" id="editSortOrder" value="1">
+          <small id="sortOrderHint" class="form-text text-muted">序号将自动设置为最后一章的序号+1</small>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">章节内容</label>
+          <textarea class="form-control" id="editContent" rows="15"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" onclick="saveChapter()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 批量导入弹窗 -->
+<div class="modal fade" id="batchImportModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">批量导入章节</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>每行一个章节，格式：<code>章节标题|章节内容</code></p>
+        <textarea class="form-control" id="batchContent" rows="15" placeholder="第一章 楔子|这是一个故事的开头...&#10;第二章 初遇|故事继续..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" onclick="batchImport()">导入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  let modal;
+  let currentBookId;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    modal = new bootstrap.Modal(document.getElementById('chapterModal'));
+    loadBooks();
+    
+    // 添加模式切换事件
+    document.querySelectorAll('input[name="addMode"]').forEach(radio => {
+      radio.addEventListener('change', updateSortOrderInputState);
+    });
+  });
+
+  // 更新排序序号输入框的状态
+  function updateSortOrderInputState() {
+    const addMode = document.querySelector('input[name="addMode"]:checked')?.value;
+    const sortOrderInput = document.getElementById('editSortOrder');
+    const sortOrderHint = document.getElementById('sortOrderHint');
+    
+    if (addMode === 'append') {
+      // 更新章节模式：自动添加到末尾，禁用排序输入
+      sortOrderInput.disabled = true;
+      sortOrderHint.textContent = '序号将自动设置为最后一章的序号+1';
+    } else {
+      // 补充章节模式：手动输入排序序号
+      sortOrderInput.disabled = false;
+      sortOrderHint.textContent = '请输入要插入的位置序号';
+    }
+  }
+  // 存储大章节数据
+  window.majorChapters = [];
+
+  // 加载书籍列表到下拉框
+  function loadBooks() {
+    fetch('/api/books?size=100')
+            .then(r => r.json())
+            .then(d => {
+              const select = document.getElementById('bookSelect');
+              d.data.content.forEach(b => {
+                select.innerHTML += `<option value="${b.id}">${b.title} - ${b.author}</option>`;
+              });
+            });
+  }
+
+  // 加载章节列表
+  function loadChapters() {
+    currentBookId = document.getElementById('bookSelect').value;
+    if (!currentBookId) return;
+
+    fetch(`/api/major-chapters/book/${currentBookId}`)
+            .then(r => r.json())
+            .then(d => {
+              window.majorChapters = d.data || [];
+              loadChapterData();
+            });
+
+    const bookName = document.getElementById('bookSelect').selectedOptions[0].text;
+    document.getElementById('bookTitle').textContent = bookName + ' - 章节列表';
+  }
+
+  // 实际渲染章节列表
+  function loadChapterData() {
+    fetch(`/api/chapters/book/${currentBookId}`)
+            .then(r => r.json())
+            .then(d => {
+              const tbody = document.getElementById('chapterTable');
+              if (!d.data || d.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">暂无章节数据</td></tr>';
+                return;
+              }
+
+              d.data.sort((a, b) => {
+                const keyA = a.sortKey || '';
+                const keyB = b.sortKey || '';
+                return keyA.localeCompare(keyB);
+              });
+
+              const hasMajorChapters = window.majorChapters && window.majorChapters.length > 0;
+
+              let lastMajorLevel = '';
+              let rows = '';
+
+              d.data.forEach(c => {
+                const currentMajor = c.sortKey ? c.sortKey.split('-')[0] : '1';
+                // 查找大章节名
+                if (hasMajorChapters && currentMajor !== lastMajorLevel && c.sortKey) {
+                  const mc = window.majorChapters.find(m => m.sortKey === currentMajor);
+                  const majorTitle = mc ? mc.title : '第' + currentMajor + '部分';
+                  rows += `<tr class="table-primary">
+
+                    <td colspan="4">
+                      <strong id="major-title-${currentMajor}">📖 ${majorTitle}</strong>
+                    </td>
+                    <td>
+                      <button class="btn btn-sm btn-outline-dark" onclick="editMajorTitle('${currentMajor}')">✏️ 编辑</button>
+                    </td>
+                  </tr>`;
+                  lastMajorLevel = currentMajor;
+                }
+                rows += `<tr>
+                  <td>${c.sortKey || '第' + c.sortOrder + '章'}</td>
+                  <td>${c.title}</td>
+                  <td>${c.wordCount ? c.wordCount.toLocaleString() + '字' : '-'}</td>
+                  <td>${c.createdAt ? c.createdAt.substring(0, 10) : '-'}</td>
+                  <td>
+                    <button class="btn btn-sm btn-warning" onclick="editChapter(${c.id})">编辑</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteChapter(${c.id})">删除</button>
+                  </td>
+                </tr>`;
+              });
+
+              tbody.innerHTML = rows;
+            });
+  }
+
+  function editMajorTitle(majorLevel) {
+    fetch(`/api/major-chapters/book/${currentBookId}`)
+            .then(r => r.json())
+            .then(d => {
+              window.majorChapters = d.data || [];
+              const mc = window.majorChapters.find(m => m.sortKey === majorLevel);
+              const currentTitle = mc ? mc.title : '第' + majorLevel + '部分';
+              const newTitle = prompt('编辑大章节名称：', currentTitle);
+
+              if (newTitle && newTitle !== currentTitle) {
+                document.getElementById('major-title-' + majorLevel).textContent = '📖 ' + newTitle;
+
+                const savePromise = mc
+                        ? fetch(`/api/major-chapters/${mc.id}`, {
+                          method: 'PUT',
+                          headers: {'Content-Type': 'application/json'},
+                          body: JSON.stringify({title: newTitle})
+                        })
+                        : fetch('/api/major-chapters', {
+                          method: 'POST',
+                          headers: {'Content-Type': 'application/json'},
+                          body: JSON.stringify({
+                            bookId: currentBookId,
+                            title: newTitle,
+                            sortKey: majorLevel,
+                            sortOrder: parseInt(majorLevel)
+                          })
+                        });
+
+                savePromise.then(() => loadChapters());
+              }
+            });
+  }
+
+  function showAddModal() {
+    if (!currentBookId) { alert('请先选择一本书'); return; }
+    
+    // 获取当前书籍的最大排序序号
+    fetch(`/api/chapters/max-sort-order/${currentBookId}`)
+      .then(r => r.json())
+      .then(d => {
+        const maxOrder = d.data || 0;
+        
+        document.getElementById('modalTitle').textContent = '添加章节';
+        document.getElementById('editId').value = '';
+        document.getElementById('editBookId').value = currentBookId;
+        document.getElementById('editTitle').value = '';
+        document.getElementById('editSortOrder').value = maxOrder + 1;
+        document.getElementById('editContent').value = '';
+        
+        // 显示添加模式选择
+        document.getElementById('addModeGroup').style.display = 'block';
+        // 默认选中"更新章节"，禁用排序输入
+        document.querySelector('input[name="addMode"][value="append"]').checked = true;
+        updateSortOrderInputState();
+        
+        modal.show();
+      });
+  }
+
+  function editChapter(id) {
+    fetch(`/api/chapters/${id}`)
+            .then(r => r.json())
+            .then(d => {
+              const c = d.data;
+              document.getElementById('modalTitle').textContent = '编辑章节';
+              document.getElementById('editId').value = c.id;
+              document.getElementById('editBookId').value = c.bookId;
+              document.getElementById('editTitle').value = c.title;
+              document.getElementById('editSortOrder').value = c.sortOrder;
+              document.getElementById('editContent').value = c.content || '';
+              modal.show();
+            });
+  }
+
+  function saveChapter() {
+    const id = document.getElementById('editId').value;
+    const bookId = parseInt(document.getElementById('editBookId').value);
+    const title = document.getElementById('editTitle').value;
+    const content = document.getElementById('editContent').value;
+    
+    let sortOrder = parseInt(document.getElementById('editSortOrder').value);
+    const addMode = document.querySelector('input[name="addMode"]:checked')?.value;
+    
+    // 如果是更新章节模式且是添加新章节，需要先获取最大序号
+    if (!id && addMode === 'append') {
+      fetch(`/api/chapters/max-sort-order/${bookId}`)
+        .then(r => r.json())
+        .then(d => {
+          const maxOrder = d.data || 0;
+          submitChapter(id, bookId, title, maxOrder + 1, content);
+        });
+    } else {
+      submitChapter(id, bookId, title, sortOrder, content);
+    }
+  }
+
+  // 提交章节数据
+  function submitChapter(id, bookId, title, sortOrder, content) {
+    const data = {
+      bookId: bookId,
+      title: title,
+      sortOrder: sortOrder,
+      content: content
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `/api/chapters/${id}` : '/api/chapters';
+
+    fetch(url, {
+      method: method,
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    }).then(() => {
+      modal.hide();
+      loadChapters();
+    });
+  }
+
+  function deleteChapter(id) {
+    if (confirm('确定删除这个章节？')) {
+      fetch(`/api/chapters/${id}`, {method: 'DELETE'})
+              .then(() => {
+                return fetch(`/api/chapters/renumber/${currentBookId}?layered=false`, {method: 'POST'});
+              })
+              .then(r => r.json())
+              .then(d => {
+                alert(d.message);
+                loadChapters();
+              });
+    }
+  }
+
+  function reorderChapters(layered) {
+    if (!currentBookId) { alert('请先选择一本书'); return; }
+    fetch(`/api/chapters/renumber/${currentBookId}?layered=${layered}`, {method: 'POST'})
+            .then(r => r.json())
+            .then(d => {
+              alert(d.message);
+              loadChapters();
+            });
+  }
+
+  function showBatchImportModal() {
+    if (!currentBookId) { alert('请先选择一本书'); return; }
+    new bootstrap.Modal(document.getElementById('batchImportModal')).show();
+  }
+
+  function batchImport() {
+    const text = document.getElementById('batchContent').value.trim();
+    if (!text) { alert('请输入章节内容'); return; }
+
+    const lines = text.split('\n').filter(l => l.trim());
+    const chapters = lines.map(line => {
+      const parts = line.split('|');
+      return {
+        title: parts[0]?.trim() || '未命名章节',
+        content: parts[1]?.trim() || ''
+      };
+    });
+
+    fetch('/api/admin/import/chapters', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ bookId: currentBookId, chapters: chapters })
+    })
+            .then(r => r.json())
+            .then(d => {
+              alert(d.message);
+              bootstrap.Modal.getInstance(document.getElementById('batchImportModal')).hide();
+              loadChapters();
+            });
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--个人中心页布局-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/windowBackground">
+
+    <!-- 顶部：头像 + 用户名 + UID -->
+    <RelativeLayout
+        android:id="@+id/layout_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="20dp"
+        android:background="?attr/colorPrimary">
+
+        <!-- 头像 -->
+        <ImageView
+            android:id="@+id/iv_avatar"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:src="@drawable/ic_detective"
+            android:background="@drawable/bg_avatar_round"
+            android:scaleType="centerCrop"
+            android:contentDescription="@null"/>
+
+        <!-- 昵称 + UID -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginStart="15dp"
+            android:layout_toEndOf="@id/iv_avatar"
+            android:layout_toStartOf="@id/btn_settings"
+            android:layout_centerVertical="true">
+
+            <TextView
+                android:id="@+id/tv_nickname"
+                android:text="@string/tv_username"
+                android:textSize="20sp"
+                android:textColor="?attr/colorOnPrimary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+
+            <TextView
+                android:id="@+id/tv_uid"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="UID: ------"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnPrimary"
+                android:alpha="0.8"
+                android:layout_marginTop="4dp"/>
+
+        </LinearLayout>
+
+        <!-- 设置图标按钮（最右上角） -->
+        <ImageView
+            android:id="@+id/btn_settings"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/ic_settings_white"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@null"/>
+
+    </RelativeLayout>
+    <!-- 分割线 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#e0e0e0"/>
+
+    <!-- 列表项 2：阅读记录 -->
+    <LinearLayout
+        android:id="@+id/btn_reading_record"
+        android:layout_width="match_parent"
+        android:layout_height="55dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:clickable="true"
+        android:background="?attr/selectableItemBackground"
+        android:focusable="true"
+        android:nextFocusDown="@+id/btn_theme">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_history"
+            android:contentDescription="@null"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/history"
+            android:textSize="16sp"
+            android:layout_marginStart="15dp"/>
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#e0e0e0"/>
+
+    <!-- 列表项：消息中心 -->
+    <LinearLayout
+        android:id="@+id/btn_message_center"
+        android:layout_width="match_parent"
+        android:layout_height="55dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:clickable="true"
+        android:background="?attr/selectableItemBackground"
+        android:focusable="true"
+        android:nextFocusDown="@+id/btn_feedback">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_notification"
+            android:contentDescription="@null"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="@string/message_center"
+            android:textSize="16sp"
+            android:layout_marginStart="15dp"/>
+
+        <!-- 未读数量角标 -->
+        <TextView
+            android:id="@+id/tv_unread_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="20dp"
+            android:minWidth="20dp"
+            android:gravity="center"
+            android:background="@drawable/bg_message_badge"
+            android:textColor="@android:color/white"
+            android:textSize="11sp"
+            android:paddingHorizontal="6dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#e0e0e0"/>
+
+    <!-- 列表项 3：意见反馈 -->
+    <LinearLayout
+        android:id="@+id/btn_feedback"
+        android:layout_width="match_parent"
+        android:layout_height="55dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:clickable="true"
+        android:background="?attr/selectableItemBackground"
+        android:focusable="true">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_feedback"
+            android:contentDescription="@null"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/feedback"
+            android:textSize="16sp"
+            android:layout_marginStart="15dp"/>
+
+    </LinearLayout>
+
+</LinearLayout>

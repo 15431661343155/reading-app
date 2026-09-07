@@ -1,0 +1,145 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--书城页布局（iOS 浅色磨砂玻璃风）-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ios_bg_grouped">
+
+    <!-- 顶部：搜索框 + 分类图标 -->
+    <LinearLayout
+        android:id="@+id/layout_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/ios_bg_grouped">
+
+        <!--🔍 搜索框 + 分类图标 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="12dp"
+            android:gravity="center_vertical"
+            android:background="@color/ios_bg_grouped">
+
+            <!-- 搜索框（可点击，跳转搜索页） -->
+            <LinearLayout
+                android:id="@+id/layout_search_bar"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_search_radius"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="14dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_search"
+                    app:tint="@color/ios_text_tertiary"
+                    android:contentDescription="@null"/>
+
+                <TextView
+                    android:id="@+id/tv_search_hint"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="搜索书籍、作者"
+                    android:textColor="@color/ios_text_tertiary"
+                    android:textSize="15sp"/>
+            </LinearLayout>
+
+            <!-- 分类图标框（点击展开面板：本站藏书/外站书城） -->
+            <LinearLayout
+                android:id="@+id/layout_category_icon"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/bg_category_icon"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_category"
+                    app:tint="@color/ios_text_primary"
+                    android:contentDescription="@null"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 当前书城模式标题行（显示：📚 本站藏书 / 🌐 七猫小说网） -->
+        <LinearLayout
+            android:id="@+id/layout_mode_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="10dp"
+            android:paddingTop="4dp">
+
+            <TextView
+                android:id="@+id/tv_mode_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="@color/ios_text_primary"
+                android:text="📚 本站藏书"/>
+
+            <TextView
+                android:id="@+id/tv_mode_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:textColor="@color/ios_text_secondary"/>
+        </LinearLayout>
+
+        <!-- 🏷️ 二级分类（横向滚动，仅部分模式显示） -->
+        <HorizontalScrollView
+            android:id="@+id/hsv_sub_category"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="@color/ios_bg_grouped"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/layout_sub_category"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp"
+                android:gravity="center_vertical"/>
+        </HorizontalScrollView>
+    </LinearLayout>
+
+    <!-- 分割线（iOS 0.5dp 规范） -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:background="@color/ios_separator"/>
+
+    <!-- 下拉刷新 + 书籍列表 -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipe_refresh_bookstore"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/ios_bg_grouped">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_bookstore"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingBottom="72dp"
+            android:clipToPadding="false" />
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

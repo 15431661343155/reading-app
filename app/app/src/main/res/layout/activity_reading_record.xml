@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ios_bg_grouped">
+
+    <!-- 标题栏容器 -->
+    <FrameLayout
+        android:id="@+id/layout_header"
+        android:layout_width="match_parent"
+        android:layout_height="56dp">
+
+        <!-- 原标题栏 -->
+        <LinearLayout
+            android:id="@+id/layout_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@color/ios_bg"
+            android:elevation="2dp"
+            android:paddingHorizontal="16dp"
+            android:minHeight="60dp">
+
+            <ImageView
+                android:id="@+id/iv_back"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_back_black"
+                android:padding="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="阅读记录"
+                android:textSize="18sp"
+                android:textColor="#1D1D1F"
+                android:textStyle="bold"
+                android:gravity="center" />
+
+            <TextView
+                android:id="@+id/tv_edit"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="编辑"
+                android:textSize="14sp"
+                android:textColor="#007AFF"
+                android:gravity="center"
+                android:paddingHorizontal="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true" />
+        </LinearLayout>
+
+        <!-- 编辑模式标题栏 -->
+        <LinearLayout
+            android:id="@+id/layout_edit_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@color/ios_bg"
+            android:elevation="4dp"
+            android:paddingHorizontal="16dp"
+            android:minHeight="60dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tv_cancel"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="取消"
+                android:textSize="14sp"
+                android:textColor="#1D1D1F"
+                android:gravity="center"
+                android:paddingHorizontal="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="请选择图书"
+                android:textSize="16sp"
+                android:textColor="#1D1D1F"
+                android:gravity="center" />
+
+            <TextView
+                android:id="@+id/tv_select_all"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="全选"
+                android:textSize="14sp"
+                android:textColor="#1D1D1F"
+                android:gravity="center"
+                android:paddingHorizontal="8dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- 列表（下拉刷新） -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipe_refresh_reading"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
+                android:id="@+id/recycler_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:fastScrollAutoHide="true"
+                app:fastScrollAutoHideDelay="2000"
+                app:fastScrollThumbColor="#007AFF"
+                app:fastScrollTrackColor="#00000000" />
+
+            <TextView
+                android:id="@+id/tv_empty"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:text="暂无阅读记录"
+                android:textSize="16sp"
+                android:textColor="#8E8E93"
+                android:gravity="center"
+                android:visibility="gone" />
+        </FrameLayout>
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    <!-- 底部删除栏（编辑模式显示） -->
+    <LinearLayout
+        android:id="@+id/layout_bottom_delete"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:background="@color/ios_bg"
+        android:elevation="8dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/iv_delete"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_delete"
+            android:padding="12dp"
+            android:clickable="true"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="删除" />
+    </LinearLayout>
+
+
+</LinearLayout>

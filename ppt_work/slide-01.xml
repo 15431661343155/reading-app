@@ -1,0 +1,147 @@
+<slide>
+  <style>
+    <fill>
+      <fillColor color="rgb(255, 255, 255)"/>
+    </fill>
+  </style>
+  <data>
+    <!-- 第一层：系统 -->
+    <shape type="rect" topLeftX="380" topLeftY="25" width="200" height="50">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="2"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>智能阅读系统</p></content>
+    </shape>
+
+    <!-- 第二层：子系统 -->
+    <shape type="rect" topLeftX="100" topLeftY="130" width="200" height="50">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="2"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>Android客户端</p></content>
+    </shape>
+    <shape type="rect" topLeftX="660" topLeftY="130" width="200" height="50">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="2"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>服务端子系统</p></content>
+    </shape>
+
+    <!-- 第三层左：Android客户端功能模块（两行三列） -->
+    <shape type="rect" topLeftX="35" topLeftY="235" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>用户认证</p></content>
+    </shape>
+    <shape type="rect" topLeftX="187" topLeftY="235" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>书架管理</p></content>
+    </shape>
+    <shape type="rect" topLeftX="339" topLeftY="235" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>搜索发现</p></content>
+    </shape>
+    <shape type="rect" topLeftX="35" topLeftY="315" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>阅读引擎</p></content>
+    </shape>
+    <shape type="rect" topLeftX="187" topLeftY="315" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>阅读设置</p></content>
+    </shape>
+    <shape type="rect" topLeftX="339" topLeftY="315" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>个人中心</p></content>
+    </shape>
+
+    <!-- 第三层右：服务端功能模块（两行三列） -->
+    <shape type="rect" topLeftX="500" topLeftY="235" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>用户管理</p></content>
+    </shape>
+    <shape type="rect" topLeftX="652" topLeftY="235" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>书籍管理</p></content>
+    </shape>
+    <shape type="rect" topLeftX="804" topLeftY="235" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>章节管理</p></content>
+    </shape>
+    <shape type="rect" topLeftX="500" topLeftY="315" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>书源解析</p></content>
+    </shape>
+    <shape type="rect" topLeftX="652" topLeftY="315" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>数据访问</p></content>
+    </shape>
+    <shape type="rect" topLeftX="804" topLeftY="315" width="125" height="45">
+      <fill><fillColor color="rgb(255, 255, 255)"/></fill>
+      <border color="rgb(0, 0, 0)" width="1"/>
+      <content textType="body" textAlign="center" verticalAlign="middle" fontSize="18" fontFamily="宋体" color="rgb(0,0,0)"><p>配置管理</p></content>
+    </shape>
+
+    <!-- 连接符：第一层到第二层 -->
+    <polyline type="bent-connector3" topLeftX="200" topLeftY="75" width="280" height="55" flipX="true">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+    <polyline type="bent-connector3" topLeftX="480" topLeftY="75" width="280" height="55">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+
+    <!-- 连接符：Android客户端到第一行模块 -->
+    <polyline type="bent-connector3" topLeftX="97" topLeftY="180" width="103" height="55" flipX="true">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+    <polyline type="bent-connector3" topLeftX="200" topLeftY="180" width="49" height="55">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+    <polyline type="bent-connector3" topLeftX="200" topLeftY="180" width="201" height="55">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+
+    <!-- 连接符：Android客户端到第二行模块 -->
+    <polyline type="bent-connector3" topLeftX="97" topLeftY="180" width="103" height="135" flipX="true">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+    <polyline type="bent-connector3" topLeftX="200" topLeftY="180" width="49" height="135">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+    <polyline type="bent-connector3" topLeftX="200" topLeftY="180" width="201" height="135">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+
+    <!-- 连接符：服务端到第一行模块 -->
+    <polyline type="bent-connector3" topLeftX="562" topLeftY="180" width="198" height="55" flipX="true">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+    <polyline type="bent-connector3" topLeftX="714" topLeftY="180" width="48" height="55">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+    <polyline type="bent-connector3" topLeftX="760" topLeftY="180" width="166" height="55">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+
+    <!-- 连接符：服务端到第二行模块 -->
+    <polyline type="bent-connector3" topLeftX="562" topLeftY="180" width="198" height="135" flipX="true">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+    <polyline type="bent-connector3" topLeftX="714" topLeftY="180" width="48" height="135">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+    <polyline type="bent-connector3" topLeftX="760" topLeftY="180" width="166" height="135">
+      <border color="rgb(0, 0, 0)" width="1"/>
+    </polyline>
+
+  </data>
+  <note>
+    <content textType="body"><p>本页展示智能阅读系统的三层功能模块组织结构：第一层为系统整体，第二层分为Android客户端和服务端两个子系统，第三层为各子系统的核心功能模块。模块间采用无箭头肘型连接符连接。</p></content>
+  </note>
+</slide>

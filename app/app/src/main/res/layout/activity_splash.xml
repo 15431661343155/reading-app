@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/splash_bg">
+
+    <!-- ═══ 水墨山峦 · 底部装饰层 ═══ -->
+    <ImageView
+        android:id="@+id/iv_mountains"
+        android:layout_width="0dp"
+        android:layout_height="240dp"
+        android:scaleType="centerCrop"
+        android:src="@drawable/ic_splash_mountains"
+        android:alpha="0.6"
+        android:importantForAccessibility="no"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- ═══ 朱砂印章 · 右上角点缀 ═══ -->
+    <ImageView
+        android:id="@+id/iv_seal"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:src="@drawable/ic_splash_seal"
+        android:importantForAccessibility="no"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="48dp"
+        android:layout_marginEnd="32dp" />
+
+    <!-- ═══ 主标题「书」· 竖排第一字 ═══ -->
+    <TextView
+        android:id="@+id/tv_title_char1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="书"
+        android:textSize="108sp"
+        android:textColor="@color/splash_title"
+        android:fontFamily="serif"
+        android:textStyle="bold"
+        android:letterSpacing="0.05"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintVertical_bias="0.2" />
+
+    <!-- ═══ 主标题「阁」· 竖排第二字 ═══ -->
+    <TextView
+        android:id="@+id/tv_title_char2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="阁"
+        android:textSize="108sp"
+        android:textColor="@color/splash_title"
+        android:fontFamily="serif"
+        android:textStyle="bold"
+        android:letterSpacing="0.05"
+        app:layout_constraintTop_toBottomOf="@id/tv_title_char1"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="-20dp" />
+
+    <!-- ═══ 装饰分隔线 ═══ -->
+    <ImageView
+        android:id="@+id/iv_divider"
+        android:layout_width="140dp"
+        android:layout_height="wrap_content"
+        android:adjustViewBounds="true"
+        android:src="@drawable/ic_splash_divider"
+        android:importantForAccessibility="no"
+        app:layout_constraintTop_toBottomOf="@id/tv_title_char2"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="28dp" />
+
+    <!-- ═══ 副标题「一阁藏万卷，开卷遇山河」 ═══ -->
+    <TextView
+        android:id="@+id/tv_subtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="一阁藏万卷，开卷遇山河"
+        android:textSize="22sp"
+        android:textColor="@color/splash_subtitle"
+        android:fontFamily="serif"
+        android:letterSpacing="0.3"
+        app:layout_constraintTop_toBottomOf="@id/iv_divider"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="22dp" />
+
+    <!-- ═══ 版本号 ═══ -->
+    <TextView
+        android:id="@+id/tv_version"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/app_version"
+        android:textSize="11sp"
+        android:textColor="@color/splash_version"
+        android:fontFamily="sans-serif-light"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="28dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

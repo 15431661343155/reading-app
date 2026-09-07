@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- 全屏启动页主题 · 阁檐墨韵（保持国风，不在本次改造范围） -->
+    <style name="Theme.Splash" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="colorPrimary">@color/splash_title</item>
+        <item name="colorPrimaryVariant">@color/splash_title</item>
+        <item name="colorOnPrimary">@color/splash_bg</item>
+        <item name="android:windowBackground">@color/splash_bg</item>
+        <item name="android:statusBarColor">@color/splash_bg</item>
+        <item name="android:navigationBarColor">@color/splash_bg</item>
+        <!-- 全屏设置 -->
+        <item name="android:windowFullscreen">true</item>
+        <!-- 状态栏图标使用深色以配合浅色背景 -->
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!-- ===== 默认主题：iOS 浅色磨砂玻璃 ===== -->
+    <style name="Theme.MyApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- 主色调：iOS 系统蓝 -->
+        <item name="colorPrimary">@color/ios_blue</item>
+        <item name="colorPrimaryVariant">@color/ios_blue</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/ios_blue</item>
+        <item name="colorSecondaryVariant">@color/ios_blue</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <!-- Toolbar 白色背景 + 深色图标/文字 -->
+        <item name="actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar.Light</item>
+        <item name="android:actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar.Light</item>
+        <!-- 状态栏：Toolbar 白色背景 → 状态栏也白色统一 -->
+        <item name="android:statusBarColor">@color/ios_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/ios_bg_grouped</item>
+        <item name="android:navigationBarColor">@color/ios_bg_grouped</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <!-- 圆角：iOS continuous corner，10/12/16dp -->
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.iOS.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.iOS.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.iOS.Large</item>
+        <!-- 按钮样式 -->
+        <item name="materialButtonStyle">@style/Widget.MyApp.Button.iOS</item>
+        <!-- 卡片样式 -->
+        <item name="materialCardViewStyle">@style/Widget.MyApp.CardView.iOS</item>
+        <!--自定义导航栏 attr（iOS 配色）-->
+        <item name="navBg">@color/ios_tab_bar</item>
+        <item name="navSelectedColor">@color/ios_blue</item>
+        <item name="navUnselectedColor">@color/ios_text_tertiary</item>
+        <item name="navRipple">@color/ios_separator</item>
+        <item name="navTextSelectedColor">@color/ios_blue</item>
+        <item name="navTextUnselectedColor">@color/ios_text_tertiary</item>
+    </style>
+
+    <!-- 海滨主题：收敛为 iOS 蓝变体（保留作为可选主题） -->
+    <style name="Theme.MyApp.Seaside" parent="Theme.MyApp">
+        <item name="colorPrimary">@color/ios_blue</item>
+        <item name="colorPrimaryVariant">@color/ios_blue</item>
+        <item name="android:statusBarColor">@color/ios_bg</item>
+        <item name="android:windowBackground">@color/ios_bg_grouped</item>
+        <item name="navBg">@color/ios_tab_bar</item>
+        <item name="navSelectedColor">@color/ios_blue</item>
+        <item name="navUnselectedColor">@color/ios_text_tertiary</item>
+        <item name="navRipple">@color/ios_separator</item>
+        <item name="navTextSelectedColor">@color/ios_blue</item>
+        <item name="navTextUnselectedColor">@color/ios_text_tertiary</item>
+    </style>
+
+    <!-- ===== Toolbar 白色背景 + 深色图标/文字 ===== -->
+    <style name="ThemeOverlay.MyApp.ActionBar.Light" parent="ThemeOverlay.AppCompat.ActionBar">
+        <item name="android:windowBackground">@color/ios_bg</item>
+        <item name="android:textColorPrimary">@color/ios_text_primary</item>
+        <item name="android:textColorSecondary">@color/ios_text_secondary</item>
+        <item name="actionBarWidgetTheme">@style/ThemeOverlay.MyApp.ActionBar.Widget</item>
+    </style>
+    <style name="ThemeOverlay.MyApp.ActionBar.Widget" parent="ThemeOverlay.AppCompat.Light">
+        <item name="colorControlNormal">@color/ios_text_primary</item>
+    </style>
+
+    <!-- ===== iOS 圆角样式（continuous corner） ===== -->
+    <style name="ShapeAppearance.iOS.Small" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">10dp</item>
+    </style>
+    <style name="ShapeAppearance.iOS.Medium" parent="ShapeAppearance.MaterialComponents.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
+    <style name="ShapeAppearance.iOS.Large" parent="ShapeAppearance.MaterialComponents.LargeComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
+    </style>
+
+    <!-- ===== iOS 按钮样式 ===== -->
+    <style name="Widget.MyApp.Button.iOS" parent="Widget.MaterialComponents.Button">
+        <item name="cornerRadius">10dp</item>
+        <item name="backgroundTint">@color/ios_blue</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="elevation">0dp</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.01</item>
+    </style>
+
+    <!-- ===== iOS 卡片样式 ===== -->
+    <style name="Widget.MyApp.CardView.iOS" parent="Widget.MaterialComponents.CardView">
+        <item name="cardBackgroundColor">@color/ios_card_bg</item>
+        <item name="cardCornerRadius">12dp</item>
+        <item name="cardElevation">1dp</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
+    <!-- 海滨主题圆角样式（保留兼容旧引用） -->
+    <style name="ShapeAppearance.Seaside.Medium" parent="ShapeAppearance.iOS.Medium" />
+    <style name="ShapeAppearance.Seaside.Large" parent="ShapeAppearance.iOS.Large" />
+
+    <!-- 海滨主题按钮样式（保留兼容旧引用） -->
+    <style name="Widget.MyApp.Button.Seaside" parent="Widget.MyApp.Button.iOS" />
+    <style name="Widget.MyApp.CardView.Seaside" parent="Widget.MyApp.CardView.iOS" />
+</resources>

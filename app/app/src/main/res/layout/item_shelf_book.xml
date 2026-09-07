@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--书架书籍 Item 布局（iOS 白卡片 + 灰底 grouped 风格）-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="12dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:background="@drawable/bg_ios_card"
+        android:gravity="center_vertical">
+
+        <!-- 选择框 -->
+        <ImageView
+            android:id="@+id/iv_checkbox"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_checkbox_unchecked"
+            android:layout_marginEnd="10dp"
+            android:visibility="gone"
+            android:contentDescription="选择" />
+
+        <!-- 书籍封面（圆角） -->
+        <ImageView
+            android:id="@+id/iv_book_cover"
+            android:layout_width="72dp"
+            android:layout_height="96dp"
+            android:scaleType="centerCrop"
+            android:src="@mipmap/ic_launcher"
+            android:contentDescription="@null"
+            android:background="@drawable/bg_cover_rounded"
+            android:clipToOutline="true" />
+
+        <!-- 书籍信息 -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="14dp">
+
+            <TextView
+                android:id="@+id/tv_book_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:text="书名"
+                android:textColor="@color/ios_text_primary"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tv_author"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_secondary"
+                android:layout_marginTop="4dp"
+                android:text="作者" />
+
+            <!-- 阅读进度 -->
+            <TextView
+                android:id="@+id/tv_read_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_secondary"
+                android:layout_marginTop="4dp"
+                android:text="继续阅读 第1章" />
+
+            <TextView
+                android:id="@+id/tv_last_update"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="@color/ios_text_tertiary"
+                android:layout_marginTop="2dp"
+                android:text="最新章节 第120章"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

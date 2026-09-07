@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--书签布局（iOS 分组列表风）-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ios_bg_grouped">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_popup_bookmarks"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/tv_empty_bookmark"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:text="暂无书签"
+        android:textSize="15sp"
+        android:textColor="@color/ios_text_tertiary"
+        android:gravity="center"
+        android:visibility="visible" />
+
+</FrameLayout>

@@ -1,0 +1,47 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- 夜间模式：iOS 深色变体 -->
+    <style name="Theme.MyApplication" parent="Theme.AppCompat.DayNight">
+        <item name="colorPrimary">@color/ios_blue_dark</item>
+        <item name="colorPrimaryDark">@color/ios_bg_dark</item>
+        <item name="colorAccent">@color/ios_blue_dark</item>
+    </style>
+
+    <!-- 覆盖 Theme.MyApp 夜间表现：iOS 深色磨砂玻璃 -->
+    <style name="Theme.MyApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/ios_blue_dark</item>
+        <item name="colorPrimaryVariant">@color/ios_blue_dark</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/ios_blue_dark</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <!-- Toolbar 深色背景 + 浅色图标/文字 -->
+        <item name="actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar.Dark</item>
+        <item name="android:actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar.Dark</item>
+        <item name="android:statusBarColor">@color/ios_bg_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@color/ios_bg_grouped_dark</item>
+        <item name="android:navigationBarColor">@color/ios_bg_grouped_dark</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.iOS.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.iOS.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.iOS.Large</item>
+        <item name="materialButtonStyle">@style/Widget.MyApp.Button.iOS</item>
+        <item name="materialCardViewStyle">@style/Widget.MyApp.CardView.iOS</item>
+        <item name="navBg">@color/ios_tab_bar_dark</item>
+        <item name="navSelectedColor">@color/ios_blue_dark</item>
+        <item name="navUnselectedColor">@color/ios_text_secondary_dark</item>
+        <item name="navRipple">@color/ios_separator_dark</item>
+        <item name="navTextSelectedColor">@color/ios_blue_dark</item>
+        <item name="navTextUnselectedColor">@color/ios_text_secondary_dark</item>
+    </style>
+
+    <!-- ===== Toolbar 深色背景 + 浅色图标/文字 ===== -->
+    <style name="ThemeOverlay.MyApp.ActionBar.Dark" parent="ThemeOverlay.AppCompat.Dark.ActionBar">
+        <item name="android:windowBackground">@color/ios_bg_dark</item>
+        <item name="android:textColorPrimary">@color/white</item>
+        <item name="android:textColorSecondary">@color/ios_text_secondary_dark</item>
+        <item name="actionBarWidgetTheme">@style/ThemeOverlay.MyApp.ActionBar.Widget.Dark</item>
+    </style>
+    <style name="ThemeOverlay.MyApp.ActionBar.Widget.Dark" parent="ThemeOverlay.AppCompat.Dark">
+        <item name="colorControlNormal">@color/white</item>
+    </style>
+</resources>

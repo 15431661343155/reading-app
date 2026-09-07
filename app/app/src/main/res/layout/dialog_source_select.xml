@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 外站书城 书源选择弹窗 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog_rounded"
+    android:padding="16dp"
+    android:minHeight="300dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="选择外站书源"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/ios_text_primary"/>
+
+        <ImageView
+            android:id="@+id/iv_dialog_close"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@drawable/ic_close_grey"
+            android:contentDescription="@null"
+            android:padding="4dp"/>
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:text="选择一个书源，书城将展示该网站的分类榜单与推荐书籍"
+        android:textSize="13sp"
+        android:textColor="@color/ios_text_secondary"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_source_list"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:overScrollMode="never"
+        android:maxHeight="400dp"/>
+</LinearLayout>

@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>资源管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a href="/admin" class="navbar-brand">📚 阅读App管理后台</a>
+    <div>
+      <a href="/admin" class="btn btn-outline-light btn-sm me-2">🏠 首页</a>
+      <a href="/admin/books" class="btn btn-outline-light btn-sm me-2">书籍管理</a>
+      <a href="/admin/chapters" class="btn btn-outline-light btn-sm me-2">章节管理</a>
+      <a href="/admin/import" class="btn btn-outline-light btn-sm me-2">数据导入</a>
+      <a href="/admin/online-source" class="btn btn-outline-light btn-sm me-2">🌐 在线书源</a>
+      <a href="/admin/book-source" class="btn btn-outline-light btn-sm me-2">⚙️ 书源管理</a>
+      <a href="/admin/users" class="btn btn-outline-light btn-sm me-2">用户管理</a>
+      <a href="/admin/resource" class="btn btn-outline-light btn-sm me-2">📦 资源管理</a>
+      <a href="/admin/feedback" class="btn btn-outline-light btn-sm">💬 意见反馈</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-4">
+  <h2 class="mb-4">📦 资源管理</h2>
+
+  <ul class="nav nav-tabs mb-4" id="resourceTabs">
+    <li class="nav-item">
+      <button class="nav-link active" data-tab="font">字体管理</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-tab="apk">APK管理</button>
+    </li>
+  </ul>
+
+  <!-- 字体管理 -->
+  <div id="fontPanel">
+    <div class="d-flex justify-content-between mb-3">
+      <div class="form-text text-muted">TTF 字体文件用于 Android 客户端阅读页字体切换</div>
+      <button class="btn btn-primary" onclick="showFontModal()">+ 新增字体</button>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>显示名称</th>
+              <th>CSS 字体名</th>
+              <th>文件路径</th>
+              <th>大小</th>
+              <th>排序</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="fontTable">
+            <tr><td colspan="7" class="text-center text-muted">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- APK管理 -->
+  <div id="apkPanel" style="display:none;">
+    <div class="d-flex justify-content-between mb-3">
+      <div class="form-text text-muted">APK 文件用于客户端更新提示</div>
+      <button class="btn btn-primary" onclick="showApkUpload()">+ 上传APK</button>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>文件名</th>
+              <th>文件大小</th>
+              <th>上传时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="apkTable">
+            <tr><td colspan="4" class="text-center text-muted">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 字体编辑/新增弹窗 -->
+<div class="modal fade" id="fontModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="fontModalTitle">新增字体</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">字体文件（TTF/OTF，可选 - 若已上传或仅修改信息）</label>
+          <input type="file" class="form-control" id="fontFile" accept=".ttf,.otf">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">显示名称 *</label>
+          <input type="text" class="form-control" id="fontName" placeholder="如：楷体">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">CSS 字体名 *</label>
+          <input type="text" class="form-control" id="fontCssName" placeholder="如：KaiTi">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">文件路径</label>
+          <input type="text" class="form-control" id="fontFileUrl" placeholder="如：/fonts/kaiti.ttf">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">文件大小</label>
+          <input type="text" class="form-control" id="fontFileSize" placeholder="如：5.2 MB">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">排序（数字越小越靠前）</label>
+          <input type="number" class="form-control" id="fontSortOrder" value="0">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" onclick="saveFont()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APK上传弹窗 -->
+<div class="modal fade" id="apkModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">上传APK文件</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">选择APK文件</label>
+          <input type="file" class="form-control" id="apkFile" accept=".apk">
+          <small class="text-muted">请选择Android APK安装包文件</small>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">应用名称</label>
+          <input type="text" class="form-control" id="apkAppName" value="书阁阅读" placeholder="书阁阅读">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">版本号（格式：1.5.3）</label>
+          <input type="text" class="form-control" id="apkVersion" placeholder="1.5.3">
+          <small class="text-muted">留空则尝试从原文件名解析 vX.Y.Z</small>
+        </div>
+        <div id="apkUploadProgress" style="display:none;">
+          <div class="progress"><div class="progress-bar" role="progressbar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" onclick="uploadApk()">上传</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  let fontModal;
+  let apkModal;
+  let editingFontId = null;
+
+  document.addEventListener('DOMContentLoaded', function () {
+    fontModal = new bootstrap.Modal(document.getElementById('fontModal'));
+    apkModal = new bootstrap.Modal(document.getElementById('apkModal'));
+    loadFonts();
+
+    document.querySelectorAll('#resourceTabs button').forEach(btn => {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('#resourceTabs button').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        const tab = this.dataset.tab;
+        document.getElementById('fontPanel').style.display = tab === 'font' ? 'block' : 'none';
+        document.getElementById('apkPanel').style.display = tab === 'apk' ? 'block' : 'none';
+        if (tab === 'apk') loadApkList();
+      });
+    });
+  });
+
+  // ------- Font Management -------
+  function loadFonts() {
+    fetch('/api/admin/fonts')
+      .then(r => r.json())
+      .then(d => {
+        const tbody = document.getElementById('fontTable');
+        if (!d.data || d.data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">暂无字体，请先上传</td></tr>';
+          return;
+        }
+        tbody.innerHTML = d.data.map(f => `
+          <tr>
+            <td>${f.name}</td>
+            <td>${f.cssName}</td>
+            <td><a href="${f.fileUrl}" target="_blank">${f.fileUrl}</a></td>
+            <td>${f.fileSize || '-'}</td>
+            <td>${f.sortOrder}</td>
+            <td>${f.createdAt ? f.createdAt.substring(0, 16) : '-'}</td>
+            <td>
+              <button class="btn btn-sm btn-info me-1" onclick='editFont(${JSON.stringify(f)})'>编辑</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteFont(${f.id})">删除</button>
+            </td>
+          </tr>
+        `).join('');
+      });
+  }
+
+  function showFontModal() {
+    editingFontId = null;
+    document.getElementById('fontModalTitle').innerText = '新增字体';
+    document.getElementById('fontFile').value = '';
+    document.getElementById('fontName').value = '';
+    document.getElementById('fontCssName').value = '';
+    document.getElementById('fontFileUrl').value = '';
+    document.getElementById('fontFileSize').value = '';
+    document.getElementById('fontSortOrder').value = '0';
+    fontModal.show();
+  }
+
+  function editFont(font) {
+    editingFontId = font.id;
+    document.getElementById('fontModalTitle').innerText = '编辑字体';
+    document.getElementById('fontFile').value = '';
+    document.getElementById('fontName').value = font.name;
+    document.getElementById('fontCssName').value = font.cssName;
+    document.getElementById('fontFileUrl').value = font.fileUrl;
+    document.getElementById('fontFileSize').value = font.fileSize || '';
+    document.getElementById('fontSortOrder').value = font.sortOrder || 0;
+    fontModal.show();
+  }
+
+  function saveFont() {
+    const name = document.getElementById('fontName').value.trim();
+    const cssName = document.getElementById('fontCssName').value.trim();
+    if (!name || !cssName) {
+      alert('请填写显示名称和CSS字体名');
+      return;
+    }
+
+    const fontFile = document.getElementById('fontFile').files[0];
+
+    // 如果上传了文件，先上传后再保存（文件名使用显示名称）
+    if (fontFile) {
+      const formData = new FormData();
+      formData.append('file', fontFile);
+      const display = document.getElementById('fontName').value.trim();
+      if (display) formData.append('fileName', display);
+      fetch('/api/admin/fonts/upload', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(d => {
+          if (d.success) {
+            document.getElementById('fontFileUrl').value = d.data.fileUrl;
+            if (d.data.fileSize) document.getElementById('fontFileSize').value = d.data.fileSize;
+            submitFontSave();
+          } else {
+            alert('上传失败：' + d.message);
+          }
+        });
+    } else {
+      submitFontSave();
+    }
+  }
+
+  function submitFontSave() {
+    const body = {
+      name: document.getElementById('fontName').value.trim(),
+      cssName: document.getElementById('fontCssName').value.trim(),
+      fileUrl: document.getElementById('fontFileUrl').value.trim(),
+      fileSize: document.getElementById('fontFileSize').value.trim(),
+      sortOrder: document.getElementById('fontSortOrder').value
+    };
+    const url = editingFontId ? `/api/admin/fonts/${editingFontId}` : '/api/admin/fonts';
+    const method = editingFontId ? 'PUT' : 'POST';
+    fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(r => r.json()).then(d => {
+      if (d.success) {
+        alert('保存成功');
+        fontModal.hide();
+        loadFonts();
+      } else {
+        alert('保存失败：' + d.message);
+      }
+    });
+  }
+
+  function deleteFont(id) {
+    if (!confirm('确认删除此字体？')) return;
+    fetch(`/api/admin/fonts/${id}`, { method: 'DELETE' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          alert('删除成功');
+          loadFonts();
+        } else {
+          alert('删除失败：' + d.message);
+        }
+      });
+  }
+
+  // ------- APK Management -------
+  function showApkUpload() {
+    document.getElementById('apkFile').value = '';
+    document.getElementById('apkUploadProgress').style.display = 'none';
+    apkModal.show();
+  }
+
+  function loadApkList() {
+    fetch('/api/admin/apk/list')
+      .then(r => r.json())
+      .then(d => {
+        const tbody = document.getElementById('apkTable');
+        if (!d.data || d.data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">暂无APK文件</td></tr>';
+          return;
+        }
+        tbody.innerHTML = d.data.map(apk => {
+          // 从文件名提取版本号，例如：app_v1.5.4.apk -> 1.5.4
+          const versionMatch = apk.fileName.match(/[vV]?(\d+\.\d+\.\d+)/);
+          const version = versionMatch ? versionMatch[1] : '1.0.0';
+          return `
+          <tr>
+            <td>${apk.fileName}</td>
+            <td>${formatFileSize(apk.fileSize)}</td>
+            <td>${apk.uploadTime}</td>
+            <td>
+              <a href="${apk.downloadUrl}" class="btn btn-sm btn-info me-1" download>📥 下载</a>
+              <button class="btn btn-sm btn-success me-1" onclick="pushApk('${apk.fileName}', '${version}')">📢 推送</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteApk('${encodeURIComponent(apk.fileName)}')">🗑️ 删除</button>
+            </td>
+          </tr>
+        `;}).join('');
+      });
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
+
+  function uploadApk() {
+    const file = document.getElementById('apkFile').files[0];
+    if (!file) { alert('请选择要上传的APK文件'); return; }
+    if (!file.name.toLowerCase().endsWith('.apk')) { alert('请上传APK格式的文件'); return; }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    const appName = document.getElementById('apkAppName').value.trim();
+    const version = document.getElementById('apkVersion').value.trim();
+    if (appName) formData.append('appName', appName);
+    if (version) formData.append('version', version);
+
+    document.getElementById('apkUploadProgress').style.display = 'block';
+    const progressBar = document.querySelector('#apkUploadProgress .progress-bar');
+    progressBar.style.width = '0%';
+
+    fetch('/api/admin/apk/upload', { method: 'POST', body: formData })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          alert('上传成功');
+          apkModal.hide();
+          loadApkList();
+        } else {
+          alert('上传失败：' + d.message);
+        }
+      })
+      .finally(() => {
+        document.getElementById('apkUploadProgress').style.display = 'none';
+      });
+  }
+
+  function deleteApk(fileName) {
+    if (!confirm('确定要删除此APK文件吗？')) return;
+    fetch(`/api/admin/apk/delete/${fileName}`, { method: 'DELETE' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          alert('删除成功');
+          loadApkList();
+        } else {
+          alert('删除失败：' + d.message);
+        }
+      });
+  }
+
+  // 推送APK
+  function pushApk(fileName, version) {
+    if (!confirm('确定要推送此APK给所有用户吗？')) return;
+    fetch(`/api/admin/apk-push/push?fileName=${encodeURIComponent(fileName)}&version=${encodeURIComponent(version)}`, {
+      method: 'POST'
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        alert('推送成功');
+      } else {
+        alert('推送失败：' + d.message);
+      }
+    })
+    .catch(err => {
+      alert('推送失败：' + err.message);
+    });
+  }
+</script>
+</body>
+</html>

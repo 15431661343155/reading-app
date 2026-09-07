@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- iOS 描边搜索框：透明底、分隔线描边、10dp 圆角 -->
+    <solid android:color="@android:color/transparent"/>
+    <stroke android:width="0.5dp" android:color="@color/ios_separator"/>
+    <corners android:radius="10dp"/>
+    <padding android:top="4dp" android:bottom="4dp"/>
+</shape>

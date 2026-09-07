@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--意见反馈页布局-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/windowBackground">
+
+    <!-- 返回标题栏 -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar_back"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@color/ios_bg"
+        app:navigationIcon="@drawable/ic_back_black"
+        app:title="@string/feedback_title"
+        app:titleTextColor="@color/ios_text_primary" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <!-- 反馈类型标题 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/feedback_type"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:layout_marginBottom="10dp" />
+
+            <!-- 反馈类型单选组 -->
+            <RadioGroup
+                android:id="@+id/rg_feedback_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="24dp">
+
+                <RadioButton
+                    android:id="@+id/rb_bug"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="@string/feedback_type_bug"
+                    android:textSize="14sp"
+                    android:checked="true" />
+
+                <RadioButton
+                    android:id="@+id/rb_suggestion"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="@string/feedback_type_suggestion"
+                    android:textSize="14sp" />
+
+                <RadioButton
+                    android:id="@+id/rb_other"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="@string/feedback_type_other"
+                    android:textSize="14sp" />
+            </RadioGroup>
+
+            <!-- 反馈内容 -->
+            <EditText
+                android:id="@+id/et_feedback_content"
+                android:layout_width="match_parent"
+                android:layout_height="180dp"
+                android:gravity="start|top"
+                android:hint="@string/feedback_content_hint"
+                android:inputType="textMultiLine"
+                android:minHeight="48dp"
+                android:padding="12dp"
+                android:background="@android:drawable/edit_text"
+                android:textSize="15sp"
+                android:layout_marginBottom="16dp"
+                android:autofillHints="@null" />
+
+            <!-- 联系方式 -->
+            <EditText
+                android:id="@+id/et_feedback_contact"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:hint="@string/feedback_contact_hint"
+                android:inputType="textEmailAddress"
+                android:padding="12dp"
+                android:background="@android:drawable/edit_text"
+                android:textSize="15sp"
+                android:autofillHints="@null" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- 底部提交按钮 -->
+    <Button
+        android:id="@+id/btn_feedback_submit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="50dp"
+        android:text="@string/feedback_submit"
+        android:textSize="16sp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginBottom="20dp" />
+
+</LinearLayout>

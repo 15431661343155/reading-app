@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@color/ios_bg"
+    android:elevation="8dp"
+    android:padding="8dp">
+
+    <!-- 布局切换（列表/宫格） -->
+    <LinearLayout
+        android:id="@+id/item_layout_switch"
+        android:layout_width="150dp"
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:background="?attr/selectableItemBackground">
+
+        <ImageView
+            android:id="@+id/iv_layout_icon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_grid"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/tv_layout_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="宫格布局"
+            android:textSize="15sp"
+            android:textColor="@color/ios_text_primary"
+            android:layout_marginStart="10dp" />
+    </LinearLayout>
+
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/ios_separator" />
+
+    <!-- 导入书籍 -->
+    <LinearLayout
+        android:id="@+id/item_import_book"
+        android:layout_width="150dp"
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:background="?attr/selectableItemBackground">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_upload"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="导入书籍"
+            android:textSize="15sp"
+            android:textColor="@color/ios_text_primary"
+            android:layout_marginStart="10dp" />
+    </LinearLayout>
+
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/ios_separator" />
+
+    <!-- 分组管理 -->
+    <LinearLayout
+        android:id="@+id/item_group_manage"
+        android:layout_width="150dp"
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:background="?attr/selectableItemBackground">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_category"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="分组管理"
+            android:textSize="15sp"
+            android:textColor="@color/ios_text_primary"
+            android:layout_marginStart="10dp" />
+    </LinearLayout>
+
+</LinearLayout>

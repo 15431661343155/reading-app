@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>书籍管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .batch-toolbar { display: none; }
+        .batch-toolbar.active { display: flex; }
+        .table th:first-child, .table td:first-child { width: 40px; text-align: center; }
+        .selected-row { background-color: #e7f3ff !important; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a href="/admin" class="navbar-brand">📚 阅读App管理后台</a>
+    <div>
+      <a href="/admin" class="btn btn-outline-light btn-sm me-2">🏠 首页</a>
+      <a href="/admin/books" class="btn btn-outline-light btn-sm me-2">书籍管理</a>
+      <a href="/admin/chapters" class="btn btn-outline-light btn-sm me-2">章节管理</a>
+      <a href="/admin/import" class="btn btn-outline-light btn-sm me-2">数据导入</a>
+      <a href="/admin/online-source" class="btn btn-outline-light btn-sm me-2">🌐 在线书源</a>
+      <a href="/admin/book-source" class="btn btn-outline-light btn-sm me-2">⚙️ 书源管理</a>
+      <a href="/admin/users" class="btn btn-outline-light btn-sm me-2">用户管理</a>
+      <a href="/admin/resource" class="btn btn-outline-light btn-sm me-2">📦 资源管理</a>
+      <a href="/admin/feedback" class="btn btn-outline-light btn-sm">💬 意见反馈</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-3">
+    <div class="d-flex justify-content-between mb-3">
+        <input type="text" id="searchInput" class="form-control w-50" placeholder="搜索书籍...">
+        <button class="btn btn-primary" onclick="showAddModal()">+ 添加书籍</button>
+    </div>
+
+    <!-- 批量操作工具栏 -->
+    <div id="batchToolbar" class="batch-toolbar alert alert-info align-items-center mb-3 py-2 px-3">
+        <span class="me-3">已选择 <strong id="selectedCount">0</strong> 本书籍</span>
+        <button class="btn btn-sm btn-outline-danger me-2" onclick="batchDelete()">🗑 批量删除</button>
+        <div class="dropdown me-2">
+            <button class="btn btn-sm btn-outline-warning dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                📝 批量改状态
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" onclick="batchUpdateStatus(0)">📝 连载中</a></li>
+                <li><a class="dropdown-item" href="#" onclick="batchUpdateStatus(1)">✅ 已完结</a></li>
+            </ul>
+        </div>
+        <div class="dropdown me-2">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                📂 批量改分类
+            </button>
+            <ul class="dropdown-menu" id="categoryMenu"></ul>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearSelection()">取消选择</button>
+    </div>
+
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+            <th>ID</th>
+            <th>书名</th>
+            <th>作者</th>
+            <th>分类</th>
+            <th>章节</th>
+            <th>状态</th>
+            <th>操作</th>
+        </tr>
+        </thead>
+        <tbody id="bookTable"></tbody>
+    </table>
+
+    <nav>
+        <ul class="pagination" id="pagination"></ul>
+    </nav>
+</div>
+
+<!-- 编辑/添加 弹窗 -->
+<div class="modal fade" id="bookModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">编辑书籍</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                <div class="mb-3">
+                    <label class="form-label">书名</label>
+                    <input type="text" class="form-control" id="editTitle">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">作者</label>
+                    <input type="text" class="form-control" id="editAuthor">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">分类</label>
+                    <input type="text" class="form-control" id="editCategory">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">简介</label>
+                    <textarea class="form-control" id="editIntro" rows="4"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">状态</label>
+                    <select class="form-control" id="editStatus">
+                        <option value="0">连载中</option>
+                        <option value="1">已完结</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">封面</label>
+                    <div class="d-flex align-items-center">
+                        <input type="file" class="form-control me-2" id="editCover" accept="image/*" onchange="previewCover(this)">
+                        <img id="coverPreview" src="" style="width:80px; height:100px; object-fit:cover; border:1px solid #ddd; display:none;">
+                        <button id="removeCoverBtn" type="button" class="btn btn-sm btn-danger ms-2" style="display:none;" onclick="removeCover()">删除封面</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveBook()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 查看书籍详情弹窗 -->
+<div class="modal fade" id="viewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">书籍详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <img id="viewCover" src="" style="width:120px; height:160px; object-fit:cover; border:1px solid #ddd;">
+                    </div>
+                    <div class="col-md-8">
+                        <table class="table">
+                            <tr><td width="80"><strong>书名</strong></td><td id="viewTitle"></td></tr>
+                            <tr><td><strong>作者</strong></td><td id="viewAuthor"></td></tr>
+                            <tr><td><strong>分类</strong></td><td id="viewCategory"></td></tr>
+                            <tr><td><strong>状态</strong></td><td id="viewStatus"></td></tr>
+                            <tr><td><strong>章节数</strong></td><td id="viewChapterCount"></td></tr>
+                            <tr><td><strong>总字数</strong></td><td id="viewWordCount"></td></tr>
+                            <tr><td><strong>阅读量</strong></td><td id="viewViewCount"></td></tr>
+                            <tr><td><strong>点赞数</strong></td><td id="viewLikeCount"></td></tr>
+                            <tr><td><strong>创建时间</strong></td><td id="viewCreatedAt"></td></tr>
+                            <tr><td><strong>更新时间</strong></td><td id="viewUpdatedAt"></td></tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <strong>简介</strong>
+                    <p id="viewIntro" class="mt-2"></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let currentPage = 0;
+    let modal;
+    let viewModal;
+    let selectedIds = new Set();
+
+    document.addEventListener('DOMContentLoaded', function() {
+        modal = new bootstrap.Modal(document.getElementById('bookModal'));
+        viewModal = new bootstrap.Modal(document.getElementById('viewModal'));
+        loadCategories();
+        loadBooks();
+    });
+
+    function loadCategories() {
+        fetch('/api/books/fiction/categories')
+            .then(r => r.json())
+            .then(d => {
+                if (d.success && d.data) {
+                    const menu = document.getElementById('categoryMenu');
+                    menu.innerHTML = '';
+                    d.data.forEach(cat => {
+                        const li = document.createElement('li');
+                        const a = document.createElement('a');
+                        a.className = 'dropdown-item';
+                        a.href = '#';
+                        a.textContent = cat;
+                        a.onclick = () => batchUpdateCategory(cat);
+                        li.appendChild(a);
+                        menu.appendChild(li);
+                    });
+                }
+            });
+    }
+
+    function loadBooks(page = 0) {
+        currentPage = page;
+        fetch(`/api/books?page=${page}&size=10`)
+            .then(r => r.json())
+            .then(d => {
+                const tbody = document.getElementById('bookTable');
+                tbody.innerHTML = d.data.content.map(b => `
+                        <tr data-id="${b.id}" class="${selectedIds.has(b.id) ? 'selected-row' : ''}">
+                            <td><input type="checkbox" class="row-check" data-id="${b.id}" ${selectedIds.has(b.id) ? 'checked' : ''} onchange="toggleRow(${b.id}, this)"></td>
+                            <td>${b.id}</td>
+                            <td>${b.title}</td>
+                            <td>${b.author}</td>
+                            <td>${b.category || '-'}</td>
+                            <td>${b.chapterCount}</td>
+                            <td>${b.status == 1 ? '✅完结' : '📝连载中'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-warning" onclick="editBook(${b.id})">编辑</button>
+                                <button class="btn btn-sm btn-info" onclick="viewBook(${b.id})">查看</button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteBook(${b.id})">删除</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                renderPagination(d.data);
+                updateBatchToolbar();
+            });
+    }
+
+    function toggleSelectAll(cb) {
+        const checkboxes = document.querySelectorAll('.row-check');
+        if (cb.checked) {
+            checkboxes.forEach(c => {
+                c.checked = true;
+                selectedIds.add(parseInt(c.dataset.id));
+                c.closest('tr').classList.add('selected-row');
+            });
+        } else {
+            checkboxes.forEach(c => {
+                c.checked = false;
+                c.closest('tr').classList.remove('selected-row');
+            });
+            selectedIds.clear();
+        }
+        updateBatchToolbar();
+    }
+
+    function toggleRow(id, cb) {
+        if (cb.checked) {
+            selectedIds.add(id);
+            cb.closest('tr').classList.add('selected-row');
+        } else {
+            selectedIds.delete(id);
+            cb.closest('tr').classList.remove('selected-row');
+        }
+        updateBatchToolbar();
+    }
+
+    function clearSelection() {
+        selectedIds.clear();
+        document.querySelectorAll('.row-check').forEach(c => {
+            c.checked = false;
+            c.closest('tr').classList.remove('selected-row');
+        });
+        document.getElementById('selectAll').checked = false;
+        updateBatchToolbar();
+    }
+
+    function updateBatchToolbar() {
+        const toolbar = document.getElementById('batchToolbar');
+        const count = selectedIds.size;
+        document.getElementById('selectedCount').textContent = count;
+        if (count > 0) {
+            toolbar.classList.add('active');
+        } else {
+            toolbar.classList.remove('active');
+        }
+    }
+
+    function batchDelete() {
+        const ids = Array.from(selectedIds);
+        if (ids.length === 0) return;
+        if (!confirm(`确定要删除选中的 ${ids.length} 本书籍？\n\n此操作将同时删除这些书籍的所有章节、书架记录、阅读进度和书签，且不可恢复！`)) return;
+
+        fetch('/api/books/batch-delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(ids)
+        }).then(r => r.json())
+        .then(d => {
+            if (d.success) {
+                alert(`成功删除 ${d.data} 本书籍`);
+                selectedIds.clear();
+                loadBooks(currentPage);
+            } else {
+                alert('删除失败: ' + d.message);
+            }
+        });
+    }
+
+    function batchUpdateStatus(status) {
+        const ids = Array.from(selectedIds);
+        if (ids.length === 0) return;
+        const statusText = status === 1 ? '已完结' : '连载中';
+        if (!confirm(`确定将选中的 ${ids.length} 本书籍状态改为「${statusText}」？`)) return;
+
+        fetch('/api/books/batch-status', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ids: ids, status: status})
+        }).then(r => r.json())
+        .then(d => {
+            if (d.success) {
+                alert(`成功更新 ${d.data} 本书籍状态`);
+                selectedIds.clear();
+                loadBooks(currentPage);
+            } else {
+                alert('更新失败: ' + d.message);
+            }
+        });
+    }
+
+    function batchUpdateCategory(category) {
+        const ids = Array.from(selectedIds);
+        if (ids.length === 0) return;
+        if (!confirm(`确定将选中的 ${ids.length} 本书籍分类改为「${category}」？`)) return;
+
+        fetch('/api/books/batch-category', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ids: ids, category: category})
+        }).then(r => r.json())
+        .then(d => {
+            if (d.success) {
+                alert(`成功更新 ${d.data} 本书籍分类`);
+                selectedIds.clear();
+                loadBooks(currentPage);
+            } else {
+                alert('更新失败: ' + d.message);
+            }
+        });
+    }
+
+    function renderPagination(pageData) {
+        const pagination = document.getElementById('pagination');
+        const totalPages = pageData.totalPages;
+        const currentPageNum = pageData.number;
+        
+        if (totalPages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+
+        let html = `<li class="page-item ${currentPageNum === 0 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="loadBooks(${currentPageNum - 1})">上一页</a>
+        </li>`;
+
+        const startPage = Math.max(0, currentPageNum - 2);
+        const endPage = Math.min(totalPages - 1, currentPageNum + 2);
+
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<li class="page-item ${i === currentPageNum ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadBooks(${i})">${i + 1}</a>
+            </li>`;
+        }
+
+        html += `<li class="page-item ${currentPageNum === totalPages - 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="loadBooks(${currentPageNum + 1})">下一页</a>
+        </li>`;
+
+        pagination.innerHTML = html;
+    }
+
+    function showAddModal() {
+        document.getElementById('modalTitle').textContent = '添加书籍';
+        document.getElementById('editId').value = '';
+        document.getElementById('editTitle').value = '';
+        document.getElementById('editAuthor').value = '';
+        document.getElementById('editCategory').value = '';
+        document.getElementById('editIntro').value = '';
+        document.getElementById('editStatus').value = '0';
+        document.getElementById('editCover').value = '';
+        document.getElementById('coverPreview').src = '';
+        document.getElementById('coverPreview').style.display = 'none';
+        document.getElementById('removeCoverBtn').style.display = 'none';
+        modal.show();
+    }
+
+    function editBook(id) {
+        fetch(`/api/books/${id}`)
+            .then(r => r.json())
+            .then(d => {
+                const b = d.data;
+                if (!d.success || b == null) {
+                    alert('获取书籍详情失败：' + (d.message || '未知错误'));
+                    return;
+                }
+                document.getElementById('modalTitle').textContent = '编辑书籍';
+                document.getElementById('editId').value = b.id;
+                document.getElementById('editTitle').value = b.title;
+                document.getElementById('editAuthor').value = b.author;
+                document.getElementById('editCategory').value = b.category || '';
+                document.getElementById('editIntro').value = b.intro || '';
+                document.getElementById('editStatus').value = b.status;
+                document.getElementById('editCover').value = '';
+                if (b.cover) {
+                    document.getElementById('coverPreview').src = b.cover;
+                    document.getElementById('coverPreview').style.display = 'block';
+                    document.getElementById('removeCoverBtn').style.display = 'inline-block';
+                } else {
+                    document.getElementById('coverPreview').src = '';
+                    document.getElementById('coverPreview').style.display = 'none';
+                    document.getElementById('removeCoverBtn').style.display = 'none';
+                }
+                modal.show();
+            });
+    }
+
+    function removeCover() {
+        const bookId = document.getElementById('editId').value;
+        if (bookId && confirm('确定要删除封面吗？')) {
+            fetch(`/api/cover/${bookId}`, {method: 'DELETE'})
+                .then(() => {
+                    document.getElementById('coverPreview').src = '';
+                    document.getElementById('coverPreview').style.display = 'none';
+                    document.getElementById('removeCoverBtn').style.display = 'none';
+                    document.getElementById('editCover').value = '';
+                });
+        }
+    }
+
+    function saveBook() {
+        const id = document.getElementById('editId').value;
+        const data = {
+            title: document.getElementById('editTitle').value,
+            author: document.getElementById('editAuthor').value,
+            category: document.getElementById('editCategory').value,
+            intro: document.getElementById('editIntro').value,
+            status: parseInt(document.getElementById('editStatus').value)
+        };
+
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/books/${id}` : '/api/books';
+        const coverFile = document.getElementById('editCover').files[0];
+
+        fetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        }).then(r => r.json())
+        .then(result => {
+            modal.hide();
+            const bookId = result.data.id;
+            if (coverFile) {
+                const formData = new FormData();
+                formData.append('file', coverFile);
+                fetch(`/api/cover/upload/${bookId}`, {
+                    method: 'POST',
+                    body: formData
+                }).then(() => {
+                    loadBooks(currentPage);
+                }).catch(err => {
+                    console.error('封面上传失败:', err);
+                    loadBooks(currentPage);
+                });
+            } else {
+                loadBooks(currentPage);
+            }
+        }).catch(err => {
+            console.error('保存书籍失败:', err);
+            alert('保存书籍失败，请重试');
+        });
+    }
+
+    function deleteBook(id) {
+        if (confirm('确定删除这本书？')) {
+            fetch(`/api/books/${id}`, {method: 'DELETE'})
+                .then(() => loadBooks(currentPage));
+        }
+    }
+
+    function viewBook(id) {
+        fetch(`/api/books/${id}`)
+            .then(r => r.json())
+            .then(d => {
+                const b = d.data;
+                if (!d.success || b == null) {
+                    alert('获取书籍详情失败：' + (d.message || '未知错误'));
+                    return;
+                }
+                document.getElementById('viewTitle').textContent = b.title;
+                document.getElementById('viewAuthor').textContent = b.author;
+                document.getElementById('viewCategory').textContent = b.category || '-';
+                document.getElementById('viewStatus').innerHTML = b.status == 1
+                    ? '<span class="badge bg-success">已完结</span>'
+                    : '<span class="badge bg-warning">连载中</span>';
+                document.getElementById('viewChapterCount').textContent = b.chapterCount;
+                document.getElementById('viewViewCount').textContent = (b.viewCount || 0).toLocaleString();
+                document.getElementById('viewLikeCount').textContent = (b.likeCount || 0).toLocaleString();
+                document.getElementById('viewCreatedAt').textContent = b.createdAt ? b.createdAt.substring(0, 10) : '-';
+                document.getElementById('viewUpdatedAt').textContent = b.updatedAt ? b.updatedAt.substring(0, 10) : '-';
+                document.getElementById('viewIntro').textContent = b.intro || '暂无简介';
+
+                const viewCover = document.getElementById('viewCover');
+                if (b.cover) {
+                    viewCover.src = b.cover;
+                    viewCover.style.display = 'block';
+                } else {
+                    viewCover.src = '';
+                    viewCover.style.display = 'none';
+                }
+
+                document.getElementById('viewWordCount').textContent =
+                    (b.wordCount != null ? b.wordCount : 0).toLocaleString() + '字';
+
+                viewModal.show();
+            });
+    }
+
+    function previewCover(input) {
+        const preview = document.getElementById('coverPreview');
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+</script>
+</body>
+</html>

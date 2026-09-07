@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--图书上传页布局-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/windowBackground">
+
+    <!--返回标题栏 -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar_back"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@color/ios_bg"
+        app:navigationIcon="@drawable/ic_back_black"
+        app:title="@string/btn_upload_book"
+        app:titleTextColor="@color/ios_text_primary"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- 提示 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="支持 TXT、EPUB 格式电子书"
+            android:textSize="13sp"
+            android:textColor="#8E8E93"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 书名输入框 -->
+        <EditText
+            android:id="@+id/et_book_name"
+            android:hint="@string/hint_book_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:inputType="textPersonName|textCapWords"
+            android:autofillHints="@string/hint_book_name" />
+        <!-- 作者输入框 -->
+        <EditText
+            android:id="@+id/et_author"
+            android:hint="@string/hint_author"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:minHeight="48dp"
+            android:inputType="textPersonName|textCapWords"
+            android:autofillHints="@string/hint_author" />
+        <!-- 文件名显示 -->
+        <TextView
+            android:id="@+id/tv_file_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/tv_no_file_selected"
+            android:layout_marginTop="15dp"
+            android:textColor="@color/gray_666"
+            android:gravity="center"/>
+        <!-- 选择文件按钮 -->
+        <Button
+            android:id="@+id/btn_select_file"
+            android:text="@string/btn_select_file"
+            android:layout_marginTop="20dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"/>
+        <!-- 导入按钮 -->
+        <Button
+            android:id="@+id/btn_submit"
+            android:text="导入本地书"
+            android:layout_marginTop="15dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp" />
+    </LinearLayout>
+</LinearLayout>

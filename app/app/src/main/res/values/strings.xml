@@ -1,0 +1,69 @@
+<resources>
+    <string name="app_name">书阁</string>
+    <string name="tv_username">未登录</string>
+    <string name="tv_uid">UID：84432</string>
+    <string name="btn_logout">退出</string>
+    <string name="logout_and_clear">退出登录</string>
+    <string name="history">阅读记录</string>
+    <string name="feedback">意见反馈</string>
+    <string name="theme_setting">主题设置</string>
+    <string name="settings">设置</string>
+    <string name="profile">个人资料</string>
+    <string name="account_security">账号管理</string>
+    <string name="about_app">关于书阁</string>
+    <string name="phone_binding">手机绑定</string>
+    <string name="email_binding">邮箱绑定</string>
+    <string name="cancel_account">注销账号</string>
+    <string name="bind_phone">绑定手机</string>
+    <string name="bind_email">绑定邮箱</string>
+    <string name="unbind">解绑</string>
+    <string name="bookshelf">书架</string>
+    <string name="bookcity">书城</string>
+    <string name="discuss">讨论</string>
+    <string name="mine">我的</string>
+    <!-- 图书上传页 -->
+    <string name="btn_upload_book">导入书籍</string>
+    <string name="hint_book_name">书名（选填）</string>
+    <string name="hint_author">作者（选填）</string>
+    <string name="hint_intro">图书简介</string>
+    <string name="btn_select_file">选择书籍文件</string>
+    <string name="btn_submit">提交审核</string>
+    <string name="tv_no_file_selected">未选择文件</string>
+    <string name="tv_file_selected">已选择文件：%1$s</string>
+
+    <!-- 意见反馈 -->
+    <string name="feedback_title">意见反馈</string>
+    <string name="feedback_type">反馈类型</string>
+    <string name="feedback_type_bug">故障报告</string>
+    <string name="feedback_type_suggestion">功能建议</string>
+    <string name="feedback_type_other">其他</string>
+    <string name="feedback_content_hint">请详细描述您的问题或建议…</string>
+    <string name="feedback_contact_hint">联系方式（选填，方便我们回复您）</string>
+    <string name="feedback_submit">提交反馈</string>
+    <string name="feedback_content_empty">请填写反馈内容</string>
+    <string name="feedback_submit_success">感谢您的反馈，我们会尽快处理！</string>
+    <string name="feedback_submit_fail">提交失败，请稍后重试</string>
+    <string name="feedback_submitting">正在提交…</string>
+
+    <!-- 消息中心 -->
+    <string name="message_center">消息中心</string>
+    <string name="message_empty">暂无消息</string>
+    <string name="message_type_system">系统通知</string>
+    <string name="message_type_activity">活动推送</string>
+    <string name="message_type_interaction">互动消息</string>
+    <string name="message_type_reply">反馈回复</string>
+    <string name="message_load_fail">消息加载失败</string>
+    <string name="message_mark_all_read">全部已读</string>
+    <!-- 消息分类Tab -->
+    <string name="message_tab_comment">评论和@</string>
+    <string name="message_tab_like">赞和收藏</string>
+    <string name="message_tab_follow">关注消息</string>
+    <string name="message_tab_system">系统通知</string>
+    <string name="message_empty_comment">暂无评论和@消息</string>
+    <string name="message_empty_like">暂无赞和收藏消息</string>
+    <string name="message_empty_follow">暂无关注消息</string>
+    <string name="message_empty_system">暂无系统通知</string>
+    <string name="message_type_comment">评论</string>
+    <string name="message_type_like">赞和收藏</string>
+    <string name="message_type_follow">关注</string>
+</resources>

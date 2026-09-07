@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>数据导入</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a href="/admin" class="navbar-brand">📚 阅读App管理后台</a>
+    <div>
+      <a href="/admin" class="btn btn-outline-light btn-sm me-2">🏠 首页</a>
+      <a href="/admin/books" class="btn btn-outline-light btn-sm me-2">书籍管理</a>
+      <a href="/admin/chapters" class="btn btn-outline-light btn-sm me-2">章节管理</a>
+      <a href="/admin/import" class="btn btn-outline-light btn-sm me-2">数据导入</a>
+      <a href="/admin/online-source" class="btn btn-outline-light btn-sm me-2">🌐 在线书源</a>
+      <a href="/admin/book-source" class="btn btn-outline-light btn-sm me-2">⚙️ 书源管理</a>
+      <a href="/admin/users" class="btn btn-outline-light btn-sm me-2">用户管理</a>
+      <a href="/admin/resource" class="btn btn-outline-light btn-sm me-2">📦 资源管理</a>
+      <a href="/admin/feedback" class="btn btn-outline-light btn-sm">💬 意见反馈</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-4">
+  <div class="row">
+    <!-- 批量导入 SQL -->
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header bg-primary text-white">📋 批量导入 SQL</div>
+        <div class="card-body">
+          <p>粘贴 INSERT SQL 语句，批量导入书籍和章节</p>
+          <textarea id="sqlInput" class="form-control mb-3" rows="10"
+                    placeholder="INSERT INTO book ...&#10;INSERT INTO chapter ..."></textarea>
+          <button class="btn btn-primary" onclick="importSQL()">执行导入</button>
+          <div id="sqlResult" class="mt-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快速添加测试数据 -->
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header bg-success text-white">🚀 快速生成测试数据</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">书名</label>
+            <input type="text" class="form-control" id="bookTitle" placeholder="输入书名">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">作者</label>
+            <input type="text" class="form-control" id="bookAuthor" placeholder="输入作者">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">分类</label>
+            <input type="text" class="form-control" id="bookCategory" placeholder="玄幻/仙侠/武侠...">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">简介</label>
+            <textarea class="form-control" id="bookIntro" rows="3"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">章节数</label>
+            <input type="number" class="form-control" id="chapterCount" value="10">
+          </div>
+          <button class="btn btn-success" onclick="generateData()">生成测试数据</button>
+          <div id="genResult" class="mt-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 上传 TXT 文件 -->
+  <div class="row mt-4">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header bg-warning text-dark">📄 上传 TXT 文件自动分章</div>
+        <div class="card-body">
+          <p>上传 TXT 文件，自动按"第X章"分割生成章节，并自动提取书名、作者、简介信息</p>
+          <div class="mb-3">
+            <label class="form-label">书名 <span class="text-muted">(留空则自动提取)</span></label>
+            <input type="text" class="form-control" id="txtBookTitle" placeholder="从文件中自动提取">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">作者 <span class="text-muted">(留空则自动提取)</span></label>
+            <input type="text" class="form-control" id="txtAuthor" placeholder="从文件中自动提取">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">分类</label>
+            <input type="text" class="form-control" id="txtCategory" placeholder="玄幻/仙侠/武侠...">
+          </div>
+          <div class="mb-3">
+            <label class="form-check">
+              <input type="checkbox" class="form-check-input" id="autoExtract" checked>
+              <span class="form-check-label">启用自动提取（书名、作者、简介）</span>
+            </label>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">选择 TXT 文件</label>
+            <input type="file" class="form-control" id="txtFile" accept=".txt">
+          </div>
+          <button class="btn btn-warning" onclick="uploadTxt()">上传并解析</button>
+          <div id="txtResult" class="mt-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 上传 EPUB 文件 -->
+  <div class="row mt-4">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header bg-info text-white">📚 上传 EPUB 电子书</div>
+        <div class="card-body">
+          <p>上传 EPUB 格式电子书，自动提取书名、作者、简介和所有章节内容</p>
+          <div class="mb-3">
+            <label class="form-label">书名 <span class="text-muted">(留空则自动提取)</span></label>
+            <input type="text" class="form-control" id="epubBookTitle" placeholder="从EPUB元数据中自动提取">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">作者 <span class="text-muted">(留空则自动提取)</span></label>
+            <input type="text" class="form-control" id="epubAuthor" placeholder="从EPUB元数据中自动提取">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">分类</label>
+            <input type="text" class="form-control" id="epubCategory" placeholder="玄幻/仙侠/武侠...">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">选择 EPUB 文件</label>
+            <input type="file" class="form-control" id="epubFile" accept=".epub">
+          </div>
+          <button class="btn btn-info" onclick="uploadEpub()">上传并解析</button>
+          <div id="epubResult" class="mt-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // 执行自定义 SQL
+  function importSQL() {
+    const sql = document.getElementById('sqlInput').value.trim();
+    if (!sql) { alert('请输入SQL语句'); return; }
+
+    fetch('/api/admin/import/sql', {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: sql
+    })
+            .then(r => r.json())
+            .then(d => {
+              document.getElementById('sqlResult').innerHTML =
+                      `<div class="alert alert-${d.success ? 'success' : 'danger'}">${d.message}</div>`;
+            });
+  }
+
+  // 快速生成测试数据
+  function generateData() {
+    const data = {
+      title: document.getElementById('bookTitle').value,
+      author: document.getElementById('bookAuthor').value,
+      category: document.getElementById('bookCategory').value,
+      intro: document.getElementById('bookIntro').value,
+      chapterCount: parseInt(document.getElementById('chapterCount').value)
+    };
+
+    fetch('/api/admin/import/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    })
+            .then(r => r.json())
+            .then(d => {
+              document.getElementById('genResult').innerHTML =
+                      `<div class="alert alert-${d.success ? 'success' : 'danger'}">${d.message}</div>`;
+            });
+  }
+
+  // 上传 TXT
+  function uploadTxt() {
+    const file = document.getElementById('txtFile').files[0];
+    const title = document.getElementById('txtBookTitle').value;
+    const author = document.getElementById('txtAuthor').value;
+    const category = document.getElementById('txtCategory').value;
+    const autoExtract = document.getElementById('autoExtract').checked;
+
+    if (!file) { alert('请选择文件'); return; }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    if (title) formData.append('title', title);
+    if (author) formData.append('author', author);
+    if (category) formData.append('category', category);
+    formData.append('autoExtract', autoExtract);
+
+    fetch('/api/admin/import/txt', {
+      method: 'POST',
+      body: formData
+    })
+            .then(r => r.json())
+            .then(d => {
+              document.getElementById('txtResult').innerHTML =
+                      `<div class="alert alert-${d.success ? 'success' : 'danger'}">${d.message}</div>`;
+            });
+  }
+
+  // 上传 EPUB
+  function uploadEpub() {
+    const file = document.getElementById('epubFile').files[0];
+    const title = document.getElementById('epubBookTitle').value;
+    const author = document.getElementById('epubAuthor').value;
+    const category = document.getElementById('epubCategory').value;
+
+    if (!file) { alert('请选择EPUB文件'); return; }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (title) formData.append('title', title);
+    if (author) formData.append('author', author);
+    if (category) formData.append('category', category);
+
+    fetch('/api/admin/import/epub', {
+      method: 'POST',
+      body: formData
+    })
+            .then(r => r.json())
+            .then(d => {
+              document.getElementById('epubResult').innerHTML =
+                      `<div class="alert alert-${d.success ? 'success' : 'danger'}">${d.message}</div>`;
+            });
+  }
+</script>
+</body>
+</html>

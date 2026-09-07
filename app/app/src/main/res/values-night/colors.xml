@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 夜间模式 · 底部导航磨砂玻璃配色 -->
+    <color name="nav_frost_tint">#801C1C1E</color>      <!-- 磨砂叠加：50% 深灰，避免暗背景变成黑条 -->
+    <color name="nav_frost_base">#661C1C1E</color>      <!-- 磨砂兜底底色：40% 深灰 -->
+    <color name="nav_frost_sheen">#0DFFFFFF</color>     <!-- 顶部玻璃高光：极弱 -->
+    <color name="nav_frost_stroke">#33FFFFFF</color>    <!-- 玻璃描边：20% 白 -->
+</resources>

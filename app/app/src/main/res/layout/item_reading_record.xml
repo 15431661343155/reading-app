@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="12dp"
+    android:gravity="center_vertical"
+    android:background="?attr/selectableItemBackground">
+
+    <CheckBox
+        android:id="@+id/cb_select"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
+        android:visibility="gone"
+        android:clickable="false" />
+
+    <!-- 封面 -->
+    <ImageView
+        android:id="@+id/iv_cover"
+        android:layout_width="72dp"
+            android:layout_height="96dp"
+        android:scaleType="centerCrop"
+        android:background="@drawable/bg_cover_rounded"
+            android:clipToOutline="true"
+android:src="@drawable/default_book_cover" />
+
+    <!-- 书籍信息 -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp">
+
+        <TextView
+            android:id="@+id/tv_book_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="书籍名称"
+            android:textSize="16sp"
+            android:textColor="#1D1D1F"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/tv_last_chapter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="第一章"
+            android:textSize="13sp"
+            android:textColor="#666666"
+            android:layout_marginTop="6dp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <!-- 进度百分比 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:id="@+id/tv_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="已读：30%"
+                android:textSize="11sp"
+                android:textColor="#BBBBBB" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="刚刚"
+                android:textSize="11sp"
+                android:textColor="#BBBBBB" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

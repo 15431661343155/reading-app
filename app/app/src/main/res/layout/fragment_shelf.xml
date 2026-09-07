@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--书架页布局（iOS 浅色磨砂玻璃风：浅灰底 + 白卡片）-->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ios_bg_grouped">
+
+    <!-- 内容层 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- 顶部导航栏：磨砂玻璃 + 大标题 -->
+        <LinearLayout
+            android:id="@+id/layout_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="12dp"
+            android:background="@color/ios_bg_grouped">
+
+            <!-- 大标题 -->
+            <TextView
+                android:id="@+id/tv_page_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="书架"
+                android:textSize="34sp"
+                android:textStyle="bold"
+                android:textColor="@color/ios_text_primary"
+                android:fontFamily="sans-serif-medium" />
+
+            <!-- 阅读时长（小文字，替代搜索图标） -->
+            <TextView
+                android:id="@+id/tv_read_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="阅读时长 0 分钟"
+                android:textSize="13sp"
+                android:textColor="@color/ios_text_secondary"
+                android:layout_marginEnd="8dp" />
+
+            <!-- 更多按钮（三个点） -->
+            <ImageView
+                android:id="@+id/iv_more"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                tools:ignore="TouchTargetSizeCheck"
+                android:src="@drawable/ic_more_menu"
+                app:tint="@color/ios_text_primary"
+                android:padding="4dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:contentDescription="更多" />
+        </LinearLayout>
+
+        <!-- 分组 Tab（iOS segmented control 风格：外层圆角胶囊容器） -->
+        <FrameLayout
+            android:id="@+id/frame_group_tabs"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="4dp"
+            android:background="@color/ios_bg_grouped">
+
+            <HorizontalScrollView
+                android:id="@+id/scroll_group_tabs"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/layout_group_tabs"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="4dp"
+                    android:background="@drawable/bg_segmented_control" />
+            </HorizontalScrollView>
+        </FrameLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:background="@color/ios_bg_grouped" />
+
+        <!-- 下拉刷新 + 书籍列表 -->
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipe_refresh"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/ios_bg_grouped"
+            app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+            <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
+                android:id="@+id/rv_shelf"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginTop="0dp"
+                android:visibility="gone"
+                android:paddingBottom="72dp"
+                android:clipToPadding="false"
+                android:scrollbarStyle="outsideOverlay"
+                app:fastScrollAutoHide="true"
+                app:fastScrollAutoHideDelay="1000"
+                app:fastScrollThumbColor="@color/ios_blue"
+                app:fastScrollTrackColor="@android:color/transparent"/>
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    </LinearLayout>
+
+    <!-- 空状态提示 -->
+    <TextView
+        android:id="@+id/tv_empty_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="书架空空如也\n去书城逛逛吧"
+        android:textSize="16sp"
+        android:textColor="@color/ios_text_tertiary"
+        android:gravity="center"
+        android:lineSpacingExtra="8dp"
+        android:visibility="visible"/>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

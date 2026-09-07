@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>阅读App管理后台</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .log-item {
+      padding: 8px 12px;
+      border-bottom: 1px solid #eee;
+      font-size: 13px;
+    }
+    .log-item:last-child {
+      border-bottom: none;
+    }
+    .log-time {
+      color: #999;
+      font-size: 11px;
+      margin-left: 8px;
+    }
+    .log-type {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      margin-right: 6px;
+    }
+    .log-type-BOOK_ADD { background: #d1e7dd; color: #0f5132; }
+    .log-type-BOOK_UPDATE { background: #cfe2ff; color: #084298; }
+    .log-type-BOOK_DELETE { background: #f8d7da; color: #842029; }
+    .log-type-CHAPTER_ADD { background: #d1e7dd; color: #0f5132; }
+    .log-type-CHAPTER_UPDATE { background: #cfe2ff; color: #084298; }
+    .log-type-CHAPTER_DELETE { background: #f8d7da; color: #842029; }
+    .log-type-CHAPTER_RENAME { background: #fff3cd; color: #664d03; }
+    .log-type-IMPORT { background: #e2d9f3; color: #4a2c7a; }
+    .log-type-USER_DISABLE { background: #f8d7da; color: #842029; }
+    .log-type-USER_ENABLE { background: #d1e7dd; color: #0f5132; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark">
+  <div class="container-fluid">
+    <span class="navbar-brand mb-0 h1">📚 阅读App管理后台</span>
+    <div>
+      <a href="/admin" class="btn btn-outline-light btn-sm me-2">🏠 首页</a>
+      <a href="/admin/books" class="btn btn-outline-light btn-sm me-2">书籍管理</a>
+      <a href="/admin/chapters" class="btn btn-outline-light btn-sm me-2">章节管理</a>
+      <a href="/admin/import" class="btn btn-outline-light btn-sm me-2">数据导入</a>
+      <a href="/admin/online-source" class="btn btn-outline-light btn-sm me-2">🌐 在线书源</a>
+      <a href="/admin/book-source" class="btn btn-outline-light btn-sm me-2">⚙️ 书源管理</a>
+      <a href="/admin/users" class="btn btn-outline-light btn-sm me-2">用户管理</a>
+      <a href="/admin/resource" class="btn btn-outline-light btn-sm me-2">📦 资源管理</a>
+      <a href="/admin/feedback" class="btn btn-outline-light btn-sm">💬 意见反馈</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-4">
+  <h2>欢迎使用管理后台</h2>
+
+  <div class="row mt-4">
+    <div class="col-md-4">
+      <div class="card text-white bg-primary mb-3">
+        <div class="card-body text-center">
+          <h5 class="card-title">书籍总数</h5>
+          <h2 id="bookCount">-</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-white bg-warning mb-3">
+        <div class="card-body text-center">
+          <h5 class="card-title">用户总数</h5>
+          <h2 id="userCount">-</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-white bg-info mb-3">
+        <div class="card-body text-center">
+          <h5 class="card-title">访问量</h5>
+          <h2>-</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 操作日志显示区 -->
+  <div class="row mt-4">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">📋 最近操作日志</h5>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadLogs()">🔄 刷新</button>
+        </div>
+        <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+          <div id="logContainer">
+            <div class="text-center text-muted p-4">加载中...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // 加载统计数据
+  fetch('/api/books?size=1').then(r => r.json()).then(d => {
+    document.getElementById('bookCount').textContent = d.data?.totalElements || 0;
+  });
+  // 用户总数
+  fetch('/api/users/count')
+          .then(r => r.json())
+          .then(d => {
+            document.getElementById('userCount').textContent = d.data || 0;
+          });
+  
+  // 加载操作日志
+  function loadLogs() {
+    fetch('/api/admin/logs/recent?limit=50')
+      .then(r => r.json())
+      .then(d => {
+        const container = document.getElementById('logContainer');
+        if (!d.data || d.data.length === 0) {
+          container.innerHTML = '<div class="text-center text-muted p-4">暂无操作记录</div>';
+          return;
+        }
+        
+        let html = '';
+        d.data.forEach(log => {
+          const time = formatTime(log.createdAt);
+          const typeClass = 'log-type-' + log.operationType;
+          const typeName = getTypeName(log.operationType);
+          html += `
+            <div class="log-item">
+              <span class="log-type ${typeClass}">${typeName}</span>
+              ${log.description}
+              <span class="log-time">${time}</span>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+      })
+      .catch(err => {
+        document.getElementById('logContainer').innerHTML = 
+          '<div class="text-center text-muted p-4">加载失败</div>';
+      });
+  }
+  
+  // 格式化时间
+  function formatTime(isoString) {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    const now = new Date();
+    const diff = now - d;
+    
+    // 小于1分钟
+    if (diff < 60000) return '刚刚';
+    // 小于1小时
+    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+    // 小于24小时
+    if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+    // 超过24小时显示日期
+    return d.getFullYear() + '-' + 
+           String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+           String(d.getDate()).padStart(2, '0') + ' ' +
+           String(d.getHours()).padStart(2, '0') + ':' +
+           String(d.getMinutes()).padStart(2, '0');
+  }
+  
+  // 获取操作类型名称
+  function getTypeName(type) {
+    const names = {
+      'BOOK_ADD': '添加书籍',
+      'BOOK_UPDATE': '更新书籍',
+      'BOOK_DELETE': '删除书籍',
+      'CHAPTER_ADD': '添加章节',
+      'CHAPTER_UPDATE': '修改章节',
+      'CHAPTER_DELETE': '删除章节',
+      'CHAPTER_RENAME': '重命名章节',
+      'USER_DISABLE': '禁用用户',
+      'USER_ENABLE': '启用用户',
+      'USER_DELETE': '删除用户',
+      'IMPORT': '导入书籍'
+    };
+    return names[type] || type;
+  }
+  
+  // 页面加载时获取日志
+  loadLogs();
+</script>
+</body>
+</html>
