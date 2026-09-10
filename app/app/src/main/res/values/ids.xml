@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <item name="tag_bg_color" type="id" />
+    <!-- 打了该 tag 的 View 及其子树不参与「跟随背景色」重着色（如背景色块本身必须显示真实颜色） -->
+    <item name="tag_keep_own_color" type="id" />
 </resources>

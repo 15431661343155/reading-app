@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
 import com.example.myapplication.R;
+import com.example.myapplication.utils.ActivityTransition;
 import com.example.myapplication.utils.ThemeManager;
 
 public class BaseActivity extends AppCompatActivity {
@@ -16,10 +17,10 @@ public class BaseActivity extends AppCompatActivity {
 
     /**
      * 当前页面是否使用「从右向左滑入」转场。
-     * 默认淡入淡出；子类（如阅读器）重写返回 true，即可让所有入口统一生效。
+     * 默认 true —— 全站统一左右滑动；个别页面（如需要淡入淡出）重写返回 false 即可。
      */
     protected boolean useSlideTransition() {
-        return false;
+        return true;
     }
 
     @Override
@@ -39,19 +40,12 @@ public class BaseActivity extends AppCompatActivity {
         setupStatusBar();
 
         // 2. 添加Activity入场动画，实现丝滑切换
-        // 默认淡入淡出；使用滑入转场时改为「新页面从右滑入，旧页面向左滑出」
-        overridePendingTransition(getCustomEnterAnim(), getCustomExitAnim());
-    }
-
-    /**
-     * 入场动画：新页面从右侧滑入；出场动画：旧页面向左滑出
-     */
-    private int getCustomEnterAnim() {
-        return useSlideTransition() ? R.anim.slide_in_right : R.anim.fade_in;
-    }
-
-    private int getCustomExitAnim() {
-        return useSlideTransition() ? R.anim.slide_out_left : R.anim.fade_out;
+        // 默认「新页面从右滑入，旧页面向左滑出」；重写 useSlideTransition() 可改为淡入淡出
+        if (useSlideTransition()) {
+            ActivityTransition.applyEnter(this);
+        } else {
+            ActivityTransition.applyFade(this);
+        }
     }
 
     @Override
@@ -59,7 +53,9 @@ public class BaseActivity extends AppCompatActivity {
         super.finish();
         // 返回时播放反向动画：上一个页面从左滑回，当前页面向右滑出
         if (useSlideTransition()) {
-            overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+            ActivityTransition.applyExit(this);
+        } else {
+            ActivityTransition.applyFade(this);
         }
     }
 

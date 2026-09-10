@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 夜间模式 · 底栏为深色磨砂，未选中不能再用纯黑，改为浅灰白 -->
+    <color name="nav_item_normal">#FFEBEBF5</color>
+    <color name="nav_item_ripple">#26FFFFFF</color>
+
     <!-- 夜间模式 · 底部导航磨砂玻璃配色 -->
     <color name="nav_frost_tint">#801C1C1E</color>      <!-- 磨砂叠加：50% 深灰，避免暗背景变成黑条 -->
     <color name="nav_frost_base">#661C1C1E</color>      <!-- 磨砂兜底底色：40% 深灰 -->

@@ -13,26 +13,25 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="20dp"
         android:paddingVertical="6dp"
         android:gravity="center_vertical">
 
         <TextView
-            android:layout_width="70dp"
+            android:layout_width="50dp"
             android:layout_height="wrap_content"
             android:text="亮度"
-            android:textSize="14sp"
-            android:textColor="@color/ios_text_primary"
-            android:paddingStart="20dp" />
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_primary" />
 
         <SeekBar
             android:id="@+id/seekbar_brightness"
             android:layout_width="200dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:max="250"
+            android:layout_height="36dp"
+            android:layout_weight="0"
+            android:max="255"
             android:progress="128"
-            android:progressTint="@color/ios_blue"
+            android:progressDrawable="@drawable/bg_seekbar_brightness"
             android:thumbTint="@color/ios_blue" />
 
         <TextView
@@ -41,14 +40,14 @@
             android:layout_height="wrap_content"
             android:text="50%"
             android:textSize="12sp"
-            android:textColor="@color/ios_text_secondary" />
+            android:textColor="@color/black" />
 
         <ImageView
             android:id="@+id/iv_follow_system"
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:src="@drawable/ic_brightness_auto"
-            app:tint="#666666"
+            app:tint="#000000"
             android:padding="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
@@ -62,64 +61,80 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="20dp"
         android:paddingVertical="6dp"
         android:gravity="center_vertical">
 
         <TextView
-            android:layout_width="70dp"
+            android:layout_width="50dp"
             android:layout_height="wrap_content"
             android:text="字号"
-            android:textSize="14sp"
-            android:textColor="@color/ios_text_primary"
-            android:paddingStart="20dp" />
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_primary" />
 
-        <TextView
-            android:id="@+id/tv_font_minus"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:text="A-"
-            android:textSize="16sp"
-            android:textColor="@color/ios_text_secondary"
-            android:gravity="center"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:clickable="true"
-            android:focusable="true" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@drawable/bg_capsule_gray"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="2dp">
 
-        <TextView
-            android:id="@+id/tv_font_size_display"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:text="18"
-            android:textSize="16sp"
-            android:textColor="@color/ios_text_primary"
-            android:gravity="center" />
+            <TextView
+                android:id="@+id/tv_font_minus"
+                android:layout_width="48dp"
+                android:layout_height="32dp"
+                android:text="A-"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary"
+                android:gravity="center"
+                android:background="@drawable/bg_capsule_white"
+                android:clickable="true"
+                android:focusable="true" />
 
-        <TextView
-            android:id="@+id/tv_font_plus"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:text="A+"
-            android:textSize="20sp"
-            android:textColor="@color/ios_text_secondary"
-            android:gravity="center"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:clickable="true"
-            android:focusable="true" />
+            <TextView
+                android:id="@+id/tv_font_size_display"
+                android:layout_width="48dp"
+                android:layout_height="32dp"
+                android:text="18"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary"
+                android:gravity="center" />
+
+            <TextView
+                android:id="@+id/tv_font_plus"
+                android:layout_width="48dp"
+                android:layout_height="32dp"
+                android:text="A+"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary"
+                android:gravity="center"
+                android:background="@drawable/bg_capsule_white"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </LinearLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
         <TextView
             android:id="@+id/tv_switch_font"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:text="切换字体 >"
-            android:textSize="14sp"
-            android:textColor="@color/ios_blue"
-            android:gravity="end"
-            android:paddingEnd="8dp"
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_primary"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
             android:clickable="true"
             android:focusable="true"
-            android:background="?attr/selectableItemBackground" />
+            android:background="@drawable/bg_capsule_gray" />
 
     </LinearLayout>
 
@@ -128,34 +143,35 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="20dp"
         android:paddingVertical="6dp"
         android:gravity="center_vertical">
 
         <TextView
-            android:layout_width="70dp"
+            android:layout_width="50dp"
             android:layout_height="wrap_content"
             android:text="背景"
-            android:textSize="14sp"
-            android:textColor="@color/ios_text_primary"
-            android:paddingStart="20dp" />
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_primary" />
 
-        <!-- 米黄(0) -->
+        <!-- 羊皮纸(0) -->
         <FrameLayout
             android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_height="36dp"
             android:layout_marginEnd="4dp">
             <View
-                android:id="@+id/bg_color_0"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:id="@+id/bg_color_2"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:clickable="true"
-                android:focusable="true" />
+                android:focusable="true"
+                android:background="@drawable/bg_color_rect"/>
+
             <View
-                android:id="@+id/bg_color_ring_0"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:id="@+id/bg_color_ring_2"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:background="@drawable/bg_color_ring"
                 android:visibility="gone" />
@@ -164,40 +180,44 @@
         <!-- 护眼绿(1) -->
         <FrameLayout
             android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_height="36dp"
             android:layout_marginEnd="4dp">
             <View
                 android:id="@+id/bg_color_1"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:clickable="true"
-                android:focusable="true" />
+                android:focusable="true"
+                android:background="@drawable/bg_color_rect"/>
             <View
                 android:id="@+id/bg_color_ring_1"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:background="@drawable/bg_color_ring"
                 android:visibility="gone" />
         </FrameLayout>
 
-        <!-- 羊皮纸(2) -->
+        <!-- 白色(3) -->
         <FrameLayout
             android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_height="36dp"
             android:layout_marginEnd="4dp">
+
             <View
-                android:id="@+id/bg_color_2"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:id="@+id/bg_color_0"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:clickable="true"
-                android:focusable="true" />
+                android:focusable="true"
+                android:background="@drawable/bg_color_rect" />
+
             <View
-                android:id="@+id/bg_color_ring_2"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:id="@+id/bg_color_ring_0"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:background="@drawable/bg_color_ring"
                 android:visibility="gone" />
@@ -206,36 +226,44 @@
         <!-- 夜间(3) -->
         <FrameLayout
             android:layout_width="48dp"
-            android:layout_height="48dp">
+            android:layout_height="36dp">
             <View
                 android:id="@+id/bg_color_3"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:clickable="true"
-                android:focusable="true" />
+                android:focusable="true"
+                android:background="@drawable/bg_color_rect"/>
             <View
                 android:id="@+id/bg_color_ring_3"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:background="@drawable/bg_color_ring"
                 android:visibility="gone" />
         </FrameLayout>
 
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
         <TextView
             android:id="@+id/tv_bg_more"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="更多 >"
-            android:textSize="14sp"
-            android:textColor="@color/ios_blue"
-            android:gravity="center_vertical|end"
-            android:paddingEnd="8dp"
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_primary"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
             android:clickable="true"
             android:focusable="true"
-            android:background="?attr/selectableItemBackground" />
+            android:background="@drawable/bg_capsule_gray" />
 
     </LinearLayout>
 
@@ -244,17 +272,16 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="20dp"
         android:paddingVertical="6dp"
         android:gravity="center_vertical">
 
         <TextView
-            android:layout_width="70dp"
+            android:layout_width="50dp"
             android:layout_height="wrap_content"
             android:text="翻页"
-            android:textSize="14sp"
-            android:textColor="@color/ios_text_primary"
-            android:paddingStart="20dp" />
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_primary" />
 
         <TextView
             android:id="@+id/tv_page_cover"
@@ -262,8 +289,8 @@
             android:layout_height="36dp"
             android:layout_weight="1"
             android:text="覆盖"
-            android:textSize="14sp"
-            android:textColor="@color/ios_blue"
+            android:textSize="12sp"
+            android:textColor="@color/black"
             android:gravity="center"
             android:background="@drawable/bg_search_radius"
             android:clickable="true"
@@ -275,8 +302,8 @@
             android:layout_height="36dp"
             android:layout_weight="1"
             android:text="仿真"
-            android:textSize="14sp"
-            android:textColor="@color/ios_text_secondary"
+            android:textSize="12sp"
+            android:textColor="@color/black"
             android:gravity="center"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
@@ -288,8 +315,8 @@
             android:layout_height="36dp"
             android:layout_weight="1"
             android:text="平移"
-            android:textSize="14sp"
-            android:textColor="@color/ios_text_secondary"
+            android:textSize="12sp"
+            android:textColor="@color/black"
             android:gravity="center"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
@@ -301,8 +328,8 @@
             android:layout_height="36dp"
             android:layout_weight="1"
             android:text="上下"
-            android:textSize="14sp"
-            android:textColor="@color/ios_text_secondary"
+            android:textSize="12sp"
+            android:textColor="@color/black"
             android:gravity="center"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
@@ -314,8 +341,8 @@
             android:layout_height="36dp"
             android:layout_weight="1"
             android:text="淡入"
-            android:textSize="14sp"
-            android:textColor="@color/ios_text_secondary"
+            android:textSize="12sp"
+            android:textColor="@color/black"
             android:gravity="center"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
@@ -329,41 +356,55 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="20dp"
         android:paddingVertical="6dp"
-        android:gravity="center_vertical"
-        android:clickable="true"
-        android:focusable="true"
-        android:background="?attr/selectableItemBackground">
+        android:gravity="center_vertical">
+
+        <LinearLayout
+            android:id="@+id/layout_auto_toggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="6dp"
+            android:paddingEnd="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground">
+
+            <TextView
+                android:id="@+id/tv_auto_page_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="自动翻页"
+                android:textColor="@color/ios_text_primary"
+                android:textSize="12sp" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_auto_page"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
         <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:paddingStart="20dp"
-            android:text="开启自动翻页"
-            android:textColor="@color/ios_text_primary"
-            android:textSize="14sp" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_auto_page"
+            android:id="@+id/tv_more_settings"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-
+            android:layout_height="32dp"
+            android:text="更多阅读设置 >"
+            android:textSize="12sp"
+            android:textColor="@color/black"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground" />
     </LinearLayout>
 
-    <!-- ========== 更多阅读设置 ========== -->
-    <TextView
-        android:id="@+id/tv_more_settings"
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:text="更多阅读设置 >"
-        android:textSize="14sp"
-        android:textColor="@color/ios_text_secondary"
-        android:gravity="center_vertical"
-        android:paddingStart="46dp"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true" />
 
 </LinearLayout>

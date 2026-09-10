@@ -25,6 +25,15 @@ public class BookmarkAdapter extends RecyclerView.Adapter<BookmarkAdapter.Bookma
     private OnBookmarkClickListener clickListener;
     private OnBookmarkLongClickListener longClickListener;
 
+    /**
+     * 是否跟随阅读器背景的派生配色，仅阅读器「书签」浮窗开启。
+     */
+    private boolean followReaderTheme = false;
+
+    public void setFollowReaderTheme(boolean follow) {
+        this.followReaderTheme = follow;
+    }
+
     public interface OnBookmarkClickListener {
         void onBookmarkClick(Bookmark bookmark);
     }
@@ -67,9 +76,10 @@ public class BookmarkAdapter extends RecyclerView.Adapter<BookmarkAdapter.Bookma
         holder.tvPreview.setText(bookmark.getPreviewText());
         holder.tvTime.setText(formatTime(bookmark.getCreatedAt()));
 
-        // ✅ 书签条目（文字/分割线/背景）跟随阅读器日/夜间模式
-        ReadActivity.themeViewTree(holder.itemView,
-                ReadActivity.isNightModeForContext(holder.itemView.getContext()));
+        // ✅ 书签条目（文字/分割线/背景）跟随阅读器背景派生配色；非阅读器宿主保持自身配色
+        if (followReaderTheme) {
+            ReadActivity.themeViewTree(holder.itemView);
+        }
 
         holder.itemView.setOnClickListener(v -> {
             if (clickListener != null) {

@@ -20,6 +20,17 @@ public class ChapterAdapter extends RecyclerView.Adapter<ChapterAdapter.ChapterH
     private int currentChapterIndex;
     private OnChapterClickListener listener;
 
+    /**
+     * 是否跟随阅读器背景的派生配色。仅阅读器「目录」浮窗开启。
+     * 本 Adapter 同时被书城 / 在线目录 / 书籍详情等外部页面复用，
+     * 这些页面不属于阅读器，必须保持自身配色，不能被阅读器的调色板带跑。
+     */
+    private boolean followReaderTheme = false;
+
+    public void setFollowReaderTheme(boolean follow) {
+        this.followReaderTheme = follow;
+    }
+
     public interface OnChapterClickListener {
         void onChapterClick(ReadActivity.Chapter chapter);
     }
@@ -48,15 +59,18 @@ public class ChapterAdapter extends RecyclerView.Adapter<ChapterAdapter.ChapterH
 
         // 高亮当前阅读章节（按章节索引匹配，而非列表位置）
         if (chapter.getIndex() == currentChapterIndex) {
-            holder.tvChapterTitle.setTextColor(Color.parseColor("#007AFF"));
+            holder.tvChapterTitle.setTextColor(followReaderTheme ? ReadActivity.getAccentColor()
+                    : Color.parseColor("#007AFF"));
         } else {
-            holder.tvChapterTitle.setTextColor(Color.parseColor("#1D1D1F"));
+            holder.tvChapterTitle.setTextColor(followReaderTheme ? ReadActivity.getTextPrimaryColor()
+                    : Color.parseColor("#1D1D1F"));
         }
 
-        // ✅ 列表项（文字/分割线/背景）跟随阅读器日/夜间模式
-        // 非阅读器宿主（如书籍详情页）返回 false，保持日间配色
-        ReadActivity.themeViewTree(holder.itemView,
-                ReadActivity.isNightModeForContext(holder.itemView.getContext()));
+        // 列表项（文字/分割线/背景）跟随阅读器背景派生配色；
+        // 非阅读器宿主（书城 / 在线目录 / 书籍详情）保持自身配色
+        if (followReaderTheme) {
+            ReadActivity.themeViewTree(holder.itemView);
+        }
 
         holder.itemView.setOnClickListener(v -> {
             if (listener != null) {

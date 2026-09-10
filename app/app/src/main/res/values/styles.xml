@@ -11,9 +11,9 @@
         <item name="android:statusBarColor" tools:targetApi="l">?attr/colorPrimaryVariant</item>
     </style>
 
-    <!-- 底部导航文字样式（iOS 风：10sp semibold） -->
+    <!-- 底部导航文字样式（iOS 风：6sp semibold） -->
     <style name="NavTextAppearance" parent="TextAppearance.MaterialComponents.Body2">
-        <item name="android:textSize">10sp</item>
+        <item name="android:textSize">6sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>

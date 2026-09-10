@@ -52,7 +52,7 @@ public class PopupChapterFragment extends Fragment {
                 try {
                     ((TextView) view.findViewById(R.id.tv_chapter_count)).setText("共 0 章");
                 } catch (Throwable ignored) {}
-                ReadActivity.themeViewTree(view, ReadActivity.isNightModeForContext(getContext()));
+                ReadActivity.themeViewTree(view);
                 return view;
             }
 
@@ -62,6 +62,7 @@ public class PopupChapterFragment extends Fragment {
             rv.setLayoutManager(new LinearLayoutManager(getContext()));
 
             ChapterAdapter adapter = new ChapterAdapter(chapterList, currentChapterIndex);
+            adapter.setFollowReaderTheme(true);   // 仅阅读器目录页跟随背景派生配色
             adapter.setOnChapterClickListener(c -> {
                 if (listener == null) return;
                 try {
@@ -87,7 +88,7 @@ public class PopupChapterFragment extends Fragment {
                 });
             }
             // ✅ 目录 Fragment 根视图（背景/章节数栏）跟随日/夜间；列表项由 ChapterAdapter 在 bind 时着色
-            ReadActivity.themeViewTree(view, ReadActivity.isNightModeForContext(getContext()));
+            ReadActivity.themeViewTree(view);
             return view;
         } catch (Throwable t) {
             android.util.Log.e("PopupChapter", "onCreateView 崩溃", t);

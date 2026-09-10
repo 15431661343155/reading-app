@@ -58,10 +58,5 @@ public class ChapterListActivity extends BaseActivity {
         toolbar.setTitle(currentBook.getBookName());
         toolbar.setNavigationOnClickListener(v -> finish());
     }
-
-    @Override
-    public void finish() {
-        super.finish();
-        overridePendingTransition(0, R.anim.fade_out);
-    }
+    // 关闭动画由 BaseActivity.finish() 统一处理（返回时左滑回 / 右滑出），此处不再单独覆盖
 }

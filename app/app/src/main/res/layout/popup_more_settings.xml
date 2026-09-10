@@ -1,220 +1,303 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/ios_bg"
-    android:paddingBottom="20dp">
+    android:paddingBottom="12dp">
 
     <!-- 标题栏 -->
-    <LinearLayout
+    <RelativeLayout
+        android:id="@+id/popup_title_bar"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:orientation="horizontal"
+        android:layout_height="44dp"
         android:gravity="center_vertical"
         android:paddingHorizontal="16dp"
         android:background="@color/ios_bg_grouped">
 
         <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_centerInParent="true"
             android:text="更多设置"
-            android:textSize="18sp"
+            android:textSize="16sp"
             android:textColor="@color/ios_text_primary"
             android:textStyle="bold" />
 
-        <TextView
+        <ImageView
             android:id="@+id/tv_more_settings_done"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="完成"
-            android:textSize="16sp"
-            android:textColor="@color/ios_blue"
-            android:padding="8dp"
-            android:background="?attr/selectableItemBackground" />
-    </LinearLayout>
-
-    <!-- 页眉页脚开关 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="12dp">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="显示页眉页脚"
-            android:textSize="16sp"
-            android:textColor="@color/ios_text_primary" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_header_footer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
-
-    <!-- 分隔线 -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/ios_separator" />
-
-    <!-- 页眉页脚字号调节 -->
-    <LinearLayout
-        android:id="@+id/layout_header_footer_size"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="16dp">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="页眉页脚字号"
-            android:textSize="16sp"
-            android:textColor="@color/ios_text_primary" />
-
-        <TextView
-            android:id="@+id/tv_header_footer_minus"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:gravity="center"
-            android:text="−"
-            android:textSize="22sp"
-            android:textColor="@color/ios_blue"
-            android:background="?attr/selectableItemBackground"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@drawable/shouqi"
+            android:scaleType="centerInside"
+            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
-            android:focusable="true" />
+            android:focusable="true"
+            android:contentDescription="关闭" />
+    </RelativeLayout>
 
-        <TextView
-            android:id="@+id/tv_header_footer_size_display"
-            android:layout_width="56dp"
-            android:layout_height="48dp"
-            android:gravity="center"
-            android:text="14"
-            android:textSize="20sp"
-            android:textColor="@color/ios_text_primary"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tv_header_footer_plus"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:gravity="center"
-            android:text="+"
-            android:textSize="22sp"
-            android:textColor="@color/ios_blue"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true" />
-    </LinearLayout>
-
-    <!-- 分隔线 -->
-    <View
+    <!-- 内容区：固定半屏，超出滚动 -->
+    <ScrollView
+        android:id="@+id/popup_scroll"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/ios_separator" />
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
 
-    <!-- 电量时间显示开关（次级设置，跟随页眉页脚开关） -->
-    <LinearLayout
-        android:id="@+id/layout_battery_time"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="12dp">
-
-        <TextView
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="页脚显示电量时间"
-            android:textSize="16sp"
-            android:textColor="@color/ios_text_primary" />
+            android:orientation="vertical">
 
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_battery_time"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
+            <!-- 页眉页脚开关 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="6dp">
 
-    <!-- 分隔线 -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/ios_separator" />
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="显示页眉页脚"
+                    android:textSize="14sp"
+                    android:textColor="@color/ios_text_primary" />
 
-    <!-- 音量键翻页开关 -->
-    <LinearLayout
-        android:id="@+id/layout_volume_key_page"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="12dp">
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_header_footer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
 
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="音量键翻页"
-            android:textSize="16sp"
-            android:textColor="@color/ios_text_primary" />
+            <!-- 分隔线 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="@color/ios_separator" />
 
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_volume_key_page"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
+            <!-- 页眉页脚字号调节 -->
+            <LinearLayout
+                android:id="@+id/layout_header_footer_size"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="4dp">
 
-    <!-- 滑动翻页开关 -->
-    <LinearLayout
-        android:id="@+id/layout_swipe_page"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="12dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="页眉页脚字号"
+                    android:textSize="14sp"
+                    android:textColor="@color/ios_text_primary" />
 
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="滑动翻页"
-            android:textSize="16sp"
-            android:textColor="@color/ios_text_primary" />
+                <TextView
+                    android:id="@+id/tv_header_footer_minus"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:gravity="center"
+                    android:text="−"
+                    android:textSize="20sp"
+                    android:textColor="@color/ios_blue"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true" />
 
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_swipe_page"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
+                <TextView
+                    android:id="@+id/tv_header_footer_size_display"
+                    android:layout_width="52dp"
+                    android:layout_height="44dp"
+                    android:gravity="center"
+                    android:text="14"
+                    android:textSize="18sp"
+                    android:textColor="@color/ios_text_primary"
+                    android:textStyle="bold" />
 
-    <!-- 分隔线 -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/ios_separator" />
+                <TextView
+                    android:id="@+id/tv_header_footer_plus"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:gravity="center"
+                    android:text="+"
+                    android:textSize="20sp"
+                    android:textColor="@color/ios_blue"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true" />
 
-    <!-- 提示文字 -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="页眉页脚字号调整范围为 8 - 24"
-        android:textSize="13sp"
-        android:textColor="@color/ios_text_secondary"
-        android:paddingHorizontal="20dp"
-        android:paddingTop="12dp" />
+            </LinearLayout>
+
+            <!-- 提示文字 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="调整范围 8 - 24"
+                android:textSize="11sp"
+                android:textColor="@color/ios_text_secondary"
+                android:paddingHorizontal="20dp" />
+
+            <!-- 分隔线 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="@color/ios_separator" />
+
+            <!-- 电量时间显示开关（次级设置，跟随页眉页脚开关） -->
+            <LinearLayout
+                android:id="@+id/layout_battery_time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="页脚显示电量时间"
+                    android:textSize="14sp"
+                    android:textColor="@color/ios_text_primary" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_battery_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <!-- 分隔线 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="@color/ios_separator" />
+
+            <!-- 音量键翻页开关 -->
+            <LinearLayout
+                android:id="@+id/layout_volume_key_page"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="音量键翻页"
+                    android:textSize="14sp"
+                    android:textColor="@color/ios_text_primary" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_volume_key_page"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <!-- 滑动翻页开关 -->
+            <LinearLayout
+                android:id="@+id/layout_swipe_page"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="滑动翻页"
+                    android:textSize="14sp"
+                    android:textColor="@color/ios_text_primary" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_swipe_page"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <!-- 分隔线 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="@color/ios_separator" />
+
+            <!-- 自动翻页速度 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="自动翻页速度"
+                    android:textSize="14sp"
+                    android:textColor="@color/ios_text_primary" />
+
+                <LinearLayout
+                    android:id="@+id/layout_auto_speed"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tv_auto_slow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="慢"
+                        android:textSize="13sp"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="5dp"
+                        android:gravity="center"
+                        android:background="@drawable/bg_capsule_gray"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                    <TextView
+                        android:id="@+id/tv_auto_normal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="中"
+                        android:textSize="13sp"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="5dp"
+                        android:gravity="center"
+                        android:background="@drawable/bg_capsule_gray"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:layout_marginStart="8dp" />
+
+                    <TextView
+                        android:id="@+id/tv_auto_fast"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="快"
+                        android:textSize="13sp"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="5dp"
+                        android:gravity="center"
+                        android:background="@drawable/bg_capsule_gray"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:layout_marginStart="8dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
 
 </LinearLayout>

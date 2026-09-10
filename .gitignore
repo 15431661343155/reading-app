@@ -18,6 +18,7 @@ local.properties
 
 # ============ 开发过程产物 ============
 screenshots/
+preview/
 ppt_work/*.jpg
 *.log
 build_err.txt

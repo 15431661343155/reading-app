@@ -48,6 +48,11 @@
     <color name="ios_card_bg">#FFFFFFFF</color>           <!-- 卡片白底 -->
     <color name="ios_nav_bg">#FFF7F7F7</color>           <!-- 导航栏背景 -->
 
+    <!-- ===== 底部导航 · 胶囊选中态配色 ===== -->
+    <color name="nav_item_normal">#FF000000</color>        <!-- 未选中：纯黑（图标 + 文字） -->
+    <color name="nav_item_selected">#FFFFFFFF</color>      <!-- 选中：纯白（配主题色胶囊背景） -->
+    <color name="nav_item_ripple">#1F000000</color>        <!-- 按压缩微水波纹 -->
+
     <!-- ===== 底部导航 · 磨砂玻璃 ===== -->
     <color name="nav_frost_tint">#40FFFFFF</color>     <!-- 磨砂叠加：25% 白，避免亮背景变成白条 -->
     <color name="nav_frost_base">#80F2F2F7</color>     <!-- 磨砂兜底底色：50% 浅灰 -->

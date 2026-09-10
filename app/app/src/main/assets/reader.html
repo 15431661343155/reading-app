@@ -19,6 +19,10 @@
         left: 0;
         width: 100%;
         height: 100%;
+        /* 由页面自己处理滑动（跟手拖拽翻页），避免浏览器把手势当成滚动/缩放吃掉 */
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
     }
     #flipbookContainer {
         position: absolute;
@@ -159,16 +163,31 @@ function startPendingResources() {
                 fontFamily = fn;
                 _pendingFontPath = null;
                 _pendingFontName = null;
-                // 如果已经有内容，字体加载完成后重新分页并重绘
-                if (currentContent) {
-                    paginate(currentContent, chapterTitle);
-                    drawPage(currentPage);
-                    if (pageTurnMode === 'simulation' && simulationActive) {
-                        destroySimulation();
-                        initSimulation();
+                // ✅ 与 loadCustomFont 一致：用 document.fonts.load 显式等待该具体字体就绪再重绘
+                var redrawFn = function() {
+                    if (currentContent) {
+                        if (isScrollMode()) {
+                            layoutScroll(currentContent, chapterTitle);
+                            clampScroll();
+                            drawScroll();
+                        } else {
+                            paginate(currentContent, chapterTitle);
+                            drawPage(currentPage);
+                        }
+                        if (pageTurnMode === 'simulation' && simulationActive) {
+                            destroySimulation();
+                            initSimulation();
+                        }
+                        notifyJavaPageChange();
                     }
-                    notifyJavaPageChange();
+                };
+                var _probe = (typeof fontSize !== 'undefined' ? fontSize : 18) + 'px ' + fn;
+                if (document.fonts && document.fonts.load) {
+                    Promise.resolve(document.fonts.load(_probe)).then(redrawFn, redrawFn);
+                } else {
+                    redrawFn();
                 }
+                setTimeout(redrawFn, 150);
             }).catch(function(err) {
                 console.error('字体加载失败: ' + err);
                 _pendingFontPath = null;
@@ -198,7 +217,11 @@ function startPendingResources() {
                 }
             }
             if (currentContent) {
-                drawPage(currentPage);
+                if (isScrollMode()) {
+                    drawScroll();
+                } else {
+                    drawPage(currentPage);
+                }
                 // ✅ 仿真模式激活时重建 flipbook，使已缓存的页面位图重新带纹理渲染
                 if (simulationActive) reinitSimulation();
             }
@@ -245,6 +268,17 @@ var _reinitTimer = null;
 // 本地书和阅读进度
 var isLocalBook = false;
 var bookProgress = 0;
+
+// ============ 连续滚动模式（'updown' 即滚动模式）状态 ============
+// 该模式不再分页：整章内容连成一张长卷，手指上下拖拽即滚动显示。
+var scrollLines = [];           // 整章连续行（不分页）：{text, fontSize, bold, color, y}
+var scrollContentHeight = 0;    // 内容总高度（CSS px，含顶部页眉留白与底部留白）
+var scrollY = 0;                // 当前滚动偏移（CSS px，0 = 顶部）
+var scrollMax = 0;              // 最大可滚动偏移 = max(0, 内容高 - 视口高)
+var scrollViewW = 0, scrollViewH = 0; // 视口尺寸（CSS px）
+var scrollTouch = null;         // 当前滚动触摸状态
+var scrollAnimId = 0;           // requestAnimationFrame 句柄（用于取消动画）
+var SCROLL_HEADER_EXTRA = 14;   // 粘性页眉额外高度（CSS px）
 
 // ============ 仿真翻页背景同步 ============
 /**
@@ -294,9 +328,14 @@ function resizeCanvas() {
     ctx.setTransform(1, 0, 0, 1, 0, 0); // 重置变换
     ctx.scale(dpr, dpr);
     if (currentContent) {
-        paginate(currentContent, chapterTitle);
-        drawPage(currentPage);
-        if (simulationActive) reinitSimulation();
+        if (isScrollMode()) {
+            layoutScroll(currentContent, chapterTitle);
+            drawScroll();
+        } else {
+            paginate(currentContent, chapterTitle);
+            drawPage(currentPage);
+            if (simulationActive) reinitSimulation();
+        }
     }
 }
 
@@ -436,6 +475,12 @@ function drawPage(pageIndex) {
         ctx.fillStyle = headerFooterColor; // 使用浅灰色
         ctx.textAlign = 'left'; // 左对齐
         ctx.fillText(chapterTitle, padding, topPadding + headerFooterFontSize);
+        // 自动翻页倒计时：页眉右侧小字
+        if (autoPageCountdown > 0) {
+            ctx.textAlign = 'right';
+            ctx.fillText(autoPageCountdown + 's', window.innerWidth - padding, topPadding + headerFooterFontSize);
+            ctx.textAlign = 'left';
+        }
         y = topPadding + headerFooterFontSize + 10 + Math.floor(fontSize / 2); // 页眉后再加 10px + 半行间距
     }
     
@@ -486,6 +531,11 @@ function drawPage(pageIndex) {
 
 // ============ 翻页控制 ============
 function goToPage(page) {
+    if (isScrollMode()) {
+        cancelScrollAnim();
+        animateScrollTo(page * (scrollViewH || window.innerHeight));
+        return;
+    }
     if (isAnimating) return;
     if (page < 0) page = 0;
     if (page >= pages.length) page = pages.length - 1;
@@ -506,6 +556,7 @@ function goToPage(page) {
 
 function nextPage() {
     if (isAnimating) return;
+    if (isScrollMode()) { scrollNextScreen(); return; }
     try {
         if (simulationActive) {
             if (currentPage < pages.length - 1) {
@@ -535,6 +586,7 @@ function nextPage() {
 
 function prevPage() {
     if (isAnimating) return;
+    if (isScrollMode()) { scrollPrevScreen(); return; }
     try {
         if (simulationActive) {
             if (currentPage > 0) {
@@ -564,25 +616,39 @@ function prevPage() {
 
 // ✅ 新增：获取当前页的文本内容（用于书签预览）
 function getCurrentPageText() {
+    if (isScrollMode()) {
+        if (!scrollLines || scrollLines.length === 0) return "";
+        var textLines = [];
+        for (var i = 0; i < scrollLines.length; i++) {
+            var line = scrollLines[i];
+            // 仅取当前视口附近的若干行作为预览
+            var screenY = line.y - scrollY;
+            if (screenY < -line.fontSize * 2) continue;
+            if (screenY > window.innerHeight) break;
+            if (line.text && line.text.trim() !== "") textLines.push(line.text);
+        }
+        return textLines.join("\n");
+    }
+
     if (currentPage < 0 || currentPage >= pages.length) return "";
-    
+
     var lines = pages[currentPage];
     if (!lines || lines.length === 0) return "";
-    
+
     // 提取所有行的文本，用换行符连接
     var textLines = [];
-    for (var i = 0; i < lines.length; i++) {
-        if (lines[i].text && lines[i].text.trim() !== "") {
-            textLines.push(lines[i].text);
+    for (var j = 0; j < lines.length; j++) {
+        if (lines[j].text && lines[j].text.trim() !== "") {
+            textLines.push(lines[j].text);
         }
     }
-    
+
     return textLines.join("\n");
 }
 
 function notifyJavaPageChange() {
     try {
-        Android.onPageChanged(currentPage + 1, pages.length);
+        Android.onPageChanged(virtualCurrentPage(), virtualTotalPages());
     } catch(e) {}
 }
 
@@ -591,6 +657,8 @@ var ANIM_DURATION = 280;
 
 function setPageTurnMode(mode) {
     var wasSimulation = simulationActive || _simulationPlaceholderActive;
+    var wasScroll = (pageTurnMode === 'updown');
+    cancelScrollAnim();
     pageTurnMode = mode;
     if (mode === 'simulation') {
         if (!wasSimulation) {
@@ -604,6 +672,24 @@ function setPageTurnMode(mode) {
     } else {
         if (wasSimulation) {
             destroySimulation();
+        }
+        if (mode === 'updown') {
+            // 进入连续滚动模式：取消 canvas 隐藏（若从仿真切换），重排为长卷并绘制
+            canvas.style.visibility = 'visible';
+            if (currentContent) {
+                layoutScroll(currentContent, chapterTitle);
+                clampScroll();
+                drawScroll();
+                notifyJavaPageChange();
+            }
+        } else {
+            // 普通分页模式：若从滚动模式切出，恢复分页并回到首页
+            if (wasScroll && currentContent) {
+                paginate(currentContent, chapterTitle);
+                currentPage = 0;
+                drawPage(currentPage);
+                notifyJavaPageChange();
+            }
         }
     }
 }
@@ -1314,22 +1400,653 @@ function reinitSimulation() {
     }, 80);
 }
 
-// ============ 触摸翻页 ============
-var touchStartX = 0;
-canvas.addEventListener('touchstart', function(e) {
-    if (simulationActive) return;
-    touchStartX = e.touches[0].clientX;
-});
+// ============ 连续滚动模式（'updown'） ============
+// 进入该模式后，内容不再分页，而是连成一张长卷，靠上下拖拽滚动显示。
 
-canvas.addEventListener('touchend', function(e) {
-    if (isAnimating || simulationActive) return;
-    var deltaX = e.changedTouches[0].clientX - touchStartX;
-    if (deltaX < -50) {
-        nextPage();
-    } else if (deltaX > 50) {
-        prevPage();
+/** 是否处于连续滚动模式 */
+function isScrollMode() {
+    return pageTurnMode === 'updown';
+}
+
+/** 粘性页眉高度（章节标题固定显示在顶部）。关闭页眉或空标题时为 0 */
+function scrollHeaderHeight() {
+    if (showHeaderFooter && chapterTitle) return headerFooterFontSize + SCROLL_HEADER_EXTRA;
+    return 0;
+}
+
+/** 把整章内容排版成连续行（不分页），填充 scrollLines / scrollContentHeight / scrollMax */
+function layoutScroll(text, title) {
+    scrollLines = [];
+    if (!text && !title) { scrollContentHeight = 0; scrollMax = 0; return; }
+    var W = window.innerWidth;
+    var maxWidth = W - padding * 2;
+    var headerH = scrollHeaderHeight();
+    var top = headerH + topPadding;
+    var footerReserved = 17;
+    var bottomPad = footerReserved + 24; // 末行不被页脚遮挡
+    var y = top;
+
+    if (title) {
+        ctx.font = 'bold ' + titleFontSize + 'px ' + fontFamily;
+        var titleLines = splitTextToLines(title, maxWidth);
+        titleLines.forEach(function (line) {
+            scrollLines.push({ text: line, fontSize: titleFontSize, bold: true, color: textColor, y: y });
+            y += titleFontSize * 1.6;
+        });
+        y += titleFontSize * 0.8; // 标题后空行
     }
-});
+
+    ctx.font = fontSize + 'px ' + fontFamily;
+    var indent = '\u3000\u3000';
+    var paragraphs = text.split('\n');
+    paragraphs.forEach(function (para) {
+        if (para.length === 0) {
+            y += fontSize * lineHeightRatio * 0.5;
+            return;
+        }
+        var trimmed = para.replace(/^[\s\u3000]+/, '');
+        var indentedPara = indent + trimmed;
+        var lines = splitTextToLines(indentedPara, maxWidth);
+        lines.forEach(function (line) {
+            scrollLines.push({ text: line, fontSize: fontSize, bold: false, color: textColor, y: y });
+            y += fontSize * lineHeightRatio;
+        });
+    });
+
+    y += bottomPad;
+    scrollContentHeight = y;
+    scrollViewW = W;
+    scrollViewH = window.innerHeight;
+    scrollMax = Math.max(0, scrollContentHeight - scrollViewH);
+    clampScroll();
+}
+
+/** 约束 scrollY 在 [0, scrollMax] 范围内 */
+function clampScroll() {
+    if (scrollY < 0) scrollY = 0;
+    if (scrollY > scrollMax) scrollY = scrollMax;
+}
+
+/** 取消正在进行的滚动动画（惯性 / 程序化跳转） */
+function cancelScrollAnim() {
+    if (scrollAnimId) { cancelAnimationFrame(scrollAnimId); scrollAnimId = 0; }
+    isAnimating = false;
+}
+
+/** 绘制当前滚动视口（仅渲染可视区域内的行，性能友好） */
+function drawScroll() {
+    var dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    var W = window.innerWidth, H = window.innerHeight;
+
+    // 背景（底色 + 纹理）
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, W, H);
+    if (bgTextureImg && bgTextureImg.complete) ctx.drawImage(bgTextureImg, 0, 0, W, H);
+
+    // 页眉 / 页脚带高度：正文渲染时避开这两个区域，正文不侵入页眉页脚位置。
+    // 粘性带从 topPadding 起算，与 layoutScroll() 预留的顶距一致，并与其他翻页模式的页眉上边距相同。
+    var headerBand = (showHeaderFooter && chapterTitle) ? (topPadding + headerFooterFontSize + SCROLL_HEADER_EXTRA) : 0;
+    var footerBand = showHeaderFooter ? (headerFooterFontSize + 20) : 0;
+
+    // 顶部粘性页眉（章节标题）—— 与其他翻页模式保持一致：
+    // 背景使用页面底色 + 纹理（不单独覆盖成不透明块），标题字体/颜色/左对齐/距上边框(topPadding)均相同。
+    // 正文已用 clip 排除此区域，不会从下方透出，因此无需不透明遮罩。
+    if (showHeaderFooter && chapterTitle) {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, W, headerBand);
+        if (bgTextureImg && bgTextureImg.complete) ctx.drawImage(bgTextureImg, 0, 0, W, H);
+        ctx.font = headerFooterFontSize + 'px ' + fontFamily;
+        ctx.fillStyle = headerFooterColor;
+        ctx.textAlign = 'left';
+        ctx.fillText(chapterTitle, padding, topPadding + headerFooterFontSize);
+        // 自动翻页倒计时：页眉右侧小字
+        if (autoPageCountdown > 0) {
+            ctx.textAlign = 'right';
+            ctx.fillText(autoPageCountdown + 's', W - padding, topPadding + headerFooterFontSize);
+            ctx.textAlign = 'left';
+        }
+    }
+
+    // 正文（仅绘制可视区域行；用 clip 排除页眉/页脚带，正文不会显示在这两个位置）
+    var top = scrollY, H2 = H;
+    ctx.textAlign = 'left';
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, headerBand, W, Math.max(0, H - headerBand - footerBand));
+    ctx.clip();
+    for (var i = 0; i < scrollLines.length; i++) {
+        var line = scrollLines[i];
+        var lineH = line.fontSize * (line.bold ? 1.6 : lineHeightRatio);
+        var screenY = line.y - scrollY;
+        if (screenY + lineH < 0) continue;   // 在视口上方
+        if (screenY > H2) break;              // 在视口下方（行已按 y 升序）
+        ctx.font = (line.bold ? 'bold ' : '') + line.fontSize + 'px ' + fontFamily;
+        ctx.fillStyle = line.color || textColor;
+        ctx.fillText(line.text, padding, screenY + line.fontSize);
+    }
+    ctx.restore();
+
+    // 页脚（页码 / 进度）
+    if (showHeaderFooter) {
+        var total = virtualTotalPages();
+        var cur = virtualCurrentPage();
+        var footerText = cur + '/' + total;
+        if (isLocalBook && typeof bookProgress !== 'undefined') footerText += ' ' + bookProgress + '%';
+        ctx.font = headerFooterFontSize + 'px ' + fontFamily;
+        ctx.fillStyle = headerFooterColor;
+        ctx.textAlign = 'right';
+        ctx.fillText(footerText, W - padding, H - 15);
+        if (showBatteryTime && (batteryText || timeText)) {
+            ctx.textAlign = 'left';
+            var leftInfo = batteryText + (batteryText && timeText ? '  ' : '') + timeText;
+            ctx.fillText(leftInfo, padding, H - 15);
+        }
+        ctx.textAlign = 'left';
+    }
+}
+
+/** 越界阻尼：拖过章节边界时位移按比例缩小，产生"拉扯感" */
+function applyDamping(x) { return x * 0.4; }
+
+/** 平滑滚动到指定偏移（程序化跳转 / 越界回弹）。opts.onDone 在动画结束后回调 */
+function animateScrollTo(targetY, opts) {
+    opts = opts || {};
+    cancelScrollAnim();
+    targetY = Math.max(0, Math.min(scrollMax, targetY));
+    isAnimating = true;
+    var from = scrollY, to = targetY, start = null, dur = opts.dur || 260;
+    function step(ts) {
+        if (start === null) start = ts;
+        var t = Math.min((ts - start) / dur, 1);
+        var e = 1 - Math.pow(1 - t, 3);
+        scrollY = from + (to - from) * e;
+        drawScroll();
+        if (t < 1) {
+            scrollAnimId = requestAnimationFrame(step);
+        } else {
+            scrollAnimId = 0;
+            isAnimating = false;
+            scrollY = to;
+            if (opts.onDone) opts.onDone();
+            notifyJavaPageChange();
+        }
+    }
+    scrollAnimId = requestAnimationFrame(step);
+}
+
+/** 惯性滚动：松手后按速度继续滑行并自然减速 */
+function startMomentum(v) {
+    cancelScrollAnim();
+    isAnimating = true;
+    var last = null;
+    function step(ts) {
+        if (last === null) last = ts;
+        var dt = (ts - last) / 1000;
+        if (dt > 0.05) dt = 0.05;
+        last = ts;
+        scrollY += v * dt * 1000;       // v: px/ms
+        v *= Math.exp(-dt / 0.3);       // 时间相关的指数衰减，帧率无关
+        if (scrollY < 0) { scrollY = 0; v = 0; }
+        if (scrollY > scrollMax) { scrollY = scrollMax; v = 0; }
+        drawScroll();
+        if (Math.abs(v) > 0.02 && scrollY > 0 && scrollY < scrollMax) {
+            scrollAnimId = requestAnimationFrame(step);
+        } else {
+            scrollAnimId = 0;
+            isAnimating = false;
+            notifyJavaPageChange();
+        }
+    }
+    scrollAnimId = requestAnimationFrame(step);
+}
+
+/** 向下滚动一屏（点击"下一页"区域 / 自动翻页） */
+function scrollNextScreen() {
+    if (scrollY >= scrollMax - 0.5) { try { Android.onChapterEnd(); } catch (e) {} return; }
+    animateScrollTo(Math.min(scrollMax, scrollY + scrollViewH));
+}
+
+/** 向上滚动一屏（点击"上一页"区域 / 自动翻页） */
+function scrollPrevScreen() {
+    if (scrollY <= 0.5) { try { Android.onChapterStart(); } catch (e) {} return; }
+    animateScrollTo(Math.max(0, scrollY - scrollViewH));
+}
+
+/** 滚动模式下的"虚拟页码"：以"屏"为单位，使进度条/书签/跳转契约与分页模式一致 */
+function virtualTotalPages() {
+    if (isScrollMode()) return Math.max(1, Math.ceil((scrollContentHeight || scrollViewH || 1) / (scrollViewH || 1)));
+    return pages.length;
+}
+function virtualCurrentPage() {
+    if (isScrollMode()) {
+        var total = virtualTotalPages();
+        return Math.min(total, Math.floor(scrollY / (scrollViewH || 1)) + 1);
+    }
+    return currentPage + 1;
+}
+
+/** 仅重绘当前显示（不改变排版）：滚动模式画长卷，否则画当前分页页 */
+function redrawCurrent() {
+    if (isScrollMode()) drawScroll();
+    else drawPage(currentPage);
+}
+
+/** 重排版并立即重绘（字体/字号变化导致内容高度改变时使用） */
+function relayoutAndRedraw() {
+    if (!currentContent) return;
+    if (isScrollMode()) {
+        layoutScroll(currentContent, chapterTitle);
+        clampScroll();
+    } else {
+        paginate(currentContent, chapterTitle);
+        if (currentPage >= pages.length) currentPage = pages.length - 1;
+        if (currentPage < 0) currentPage = 0;
+    }
+    redrawCurrent();
+    notifyJavaPageChange();
+}
+
+// ============ 跟手拖拽翻页（覆盖 / 平移 / 上下） ============
+// 非仿真模式下手指滑动时，书页实时跟随手指移动（松手前不真正翻页）；
+// 松手后按「滑动距离 + 速度」决定翻到目标页还是回弹到当前页。
+// 章节边界（首页向前 / 末页向后）没有目标页可渲染，改为橡皮筋阻尼，
+// 松手且达到阈值时才请求换章，避免误触跳章。
+var swipeEnabled = true;          // 与 Android「滑动翻页」开关同步
+var drag = null;                  // 当前触摸/拖拽状态
+var dragOldCvs = null;            // 当前页位图
+var dragNewCvs = null;            // 目标页位图
+var lastDragFinishTs = 0;         // 最近一次拖拽完成翻页的时间（防止与 Android onFling 重复翻页）
+var lastDragActivityTs = 0;       // 最近一次拖拽收尾（含回弹）的时间
+// ⚠️ 必须大于系统的点击判定阈值（ViewConfiguration touch slop = 8dp，CSS px 与 dp 等价）：
+// 否则一次「点击」只要手指漂几像素就会进入跟手拖拽，既吞掉 Android 端的点击翻页，
+// 还可能因为瞬时速度被算成甩动而翻到反方向的页。
+var DRAG_SLOP = 16;               // 判定为拖拽的最小位移（CSS px）
+var DRAG_COMMIT_RATIO = 0.2;      // 松手完成翻页所需的最小滑动比例
+var DRAG_BOUNDARY_RATIO = 0.2;    // 章节边界触发换章的最小滑动比例
+var DRAG_FLICK_MIN_RATIO = 0.08;  // 按速度判定甩动时的最小滑动比例（防点击抖动误翻）
+var DRAG_COMMIT_VELOCITY = 0.45;  // px/ms：快速甩动时降低距离要求
+var DRAG_EDGE_SHADOW = 30;        // 页边投影宽度（CSS px）
+
+var touchStartX = 0;
+
+/** Android「滑动翻页」开关同步 */
+function setSwipeEnabled(enabled) {
+    swipeEnabled = !!enabled;
+    if (!swipeEnabled && drag && drag.active) finishDrag(drag, false);
+}
+
+/** 支持跟手翻页（分页动画）的模式；'updown' 已改为滚动模式，'none' / 'fade' / 'simulation' 走各自逻辑 */
+function dragMode() {
+    return (pageTurnMode === 'cover' || pageTurnMode === 'slide') ? pageTurnMode : null;
+}
+
+/** 复制当前画布内容到离屏 canvas（作为拖拽中的「当前页」位图） */
+function copyCanvasTo(cvs) {
+    if (!cvs) cvs = document.createElement('canvas');
+    if (cvs.width !== canvas.width || cvs.height !== canvas.height) {
+        cvs.width = canvas.width;
+        cvs.height = canvas.height;
+    }
+    var c = cvs.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, cvs.width, cvs.height);
+    c.drawImage(canvas, 0, 0);
+    return cvs;
+}
+
+/** 把指定页渲染到离屏 canvas（直接复用 drawPage，省去 getImageData 的开销） */
+function renderPageTo(cvs, pageIndex) {
+    if (!cvs) cvs = document.createElement('canvas');
+    if (cvs.width !== canvas.width || cvs.height !== canvas.height) {
+        cvs.width = canvas.width;
+        cvs.height = canvas.height;
+    }
+    var octx = cvs.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.scale(dpr, dpr);
+    var mainCtx = ctx;
+    ctx = octx;
+    try {
+        drawPage(pageIndex);
+    } finally {
+        ctx = mainCtx;
+    }
+    return cvs;
+}
+
+/** 开始拖拽：确定方向与是否有目标页，并预渲染两页位图 */
+function beginDrag(d, dir) {
+    var target = currentPage + dir;
+    var valid = target >= 0 && target < pages.length;
+    d.active = true;
+    d.dir = dir;
+    d.target = target;
+    d.boundary = !valid;
+    isAnimating = true;                 // 拖拽期间屏蔽外部翻页（音量键 / 进度条 / 自动翻页）
+    dragOldCvs = copyCanvasTo(dragOldCvs);
+    dragNewCvs = valid ? renderPageTo(dragNewCvs, target) : null;
+    if (animWatchdog) { clearTimeout(animWatchdog); animWatchdog = null; }
+}
+
+/** 按当前进度绘制拖拽帧（p：0=当前页，1=目标页） */
+function dragDraw(d, p) {
+    var CW = canvas.width, CH = canvas.height;
+    var dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    // ---- 章节边界：当前页带阻尼位移，露出背景 ----
+    if (d.boundary) {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, CW, CH);
+        if (bgTextureImg && bgTextureImg.complete) {
+            ctx.drawImage(bgTextureImg, 0, 0, CW, CH);
+        }
+        var bOff = (d.vertical ? CH : CW) * p * (d.dir > 0 ? -1 : 1);
+        if (d.vertical) ctx.drawImage(dragOldCvs, 0, bOff);
+        else ctx.drawImage(dragOldCvs, bOff, 0);
+        return;
+    }
+
+    if (d.mode === 'slide') {
+        // ---- 平移：旧页滑出 + 新页滑入 ----
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, CW, CH);
+        var sOld = d.dir > 0 ? -CW * p : CW * p;
+        var sNew = d.dir > 0 ? CW * (1 - p) : -CW * (1 - p);
+        ctx.drawImage(dragOldCvs, sOld, 0);
+        ctx.drawImage(dragNewCvs, sNew, 0);
+        return;
+    }
+
+    if (d.mode === 'updown') {
+        // ---- 上下：旧页上/下移出 + 新页移入 ----
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, CW, CH);
+        var uOld = d.dir > 0 ? -CH * p : CH * p;
+        var uNew = d.dir > 0 ? CH * (1 - p) : -CH * (1 - p);
+        ctx.drawImage(dragOldCvs, 0, uOld);
+        ctx.drawImage(dragNewCvs, 0, uNew);
+        return;
+    }
+
+    // ---- 覆盖：新页从侧边滑入覆盖旧页 ----
+    ctx.drawImage(dragOldCvs, 0, 0);
+    var x = d.dir > 0 ? CW * (1 - p) : -CW * (1 - p);
+    var shW = DRAG_EDGE_SHADOW * dpr;
+    if (d.dir > 0) {
+        // 新页左边缘（进入侧）在旧页上的投影
+        var l = Math.max(0, x - shW), r = Math.min(CW, x);
+        if (r > l) {
+            var g = ctx.createLinearGradient(l, 0, r, 0);
+            g.addColorStop(0, 'rgba(0,0,0,0)');
+            g.addColorStop(1, 'rgba(0,0,0,0.28)');
+            ctx.fillStyle = g;
+            ctx.fillRect(l, 0, r - l, CH);
+        }
+    } else {
+        // 新页右边缘（进入侧）在旧页上的投影
+        var edge = x + CW;
+        var l2 = Math.max(0, edge), r2 = Math.min(CW, edge + shW);
+        if (r2 > l2) {
+            var g2 = ctx.createLinearGradient(l2, 0, r2, 0);
+            g2.addColorStop(0, 'rgba(0,0,0,0.28)');
+            g2.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g2;
+            ctx.fillRect(l2, 0, r2 - l2, CH);
+        }
+    }
+    ctx.drawImage(dragNewCvs, x, 0);
+    // 纸张边缘高光
+    var hlW = Math.max(1, 2 * dpr);
+    var ha, hb;
+    if (d.dir > 0) { ha = Math.max(0, x); hb = Math.min(CW, x + hlW); }
+    else { var he = x + CW; ha = Math.max(0, he - hlW); hb = Math.min(CW, he); }
+    if (hb > ha) {
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.fillRect(ha, 0, hb - ha, CH);
+    }
+}
+
+/** 松手收尾：commit=true 翻到目标页（边界则请求换章），false 回弹 */
+function finishDrag(d, commit) {
+    if (!d || !d.active) return;
+    d.active = false;
+    lastDragActivityTs = Date.now();
+    var from = d.progress;
+    var to = (commit && !d.boundary) ? 1 : 0;
+    var dur = Math.max(90, Math.round(ANIM_DURATION * Math.abs(to - from)));
+    var startTime = null;
+    isAnimating = true;
+    if (animWatchdog) clearTimeout(animWatchdog);
+    animWatchdog = setTimeout(function () {
+        if (!isAnimating) return;
+        isAnimating = false;
+        var dpr = window.devicePixelRatio || 1;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+        drawPage(currentPage);
+        if (drag === d) drag = null;
+    }, 2000);
+
+    function step(ts) {
+        if (!startTime) startTime = ts;
+        var t = Math.min((ts - startTime) / dur, 1);
+        var e = 1 - Math.pow(1 - t, 3);
+        dragDraw(d, from + (to - from) * e);
+        if (t < 1) { requestAnimationFrame(step); return; }
+        if (animWatchdog) { clearTimeout(animWatchdog); animWatchdog = null; }
+        var dpr = window.devicePixelRatio || 1;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+        if (commit && !d.boundary) {
+            currentPage = d.target;
+            lastDragFinishTs = Date.now();
+            drawPage(currentPage);
+            notifyJavaPageChange();
+        } else {
+            drawPage(currentPage);
+            if (commit && d.boundary) {
+                try { if (d.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (ee) {}
+            }
+        }
+        isAnimating = false;
+        if (drag === d) drag = null;
+    }
+    requestAnimationFrame(step);
+}
+
+canvas.addEventListener('touchstart', function (e) {
+    if (simulationActive) return;
+    var t = e.touches && e.touches[0];
+    if (!t) return;
+    touchStartX = t.clientX;
+    // 连续滚动模式：手势交给滚动逻辑（上下拖拽即滚动）
+    if (isScrollMode()) { beginScrollTouch(t); return; }
+    if (isAnimating || !pages.length || !dragMode() || !swipeEnabled) { drag = null; return; }
+    drag = {
+        mode: pageTurnMode,
+        vertical: pageTurnMode === 'updown',
+        start: pageTurnMode === 'updown' ? t.clientY : t.clientX,
+        cross: pageTurnMode === 'updown' ? t.clientX : t.clientY,
+        active: false, dir: 0, target: -1, boundary: false,
+        progress: 0, raw: 0, lastMagn: 0, lastTs: Date.now(), velocity: 0
+    };
+}, { passive: true });
+
+canvas.addEventListener('touchmove', function (e) {
+    if (simulationActive) return;
+    // 连续滚动模式：直接处理滚动拖拽
+    if (isScrollMode()) { handleScrollTouchMove(e); return; }
+    if (!drag) return;
+    var t = e.touches && e.touches[0];
+    if (!t) return;
+    var pos = drag.vertical ? t.clientY : t.clientX;
+    var cross = drag.vertical ? t.clientX : t.clientY;
+    var delta = pos - drag.start;
+
+    if (!drag.active) {
+        // 方向判定：沿翻页轴的位移需明显大于另一根轴的位移
+        if (Math.abs(delta) < DRAG_SLOP || Math.abs(delta) <= Math.abs(cross - drag.cross)) return;
+        if (isAnimating || !pages.length || !dragMode() || !swipeEnabled) { drag = null; return; }
+        beginDrag(drag, delta < 0 ? 1 : -1);
+    }
+
+    var size = drag.vertical ? window.innerHeight : window.innerWidth;
+    var magn = -delta * drag.dir;   // 沿翻页方向的有效位移（>0 表示继续朝目标页方向）
+    var raw = Math.max(0, Math.min(1, magn / size));
+    drag.raw = raw;
+    // 章节边界没有目标页，做橡皮筋阻尼，最多露出 12%
+    drag.progress = drag.boundary ? Math.min(raw * 0.35, 0.12) : raw;
+
+    var now = Date.now();
+    var dt = now - drag.lastTs;
+    if (dt > 0) {
+        var v = (magn - drag.lastMagn) / dt;
+        drag.velocity = drag.velocity * 0.5 + v * 0.5;
+        drag.lastMagn = magn;
+        drag.lastTs = now;
+    }
+    dragDraw(drag, drag.progress);
+    e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', function (e) {
+    if (simulationActive) return;
+    // 连续滚动模式：交给滚动收尾（惯性 / 越界换章）
+    if (isScrollMode()) { handleScrollTouchEnd(e); return; }
+    var d = drag;
+    drag = null;
+    var ct = e.changedTouches && e.changedTouches[0];
+    if (!d || !d.active) {
+        // 未形成跟手拖拽（不支持的模式 / 位移过小 / 方向不符）：沿用简单滑动判定
+        // 注意要尊重「滑动翻页」开关，否则关闭开关后仍能滑动翻页
+        if (isAnimating || !ct || !swipeEnabled) return;
+        var dx = ct.clientX - touchStartX;
+        if (dx < -50) nextPage();
+        else if (dx > 50) prevPage();
+        return;
+    }
+    var commit;
+    if (d.boundary) {
+        commit = d.raw >= DRAG_BOUNDARY_RATIO ||
+                 (d.velocity >= DRAG_COMMIT_VELOCITY && d.raw >= DRAG_FLICK_MIN_RATIO);
+    } else {
+        commit = d.raw >= DRAG_COMMIT_RATIO ||
+                 (d.velocity >= DRAG_COMMIT_VELOCITY && d.raw >= DRAG_FLICK_MIN_RATIO);
+    }
+    finishDrag(d, commit);
+}, { passive: true });
+
+canvas.addEventListener('touchcancel', function () {
+    if (isScrollMode()) {
+        if (scrollTouch) { scrollTouch = null; clampScroll(); drawScroll(); }
+        return;
+    }
+    var d = drag;
+    drag = null;
+    if (d && d.active) finishDrag(d, false);
+}, { passive: true });
+
+/**
+ * Android 端 GestureDetector 的 onFling 统一交给前端决策：
+ * 跟手拖拽会自行在 touchend 收尾，这里直接忽略，避免一次滑动翻两页。
+ * 连续滚动模式下完全由前端 touch 处理（含惯性），此处直接消费，避免重复滚动。
+ */
+function onAndroidFling(deltaX) {
+    if (isScrollMode()) return true;   // 滚动模式下滚动由前端处理
+    if (!swipeEnabled) return true;
+    if (drag && drag.active) return true;                    // 拖拽收尾会处理
+    if (isAnimating) return true;                            // 已有动画在进行
+    // 拖拽刚刚收尾（翻页或回弹）：无论事件先后顺序都不再重复翻页
+    if (Date.now() - lastDragActivityTs < 400) return true;
+    if (Date.now() - lastDragFinishTs < 400) return true;
+    if (typeof deltaX !== 'number' || deltaX === 0) return true;
+    if (deltaX < 0) nextPage();
+    else prevPage();
+    return true;
+}
+
+// ============ 连续滚动模式：手势处理 ============
+/** 开始一次滚动触摸：取消惯性动画，记录起点 */
+function beginScrollTouch(t) {
+    if (!scrollLines || !scrollLines.length) { scrollTouch = null; return; }
+    cancelScrollAnim();
+    isAnimating = false;
+    scrollTouch = {
+        startY: t.clientY,
+        startScrollY: scrollY,
+        lastTs: Date.now(),
+        velocity: 0,   // d(scrollY)/dt，px/ms（正=向上滚/内容下移）
+        rawOver: 0,    // 越过边界的「原始」拖拽量（未阻尼），用于松手判定是否换章
+        moved: false
+    };
+}
+
+/** 滚动拖拽过程：根据手指位移实时更新 scrollY（带越界阻尼） */
+function handleScrollTouchMove(e) {
+    var t = e.touches && e.touches[0];
+    if (!t || !scrollTouch) return;
+    var dy = t.clientY - scrollTouch.startY;       // 手指向下移 → dy>0
+    var rawNew = scrollTouch.startScrollY - dy;     // 手指上移 → scrollY 增大（看后面内容）
+
+    // 记录越过边界的原始拖拽量（未阻尼）——松手时据此判定是否换章
+    var rawOver = 0;
+    if (rawNew < 0) rawOver = -rawNew;
+    else if (rawNew > scrollMax) rawOver = rawNew - scrollMax;
+    if (rawOver > scrollTouch.rawOver) scrollTouch.rawOver = rawOver;
+
+    // 显示用阻尼位移：超过顶部/底部时按比例缩小，产生"拉扯感"
+    var newScrollY = rawNew;
+    if (rawNew < 0) newScrollY = -applyDamping(-rawNew);
+    else if (rawNew > scrollMax) newScrollY = scrollMax + applyDamping(rawNew - scrollMax);
+
+    var now = Date.now();
+    var dt = now - scrollTouch.lastTs;
+    if (dt > 0) {
+        var v = (newScrollY - scrollY) / dt;
+        scrollTouch.velocity = scrollTouch.velocity * 0.7 + v * 0.3;
+    }
+    scrollTouch.lastTs = now;
+    if (Math.abs(dy) > 4) scrollTouch.moved = true;
+    scrollY = newScrollY;
+    drawScroll();
+    if (e.cancelable) e.preventDefault();
+}
+
+/** 滚动松手：越界 → 回弹或换章；否则按速度惯性滑行 */
+function handleScrollTouchEnd(e) {
+    var st = scrollTouch;
+    scrollTouch = null;
+    if (!st) return;
+
+    // 顶部越界：拖过顶部后松手
+    if (scrollY < 0) {
+        if (st.rawOver > scrollViewH * 0.12 || st.velocity < -0.5) {
+            animateScrollTo(0, { onDone: function () { try { Android.onChapterStart(); } catch (e) {} } });
+        } else {
+            animateScrollTo(0);
+        }
+        return;
+    }
+    // 底部越界：拖过底部后松手
+    if (scrollY > scrollMax) {
+        if (st.rawOver > scrollViewH * 0.12 || st.velocity > 0.5) {
+            animateScrollTo(scrollMax, { onDone: function () { try { Android.onChapterEnd(); } catch (e) {} } });
+        } else {
+            animateScrollTo(scrollMax);
+        }
+        return;
+    }
+    // 惯性滚动（甩动）
+    if (st.moved && Math.abs(st.velocity) > 0.05) {
+        startMomentum(st.velocity);
+    } else {
+        notifyJavaPageChange();
+    }
+}
 
 // ============ Java 调用接口 ============
 function loadContent(chapterIndex, title, content, startPage, isLocal, progress) {
@@ -1349,24 +2066,38 @@ function loadContent(chapterIndex, title, content, startPage, isLocal, progress)
     console.log('loadContent 接收内容长度: ' + content.length);
     resizeCanvas();
 
-    if (startPage === -1 && pages.length > 0) {
-        currentPage = pages.length - 1;
-    } else if (typeof startPage === 'number' && startPage > 0 && startPage <= pages.length) {
-        currentPage = startPage - 1;
+    if (isScrollMode()) {
+        // 滚动模式：resizeCanvas 已重排为长卷；按 startPage 还原阅读位置（以"屏"为单位）
+        var totalScreens = virtualTotalPages();
+        if (startPage === -1) {
+            scrollY = scrollMax;                     // 跳到本章末尾
+        } else if (typeof startPage === 'number' && startPage > 0 && startPage <= totalScreens) {
+            scrollY = (startPage - 1) * (scrollViewH || window.innerHeight);
+        } else {
+            scrollY = 0;
+        }
+        clampScroll();
+        drawScroll();
     } else {
-        currentPage = 0;
-    }
-    console.log('reader.html 开始绘制第 ' + (currentPage + 1) + ' 页');
+        if (startPage === -1 && pages.length > 0) {
+            currentPage = pages.length - 1;
+        } else if (typeof startPage === 'number' && startPage > 0 && startPage <= pages.length) {
+            currentPage = startPage - 1;
+        } else {
+            currentPage = 0;
+        }
+        console.log('reader.html 开始绘制第 ' + (currentPage + 1) + ' 页');
 
-    // ✅ 仿真模式：跳过 canvas 直接渲染为翻页页（canvas 已隐藏）
-    // 非仿真模式：正常绘制到 canvas
-    if (pageTurnMode === 'simulation') {
-        initSimulation();
-    } else {
-        drawPage(currentPage);
-        // 如果之前处于仿真占位模式，现在切换到非仿真需清理
-        if (_simulationPlaceholderActive || simulationActive) {
-            destroySimulation();
+        // ✅ 仿真模式：跳过 canvas 直接渲染为翻页页（canvas 已隐藏）
+        // 非仿真模式：正常绘制到 canvas
+        if (pageTurnMode === 'simulation') {
+            initSimulation();
+        } else {
+            drawPage(currentPage);
+            // 如果之前处于仿真占位模式，现在切换到非仿真需清理
+            if (_simulationPlaceholderActive || simulationActive) {
+                destroySimulation();
+            }
         }
     }
 
@@ -1376,7 +2107,7 @@ function loadContent(chapterIndex, title, content, startPage, isLocal, progress)
     notifyJavaPageChange();
     var summary = {
         chapterIndex: chapterIndex,
-        totalPages: pages.length,
+        totalPages: virtualTotalPages(),
         fontSize: fontSize,
         width: window.innerWidth,
         height: window.innerHeight,
@@ -1416,10 +2147,8 @@ function setFontSize(size) {
     titleFontSize = size + 4;
     topPadding = padding + fontSize; // 字号变化时同步顶部边距
     if (currentContent) {
-        paginate(currentContent, chapterTitle);
         if (!_deferDraw) {
-            drawPage(currentPage);
-            notifyJavaPageChange();
+            relayoutAndRedraw();
             if (simulationActive) reinitSimulation();
         }
     }
@@ -1433,10 +2162,8 @@ function setFontFamily(name) {
         fontFamily = name;
     }
     if (currentContent) {
-        paginate(currentContent, chapterTitle);
         if (!_deferDraw) {
-            drawPage(currentPage);
-            notifyJavaPageChange();
+            relayoutAndRedraw();
             if (simulationActive) reinitSimulation();
         }
     }
@@ -1450,13 +2177,19 @@ function loadCustomFont(src, name) {
         while (!entry.done) {
             if (entry.value.family === '"' + name + '"' || entry.value.family === name) {
                 fontFamily = name;
-                if (currentContent) {
-                    paginate(currentContent, chapterTitle);
-                    if (!_deferDraw) {
-                        drawPage(currentPage);
-                        notifyJavaPageChange();
+                if (currentContent && !_deferDraw) {
+                    // 已注册字体再次切换：同样等该具体字体可用后再重绘，避免首绘回退
+                    var _dFn = function() {
+                        relayoutAndRedraw();
                         if (simulationActive) reinitSimulation();
+                    };
+                    var _p2 = (typeof fontSize !== 'undefined' ? fontSize : 18) + 'px ' + name;
+                    if (document.fonts && document.fonts.load) {
+                        Promise.resolve(document.fonts.load(_p2)).then(_dFn, _dFn);
+                    } else {
+                        _dFn();
                     }
+                    setTimeout(_dFn, 150);
                 }
                 return;
             }
@@ -1469,19 +2202,32 @@ function loadCustomFont(src, name) {
     font.load().then(function(loaded) {
         document.fonts.add(loaded);
         fontFamily = name;
-        if (currentContent) {
-            paginate(currentContent, chapterTitle);
-            drawPage(currentPage);
-            notifyJavaPageChange();
-            if (simulationActive) reinitSimulation();
+        // ✅ 修复「点击切换无反应 / 需退出重进才生效」：
+        // document.fonts.ready 在某些 Chromium 版本下不能可靠地让 Canvas 立即应用
+        // 刚加入的自定义字体（首绘仍回退系统字体）。改用 document.fonts.load('18px 字体名')
+        // 显式等待「该具体字体」真正可用后再重排重绘；setTimeout 兜底保证即使 Promise 异常也必重绘。
+        var redrawFn = function() {
+            if (currentContent) {
+                relayoutAndRedraw();
+                if (simulationActive) reinitSimulation();
+            }
+        };
+        var _probe = (typeof fontSize !== 'undefined' ? fontSize : 18) + 'px ' + name;
+        if (document.fonts && document.fonts.load) {
+            Promise.resolve(document.fonts.load(_probe)).then(redrawFn, redrawFn);
+        } else {
+            redrawFn();
         }
+        setTimeout(redrawFn, 150);
         // If batch was active, finish it now that font is loaded
         if (wasDeferred) {
             _deferDraw = false;
         }
     }).catch(function(err) {
         console.error('加载自定义字体失败: ' + err);
+        // 加载失败时不强行改字体，保持当前阅读字体；必要时补一次重绘
         if (wasDeferred) finishSettingsBatch();
+        else if (currentContent) relayoutAndRedraw();
     });
 }
 
@@ -1493,7 +2239,7 @@ function setBackgroundColor(color) {
         syncSimulationBackground();
     }
     if (!_deferDraw) {
-        drawPage(currentPage);
+        redrawCurrent();
         if (simulationActive) reinitSimulation();
     }
 }
@@ -1506,7 +2252,7 @@ function setTextColor(color) {
         }
     }
     if (!_deferDraw) {
-        drawPage(currentPage);
+        redrawCurrent();
         if (simulationActive) reinitSimulation();
     }
 }
@@ -1515,7 +2261,7 @@ function setBackgroundTexture(src) {
     // 如果 bgTextureImg 已经加载了同一张图，直接重绘（避免重复异步加载）
     if (bgTextureImg && bgTextureImg.complete && bgTextureImg.src && bgTextureImg.src.indexOf(src) !== -1) {
         if (currentContent && !_deferDraw) {
-            drawPage(currentPage);
+            redrawCurrent();
             if (simulationActive) reinitSimulation();
         }
         return;
@@ -1535,7 +2281,7 @@ function setBackgroundTexture(src) {
         }
         if (currentContent) {
             if (!_deferDraw) {
-                drawPage(currentPage);
+                redrawCurrent();
                 if (simulationActive) reinitSimulation();
             }
         }
@@ -1556,7 +2302,7 @@ function clearBackgroundTexture() {
         syncSimulationBackground();
     }
     if (currentContent && !_deferDraw) {
-        drawPage(currentPage);
+        redrawCurrent();
         if (simulationActive) reinitSimulation();
     }
 }
@@ -1585,17 +2331,83 @@ function setNightMode(enable) {
         }
     }
     if (!_deferDraw) {
-        drawPage(currentPage);
+        redrawCurrent();
         if (simulationActive) reinitSimulation();
     }
+}
+
+// 将 #RRGGBB / #RGB 在 a→b 之间按 t(0..1) 插值，返回 #RRGGBB
+function lerpColor(a, b, t) {
+    function norm(c) {
+        if (c.length === 4) return '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3];
+        return c;
+    }
+    a = norm(a); b = norm(b);
+    var ar = parseInt(a.substr(1, 2), 16), ag = parseInt(a.substr(3, 2), 16), ab = parseInt(a.substr(5, 2), 16);
+    var br = parseInt(b.substr(1, 2), 16), bg = parseInt(b.substr(3, 2), 16), bb = parseInt(b.substr(5, 2), 16);
+    var r = Math.round(ar + (br - ar) * t);
+    var g = Math.round(ag + (bg - ag) * t);
+    var bl = Math.round(ab + (bb - ab) * t);
+    return '#' + (0x1000000 + (r << 16) + (g << 8) + bl).toString(16).slice(1);
+}
+
+// 平滑切换日/夜间：由原生侧传入起止颜色与时长（毫秒），逐帧插值并重绘 Canvas
+// enable: 目标是否为夜间；durationMs: 过渡时长；from/to 分别为起始/目标背景与文字色
+function animateNightMode(enable, durationMs, fromBg, fromText, toBg, toText) {
+    isNightMode = enable;
+    bgTextureImg = null;
+    var start = null;
+    function frame(ts) {
+        if (start === null) start = ts;
+        var t = durationMs <= 0 ? 1 : Math.min(1, (ts - start) / durationMs);
+        var e = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // ease-in-out
+        bgColor = lerpColor(fromBg, toBg, e);
+        textColor = lerpColor(fromText, toText, e);
+        // 同步仿真/翻页容器底色
+        if (_simulationPlaceholderActive || simulationActive) syncSimulationBackground();
+        // 更新已布局页面的文字颜色缓存
+        if (typeof pages !== 'undefined') {
+            for (var i = 0; i < pages.length; i++) {
+                if (!pages[i]) continue;
+                for (var j = 0; j < pages[i].length; j++) {
+                    pages[i][j].color = textColor;
+                }
+            }
+        }
+        if (!_deferDraw) {
+            redrawCurrent();
+            if (simulationActive) reinitSimulation();
+        }
+        if (t < 1) {
+            requestAnimationFrame(frame);
+        } else {
+            // 终帧落定精确值，消除浮点误差
+            bgColor = toBg; textColor = toText;
+            if (!_deferDraw) {
+                redrawCurrent();
+                if (simulationActive) reinitSimulation();
+            }
+        }
+    }
+    requestAnimationFrame(frame);
 }
 
 // 设置页眉页脚显示
 function setShowHeaderFooter(show) {
     showHeaderFooter = show;
     if (!_deferDraw) {
-        drawPage(currentPage);
+        redrawCurrent();
         if (simulationActive) reinitSimulation();
+    }
+}
+
+// 设置自动翻页倒计时（秒）；>0 时在页眉右侧显示小倒计时，<=0 时隐藏
+var autoPageCountdown = 0;
+function setAutoPageCountdown(sec) {
+    sec = sec | 0;
+    if (sec !== autoPageCountdown) {
+        autoPageCountdown = sec;
+        if (!_deferDraw) redrawCurrent();
     }
 }
 
@@ -1603,7 +2415,7 @@ function setShowHeaderFooter(show) {
 function setHeaderFooterFontSize(size) {
     headerFooterFontSize = size;
     if (!_deferDraw) {
-        drawPage(currentPage);
+        redrawCurrent();
         if (simulationActive) reinitSimulation();
     }
 }
@@ -1612,7 +2424,7 @@ function setHeaderFooterFontSize(size) {
 function setShowBatteryTime(show) {
     showBatteryTime = show;
     if (!_deferDraw) {
-        drawPage(currentPage);
+        redrawCurrent();
         if (simulationActive) reinitSimulation();
     }
 }
@@ -1622,7 +2434,7 @@ function updateBatteryTime(level, time) {
     batteryText = level;
     timeText = time;
     if (showBatteryTime && !_deferDraw) {
-        drawPage(currentPage);
+        redrawCurrent();
         if (simulationActive) reinitSimulation();
     }
 }
@@ -1650,12 +2462,20 @@ function preCalculate(content) {
     var oldTitle = chapterTitle;
     var oldFontSize = fontSize;
     var oldFontFamily = fontFamily;
+    // 暂存当前滚动状态，避免预计算污染正在阅读的滚动位置
+    var oldLines = scrollLines, oldH = scrollContentHeight, oldMax = scrollMax,
+        oldVH = scrollViewH, oldVW = scrollViewW, oldSY = scrollY;
     var processed = preprocessContent(content);
     currentContent = processed;
     chapterTitle = '';
     paginate(processed, '');
+    var totalPages = pages.length;
+    if (isScrollMode()) {
+        layoutScroll(processed, '');
+        totalPages = Math.max(1, Math.ceil((scrollContentHeight || scrollViewH || 1) / (scrollViewH || 1)));
+    }
     var summary = {
-        totalPages: pages.length,
+        totalPages: totalPages,
         fontSize: fontSize,
         width: window.innerWidth,
         height: window.innerHeight,
@@ -1665,6 +2485,8 @@ function preCalculate(content) {
     chapterTitle = oldTitle;
     fontSize = oldFontSize;
     fontFamily = oldFontFamily;
+    scrollLines = oldLines; scrollContentHeight = oldH; scrollMax = oldMax;
+    scrollViewH = oldVH; scrollViewW = oldVW; scrollY = oldSY;
     return JSON.stringify(summary);
 }
 

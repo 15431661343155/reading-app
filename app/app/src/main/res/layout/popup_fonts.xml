@@ -9,6 +9,7 @@
 
     <!-- 标题 -->
     <LinearLayout
+        android:id="@+id/popup_title_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -23,13 +24,14 @@
             android:text="选择字体"
             android:textSize="18sp"
             android:textColor="@color/ios_text_primary"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:gravity="center"/>
 
         <ImageView
             android:id="@+id/iv_font_popup_close"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:src="@drawable/shouqi"
             android:scaleType="centerInside"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
@@ -38,14 +40,11 @@
 
     </LinearLayout>
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/ios_separator" />
-
     <ScrollView
+        android:id="@+id/popup_scroll"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:fillViewport="true">
 
         <LinearLayout
@@ -53,7 +52,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="16dp"
+            android:paddingHorizontal="12dp"
             android:paddingVertical="8dp" />
 
     </ScrollView>

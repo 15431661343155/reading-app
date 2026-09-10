@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <!-- 圆角半径：数值越大，R角越圆润 -->
+    <corners android:radius="8dp" />
+    <!-- 默认填充色，代码中动态改色会覆盖此值 -->
+    <solid android:color="#FFFFFF" />
+</shape>

@@ -25,6 +25,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.myapplication.R;
 import com.example.myapplication.adapter.BookAdapter;
+import com.example.myapplication.utils.ActivityTransition;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.Book;
@@ -114,6 +115,9 @@ public class SearchActivity extends AppCompatActivity {
             // 直接触发搜索
             doSearch(extraKeyword);
         }
+
+        // 入场转场：从右侧滑入（与首页 tab 切换的「左右滑动」观感一致）
+        ActivityTransition.applyEnter(this);
     }
 
     /* ================= 绑定视图 ================= */
@@ -480,5 +484,12 @@ public class SearchActivity extends AppCompatActivity {
                 .replaceAll("\\s+", "")
                 .replaceAll("[\\p{Punct}\\p{P}\\p{S}]", "")
                 .trim();
+    }
+
+    /** 返回转场：上一页从左滑回，当前页向右滑出（与入场动画反向对称） */
+    @Override
+    public void finish() {
+        super.finish();
+        ActivityTransition.applyExit(this);
     }
 }

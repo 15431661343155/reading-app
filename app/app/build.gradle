@@ -10,8 +10,8 @@ android {
         applicationId "com.example.myapplication"
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName "2.0.16"
+        versionCode 3
+        versionName "2.0.17"
 
         // 从 versionName 自动生成显示用版本号资源，全项目统一引用 @string/app_version
         resValue "string", "app_version", "v${versionName}"

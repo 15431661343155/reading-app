@@ -40,6 +40,8 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/books/**",
                                 "/api/chapters/**",
+                                "/api/fonts/**",
+                                "/fonts/**",
                                 "/api/admin/**",
                                 "/api/app/**",
                                 "/admin/**",

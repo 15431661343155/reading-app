@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- iOS 底部导航图标：选中主色蓝，未选中次级灰 -->
-    <item android:color="@color/ios_blue" android:state_checked="true" />
-    <!-- 底栏改为半透磨砂后，未选中色加深一档以保证可读性 -->
-    <item android:color="@color/ios_text_secondary" />
+    <!-- 底部导航图标：选中白色（叠在主题色胶囊背景上），未选中黑色 -->
+    <item android:color="@color/nav_item_selected" android:state_checked="true" />
+    <item android:color="@color/nav_item_normal" />
 </selector>

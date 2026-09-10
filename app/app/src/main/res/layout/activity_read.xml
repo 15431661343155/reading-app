@@ -222,6 +222,7 @@
 
         <!-- 第二行：目录、夜间/日间、设置 -->
         <LinearLayout
+            android:id="@+id/layout_bottom_row"
             android:layout_width="match_parent"
             android:layout_height="60dp"
             android:orientation="horizontal"

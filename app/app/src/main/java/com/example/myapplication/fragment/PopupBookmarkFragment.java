@@ -79,6 +79,7 @@ public class PopupBookmarkFragment extends Fragment {
             rvBookmarks.setLayoutManager(new LinearLayoutManager(getContext()));
 
             adapter = new BookmarkAdapter(bookmarkList);
+            adapter.setFollowReaderTheme(true);   // 仅阅读器书签页跟随背景派生配色
             adapter.setOnBookmarkClickListener(bookmark -> {
                 if (listener != null) {
                     try { listener.onBookmarkSelected(bookmark); }
@@ -109,7 +110,7 @@ public class PopupBookmarkFragment extends Fragment {
             loadBookmarks();
 
             // ✅ 书签 Fragment 根视图跟随日/夜间；列表项由 BookmarkAdapter 在 bind 时着色
-            ReadActivity.themeViewTree(view, ReadActivity.isNightModeForContext(getContext()));
+            ReadActivity.themeViewTree(view);
             return view;
         } catch (Throwable t) {
             android.util.Log.e("PopupBookmark", "onCreateView 崩溃", t);
@@ -234,6 +235,8 @@ public class PopupBookmarkFragment extends Fragment {
 
     private void showBookmarkDetailDialog(Bookmark bookmark) {
         View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_bookmark_detail, null);
+        // 书签详情弹窗同样跟随阅读器当前背景色（与列表条目配色一致）
+        ReadActivity.themeViewTree(dialogView);
 
         TextView tvChapter = dialogView.findViewById(R.id.tv_detail_chapter);
         TextView tvPreview = dialogView.findViewById(R.id.tv_detail_preview);

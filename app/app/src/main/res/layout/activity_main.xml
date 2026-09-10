@@ -22,7 +22,7 @@
         android:layout_marginStart="14dp"
         android:layout_marginEnd="14dp"
         android:layout_marginBottom="11dp"
-        app:cardCornerRadius="16dp"
+        app:cardCornerRadius="28dp"
         app:cardElevation="8dp"
         app:strokeWidth="0.5dp"
         app:strokeColor="@color/nav_frost_stroke"
@@ -31,27 +31,29 @@
         app:frostBaseColor="@color/nav_frost_base"
         app:frostSheen="@color/nav_frost_sheen"
         app:frostBlurRadius="16dp"
-        app:frostDownscale="4"
+        app:frostDownscale="3"
         app:frostNoiseAlpha="55"
-        app:frostEnabled="true">
+        app:frostEnabled="true"
+        app:frostCornerRadius="28dp">
 
-        <!-- 四个 tab：书架 / 书城 / 讨论 / 我的，选中主色蓝、未选中次级灰 -->
+        <!-- 四个 tab：书架 / 书城 / 讨论 / 我的
+             未选中：图标与文字均为黑色；选中：白色图标文字 + 主题色胶囊背景 -->
         <com.google.android.material.bottomnavigation.BottomNavigationView
             android:id="@+id/bottom_navigation"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="60dp"
             android:background="@null"
             app:backgroundTint="@android:color/transparent"
             app:menu="@menu/menu_bottom_nav"
             app:labelVisibilityMode="labeled"
             app:itemIconTint="@color/nav_item_color"
             app:itemTextColor="@color/nav_item_text_color"
-            app:itemIconSize="24dp"
+            app:itemIconSize="18dp"
             app:itemTextAppearance="@style/NavTextAppearance"
             app:itemHorizontalTranslationEnabled="false"
-            app:itemBackground="@null"
+            app:itemBackground="@drawable/nav_item_pill_bg"
             app:itemActiveIndicatorStyle="@null"
-            app:itemRippleColor="@android:color/transparent"
+            app:itemRippleColor="@color/nav_item_ripple"
             app:elevation="0dp" />
 
     </com.example.myapplication.widget.FrostedNavCardView>

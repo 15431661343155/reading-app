@@ -17,6 +17,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.myapplication.R;
 import com.example.myapplication.bean.Book;
+import com.example.myapplication.utils.ActivityTransition;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,6 +42,9 @@ public class OnlineChapterListActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_online_chapter_list);
+
+        // 入场转场：从右侧滑入（与首页 tab 切换的「左右滑动」观感一致）
+        ActivityTransition.applyEnter(this);
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -247,5 +251,12 @@ public class OnlineChapterListActivity extends AppCompatActivity {
                 super(itemView);
             }
         }
+    }
+
+    /** 返回转场：上一页从左滑回，当前页向右滑出（与入场动画反向对称） */
+    @Override
+    public void finish() {
+        super.finish();
+        ActivityTransition.applyExit(this);
     }
 }

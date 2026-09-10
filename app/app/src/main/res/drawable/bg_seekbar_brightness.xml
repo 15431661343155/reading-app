@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 亮度滑动条：胶囊形（圆角=半高）轨道 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 未选中轨道 -->
+    <item
+        android:id="@android:id/background"
+        android:gravity="center_vertical"
+        android:height="6dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#E5E5EA" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+    <!-- 已选中进度（胶囊，蓝色） -->
+    <item
+        android:id="@android:id/progress"
+        android:gravity="center_vertical"
+        android:height="6dp">
+        <scale android:scaleWidth="100%">
+            <shape android:shape="rectangle">
+                <solid android:color="@color/ios_blue" />
+                <corners android:radius="3dp" />
+            </shape>
+        </scale>
+    </item>
+</layer-list>

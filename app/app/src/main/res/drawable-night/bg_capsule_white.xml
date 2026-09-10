@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 夜间模式：A-/A+ 白胶囊按钮（比外框略亮，形成分段对比，白字清晰可见） -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#3A3A3C" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#48484A" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+</selector>

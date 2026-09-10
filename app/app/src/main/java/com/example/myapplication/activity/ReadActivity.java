@@ -2,6 +2,7 @@ package com.example.myapplication.activity;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
@@ -28,13 +29,21 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.PopupWindow;
 import android.widget.SeekBar;
+import android.widget.ScrollView;
+import android.widget.AbsListView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.LinearLayout;
 import android.app.AlertDialog;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.ViewGroup;
+import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.view.animation.AccelerateDecelerateInterpolator;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -89,12 +98,18 @@ public class ReadActivity extends BaseActivity {
 
     // ========== 弹窗 ==========
     private PopupWindow chapterPopupWindow, moreMenuPopupWindow, settingsPopupWindow, moreSettingsPopupWindow, bgColorsPopupWindow, fontsPopupWindow;
+    // 设置面板内容视图：用于窗内裁剪滑动，使其从「目录/夜间/设置」行里滑出/收回
+    private View settingsPanelView;
 
     // ========== 阅读设置 ==========
     private int currentBrightness = 128;
     private boolean followSystemBrightness = false;
     private boolean autoPageEnabled = false;
+    private int autoPageInterval = 5000; // 自动翻页间隔(ms)，可配置：慢10s/中5s/快3s
     private int currentBgColor = 0;  // 0-9:纯色（0-3保持旧值兼容）
+    // 页面「实际显示」的背景基准色：纯色即自身，纹理取其预览底色，夜间模式为 #1A1A1A。
+    // 导航栏/浮窗的派生配色以它为输入，保证与 WebView 里看到的一致。
+    private int effectiveBgBase = 0xFFFFFFFF;
     private boolean isNightMode = false;
 
     /** 供弹窗内 Adapter 读取当前夜间模式状态，确保列表项配色跟随主题 */
@@ -151,7 +166,9 @@ public class ReadActivity extends BaseActivity {
     private java.util.List<com.example.myapplication.bean.FontItem> backendFonts = new java.util.ArrayList<>();
 
     private String currentFontFamily = "sans-serif"; // 当前使用的CSS字体族
+    private String currentFontDisplay = "默认字体";    // 当前字体展示名（选择时记录，用于设置按钮文案）
     private java.util.Set<String> downloadedFonts = new java.util.HashSet<>(); // 已下载的字体cssName
+    private java.util.Set<String> downloadingFonts = new java.util.HashSet<>(); // 正在下载的字体cssName
     private Book currentBook;
     private int currentChapterIndex = 0;
     private float currentFontSize = 28f;   // px
@@ -202,6 +219,10 @@ public class ReadActivity extends BaseActivity {
     // ========== 自动翻页 ==========
     private final Handler autoPageHandler = new Handler(Looper.getMainLooper());
     private Runnable autoPageRunnable;
+    /** 当某个设置弹窗打开时挂起自动翻页，关闭后恢复（仅当开启时） */
+    private boolean autoPageSuspended = false;
+    /** Activity 是否处于前台（onResume 后为 true，onPause 后为 false） */
+    private boolean activityResumed = false;
 
     // ========== 阅读时间 ==========
     private long readStartTime;
@@ -354,7 +375,13 @@ public class ReadActivity extends BaseActivity {
 
         initView();
         loadReadingPreferencesNoApply();
-        applyNightModeToNavOnly();
+        // 当前若选中在线字体，后台预拉取字体列表，确保「切换字体」按钮在未打开弹窗时也显示中文名
+        preloadBackendFontsIfNeeded();
+        // 进入页面时先把「实际显示」的背景基准对齐已保存的偏好（夜间模式 / 纯色 / 纹理），
+        // 再由 applyChromeTheme() 派生导航栏与浮窗配色，避免首帧按默认白色算错。
+        effectiveBgBase = isNightMode ? Color.parseColor("#1A1A1A")
+                : resolveBaseForMode(currentBgColor);
+        applyChromeTheme();
 
         setupWebView();
         setupClickListeners();
@@ -498,6 +525,11 @@ public class ReadActivity extends BaseActivity {
                         webView.evaluateJavascript("setPageTurnMode('" + pageTurnMode + "')", null);
                         restoreReadingPosition(currentChapterIndex);
                         updateChapterButtons();
+                        // ✅ 若此前开启过自动翻页，阅读器就绪后自动恢复
+                        if (autoPageEnabled) {
+                            autoPageSuspended = false;
+                            startAutoPage();
+                        }
                     }
                 });
             }
@@ -559,7 +591,13 @@ public class ReadActivity extends BaseActivity {
 
                 // ✅ 简化：直接检查是否还有下一章
                 if (nextIndex >= chapterList.size()) {
-                    Toast.makeText(ReadActivity.this, "已经是最后一章", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(ReadActivity.this, "已经是最后一章，自动翻页已关闭", Toast.LENGTH_SHORT).show();
+                    // ✅ 到达书末：停止自动翻页并同步开关状态
+                    stopAutoPage();
+                    autoPageEnabled = false;
+                    autoPageSuspended = false;
+                    syncAutoPageSwitchUI();
+                    saveReadingPreferences();
                     return;
                 }
 
@@ -1890,6 +1928,8 @@ public class ReadActivity extends BaseActivity {
         sb.append("headerFooterFontSize=").append((int) headerFooterFontSize).append(";");
         sb.append("showBatteryTime=").append(showBatteryTime).append(";");
         sb.append("pageTurnMode='").append(pageTurnMode).append("';");
+        // 滑动翻页开关：同步给前端的跟手拖拽逻辑
+        sb.append("if (typeof setSwipeEnabled === 'function') { setSwipeEnabled(").append(swipePageTurn).append("); }");
 
         // 更新 body 背景色以避免白闪
         sb.append("document.body.style.backgroundColor=bgColor;");
@@ -1911,6 +1951,7 @@ public class ReadActivity extends BaseActivity {
         applySettingsToWebView_inner();
         webView.evaluateJavascript("finishSettingsBatch()", null);
         webView.evaluateJavascript("setPageTurnMode('" + pageTurnMode + "')", null);
+        webView.evaluateJavascript("setSwipeEnabled(" + swipePageTurn + ")", null);
     }
 
     /** 内部方法：应用字体、背景等设置（不含 batch 包装和翻页模式） */
@@ -1919,6 +1960,7 @@ public class ReadActivity extends BaseActivity {
         applyFontFamilyToWebView();
         if (isNightMode) {
             webView.evaluateJavascript("setNightMode(true)", null);
+            effectiveBgBase = Color.parseColor("#1A1A1A");
         } else {
             applyBackgroundColorToWebView(currentBgColor);
         }
@@ -1930,13 +1972,27 @@ public class ReadActivity extends BaseActivity {
             int texIdx = mode - 10;
             webView.evaluateJavascript("setBackgroundTexture('backgrounds/" + BG_TEXTURE_FILES[texIdx] + "')", null);
             webView.evaluateJavascript("setTextColor('#1D1D1F')", null);
+            effectiveBgBase = BG_TEXTURE_PREVIEW_COLORS[texIdx];
         } else {
             // 纯色模式
             if (mode < 0 || mode >= BG_COLORS.length) mode = 0;
             webView.evaluateJavascript("clearBackgroundTexture()", null);
             webView.evaluateJavascript("setBackgroundColor('" + BG_COLORS[mode] + "')", null);
             webView.evaluateJavascript("setTextColor('" + BG_TEXT_COLORS[mode] + "')", null);
+            effectiveBgBase = Color.parseColor(BG_COLORS[mode]);
         }
+    }
+
+    /**
+     * 取指定背景模式对应的「基准色」（不改动 UI）：纹理取预览底色，纯色取自身。
+     * 导航栏/浮窗的派生配色以它为输入。
+     */
+    private int resolveBaseForMode(int mode) {
+        if (mode >= 10 && mode - 10 < BG_TEXTURE_PREVIEW_COLORS.length) {
+            return BG_TEXTURE_PREVIEW_COLORS[mode - 10];
+        }
+        if (mode < 0 || mode >= BG_COLORS.length) mode = 0;
+        return Color.parseColor(BG_COLORS[mode]);
     }
 
     /**
@@ -1970,10 +2026,25 @@ public class ReadActivity extends BaseActivity {
                 // 与 onFling 在该模式让位的策略保持一致，避免两端各翻一次变成"点一下翻两页"
                 if ("simulation".equals(pageTurnMode)) return true;
 
-                float x = e.getX();
+                float x = e.getRawX();
+                // ⚠️ 关键：MotionEvent 会先派发给最上层的左右热区 View（activity_read.xml 里
+                // view_left_tap / view_right_tap 排在 WebView 之后 → 层级更高），
+                // e.getX() 是「相对该热区」的坐标，而热区只有 80dp 宽，
+                // 直接用会让点右侧也落进左 1/3 分支 → 翻到上一页。
+                // 这里统一用 rawX 减去 WebView 在屏幕上的位置，换算成 WebView 内坐标。
+                int[] webViewLocation = new int[2];
+                webView.getLocationOnScreen(webViewLocation);
+                x -= webViewLocation[0];
                 int width = webView.getWidth();
                 if (width == 0) width = getResources().getDisplayMetrics().widthPixels;
                 float zone = width / 3f;
+
+                if ("updown".equals(pageTurnMode)) {
+                    // 连续滚动模式：上下滑动即滚动，点击只用于切换导航栏（中间区域），
+                    // 左右区域不再翻页，避免与拖拽滚动重复触发
+                    if (x >= zone && x <= zone * 2) toggleNavigation();
+                    return true;
+                }
 
                 if (x < zone) {
                     // 左 1/3：上一页
@@ -1997,8 +2068,10 @@ public class ReadActivity extends BaseActivity {
                 // Android 端 onFling 在此模式让位，避免与 turn.js 拖拽翻页叠加导致一次滑动翻两页
                 if ("simulation".equals(pageTurnMode)) return false;
 
-                float deltaX = e2.getX() - e1.getX();
-                float deltaY = e2.getY() - e1.getY();
+                // 同样必须用 rawX/rawY：手指从热区滑到 WebView 时，e1/e2 可能来自不同的 View，
+                // 各自的 getX() 坐标系不同，相减会得到错误的位移。
+                float deltaX = e2.getRawX() - e1.getRawX();
+                float deltaY = e2.getRawY() - e1.getRawY();
 
                 // 只处理水平为主的滑动（避免与垂直滚动冲突）
                 if (Math.abs(deltaX) < swipeMinDistancePx
@@ -2009,13 +2082,18 @@ public class ReadActivity extends BaseActivity {
                 if (Math.abs(velocityX) < swipeMinVelocityPx) return false;
 
                 if (isWebViewReady) {
-                    if (deltaX < 0) {
-                        // 手指向左滑 → 下一页
-                        webView.evaluateJavascript("nextPage()", null);
-                    } else {
-                        // 手指向右滑 → 上一页
-                        webView.evaluateJavascript("prevPage()", null);
-                    }
+                    // 统一交给前端决策：cover/slide/updown 模式由 reader.html 的跟手拖拽
+                    // 在 touchend 自行收尾（书页跟手 + 松手判定），这里不再直接翻页，
+                    // 否则一次滑动会翻两页。前端未接管时（旧版页面）由下面的回调兜底。
+                    webView.evaluateJavascript("onAndroidFling(" + deltaX + ")", value -> {
+                        if (!"true".equals(value)) {
+                            if (deltaX < 0) {
+                                webView.evaluateJavascript("nextPage()", null);
+                            } else {
+                                webView.evaluateJavascript("prevPage()", null);
+                            }
+                        }
+                    });
                 }
                 return true;
             }
@@ -2070,22 +2148,23 @@ public class ReadActivity extends BaseActivity {
             resetAutoHideTimer();
             if (currentChapterIndex < chapterList.size() - 1) loadChapterContent(currentChapterIndex + 1);
         });
-        btnCatalog.setOnClickListener(v -> { resetAutoHideTimer(); showChapterPopup(); });
+        // 设置浮窗的窗口下沿收缩到本行上沿后，本行已不被浮窗遮罩覆盖（保持可见、可点）。
+        // 此时点本行按钮的语义与「点浮窗外部」一致：先收起设置浮窗，不再触发各自功能。
+        btnCatalog.setOnClickListener(v -> {
+            resetAutoHideTimer();
+            if (isSettingsPopupShowing()) { dismissSettingsAnimated(); return; }
+            showChapterPopup();
+        });
         btnNightMode.setOnClickListener(v -> {
             resetAutoHideTimer();
-            isNightMode = !isNightMode;
-            applyNightModeToNavOnly();
-            // ✅ 目录/设置/书签等浮窗视图树实时跟随日/夜间配色
-            themeShowingPopups();
-            webView.evaluateJavascript("setNightMode(" + isNightMode + ")", null);
-            // 退出夜间模式后恢复当前选中的背景色
-            if (!isNightMode) {
-                mainHandler.postDelayed(() -> applyBackgroundColorToWebView(currentBgColor), 50);
-            }
-            // ✅ 修复：夜间模式切换后立即保存
-            saveReadingPreferences();
+            if (isSettingsPopupShowing()) { dismissSettingsAnimated(); return; }
+            animateNightModeToggle();
         });
-        btnSettings.setOnClickListener(v -> { resetAutoHideTimer(); showSettingsDialog(); });
+        btnSettings.setOnClickListener(v -> {
+            resetAutoHideTimer();
+            if (isSettingsPopupShowing()) { dismissSettingsAnimated(); return; }
+            showSettingsDialog();
+        });
 
         seekBarProgress.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -2251,12 +2330,21 @@ public class ReadActivity extends BaseActivity {
             new TabLayoutMediator(tabLayout, vpPopup, (tab, position) -> tab.setText(position == 0 ? "目录" : "书签")).attach();
 
             // ✅ 目录浮窗外壳（TabLayout 等）跟随日/夜间配色；列表项由各 Fragment/Adapter 自行着色
-            themeViewTree(popupView, isNightMode);
+            themeViewTree(popupView);
 
             int popupWidth = (int)(getResources().getDisplayMetrics().widthPixels * 0.75f);
             chapterPopupWindow = new PopupWindow(popupView, popupWidth, WindowManager.LayoutParams.MATCH_PARENT, true);
             chapterPopupWindow.setAnimationStyle(R.style.LeftSlideAnimation);
             chapterPopupWindow.showAtLocation(layoutBottomNav, Gravity.START, 0, 0);
+
+            // ViewPager2 里的 Fragment 在 attach 之后才走 onCreateView，首帧着色覆盖不到；
+            // 这里 post 一次整体重染，并在切到「书签」页时再染一次，保证两页都跟随背景色。
+            popupView.post(() -> themeViewTree(popupView));
+            vpPopup.registerOnPageChangeCallback(new androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
+                @Override public void onPageSelected(int position) {
+                    popupView.post(() -> themeViewTree(popupView));
+                }
+            });
 
             // 书签页（最后一页）继续左滑 → 平滑收起目录弹窗
             setupChapterPopupEdgeSwipe(vpPopup);
@@ -2541,6 +2629,11 @@ public class ReadActivity extends BaseActivity {
         pageTurnMode = sp.getString("page_turn_mode", "cover");
         // ✅ 加载字体设置
         currentFontFamily = sp.getString("font_family", "sans-serif");
+        // ✅ 加载自动翻页设置（间隔与开关状态都持久化）
+        autoPageEnabled = sp.getBoolean("auto_page", false);
+        autoPageInterval = sp.getInt("auto_page_interval", 5000);
+        // 展示名也要持久化：否则重启后未打开字体弹窗时只能回退到 cssName
+        currentFontDisplay = sp.getString("font_display", "默认字体");
         downloadedFonts = new java.util.HashSet<>(sp.getStringSet("downloaded_fonts", new java.util.HashSet<>()));
     }
 
@@ -2561,6 +2654,10 @@ public class ReadActivity extends BaseActivity {
                 .putString("page_turn_mode", pageTurnMode)
                 // ✅ 保存字体设置
                 .putString("font_family", currentFontFamily)
+                // ✅ 保存自动翻页设置
+                .putBoolean("auto_page", autoPageEnabled)
+                .putInt("auto_page_interval", autoPageInterval)
+                .putString("font_display", currentFontDisplay)
                 .putStringSet("downloaded_fonts", downloadedFonts)
                 .apply();
         uploadProgressToServer();
@@ -2584,11 +2681,141 @@ public class ReadActivity extends BaseActivity {
         return super.onKeyDown(keyCode, event);
     }
 
-    private void applyNightModeToNavOnly() {
-        // 状态栏图标：日间深色（浅色背景），夜间浅色（深色背景）
+    // ==================== 背景派生配色（上下导航栏 / 浮窗跟随当前背景色） ====================
+    // 目标：导航栏与所有浮窗的底色不再是「日间白 / 夜间黑」两个写死值，而是由当前选中的
+    // 背景色派生出「比它深一点」的同色系底色；文字与图标按背景明暗自动切换深浅，
+    // 于是选黑色背景时天然等价于夜间模式，选牛皮纸/护眼绿时导航条也跟着变成同色系深色。
+    //
+    // 派生规则（压暗强度：浅色 6%，深色 20% —— 深色背景等比压暗几乎看不出差别，需额外补偿 14%）：
+    //   L  = 相对亮度(base)；isDark = L < 0.42
+    //   c1 = mix(base, #000, isDark ? 0.20 : 0.06)      // 上下导航 + 浮窗主背景
+    //   c2 = mix(c1,   #000, isDark ? 0.20 : 0.12)      // 二级底（分组底 / 胶囊 / TabLayout）
+    //   ln = isDark ? mix(c1, #FFF, 0.13) : mix(c1, #000, 0.16)   // 分隔线
+    //   t1 = isDark ? #FFFFFF : #1D1D1F                  // 主文字 & 图标 tint
+    //   t2 = isDark ? #98989D : #8E8E93                  // 次文字
+    //   ac = isDark ? #0A84FF : #007AFF                  // 强调色（进度条 / 返回键）
+    private static final float CHROME_SHADE       = 0.06f;  // 浅色背景压暗比例
+    private static final float CHROME_SHADE_DARK  = 0.20f;  // 深色背景压暗比例（6% + 14% 补偿）
+    private static final float CHROME_SHADE_2     = 0.12f;  // 二级底（浅色）
+    private static final float CHROME_SHADE_2_DARK= 0.20f;  // 二级底（深色）
+    private static final double DARK_LUM_THRESHOLD = 0.42;  // 低于该亮度即视为深色背景
+
+    private static int sChrome1 = 0xFFEFEFEF;   // 当前派生：导航 / 浮窗主底（白底 6% 压暗的初值）
+    private static int sChrome2 = 0xFFD2D2D2;   // 当前派生：二级底
+    private static int sLine    = 0xFFC8C8C8;   // 当前派生：分隔线
+    private static int sText1   = 0xFF1D1D1F;   // 当前派生：主文字
+    private static int sText2   = 0xFF8E8E93;   // 当前派生：次文字
+    private static int sAccent  = 0xFF007AFF;   // 当前派生：强调色
+    private static int sNavText = 0xFF1D1D1F;   // 当前派生：上下导航栏文字（浅色模式用近黑，深色模式沿用浅灰）
+    private static boolean sIsDark = false;
+    /** 日间⇄夜间切换的过渡时长（毫秒）。对应预览中选中的「平滑色彩渐变 / 1000ms」。 */
+    private static final long NIGHT_TRANSITION_MS = 1000;
+    // 历史上派发过的派生色集合：浮窗会被反复重着色（换背景 / 切夜间 / 换页），
+    // 单靠「上一次」的 sPrev* 在「连续派生两次但只染一次」的场景会漏掉陈旧底色，
+    // 用集合记录所有派发过的色值即可无条件收敛到当前色。
+    private static final java.util.Set<Integer> sIssuedChrome1 = new java.util.HashSet<>();
+    private static final java.util.Set<Integer> sIssuedChrome2 = new java.util.HashSet<>();
+    private static final java.util.Set<Integer> sIssuedLine    = new java.util.HashSet<>();
+
+    /**
+     * 当前前台活跃的 ReadActivity 实例（仅在 onResume/onPause 维护）。
+     * <p>
+     * 用于 themeViewTree 的宿主判定：只有当前 Activity 是某个 ReadActivity 实例时，浮窗/列表
+     * 才能被派生配色覆盖。书城/书架/设置等外部页在前台时，sActiveInstance == null，
+     * 任何迟到的 themeViewTree 调用都会被静默忽略，杜绝「书城等也跟随背景色」。
+     * <p>
+     * 设计要点：用「前台实例引用」而非上一版的 isReaderHost(ctx)。后者在 PopupWindow +
+     * ViewPager2 嵌套时 itemView.getContext() 的 ContextWrapper 层级与判定不一致，
+     * 导致阅读器自己的目录/书签浮窗也被错判拒绝——上一轮反馈「目录书签页不跟随」。
+     * 现在改为 Activity 生命周期级别的判定：PopupWindow 不会触发 onPause，
+     * 所以目录浮窗打开时 ReadActivity 仍在 onResume → sActiveInstance 仍指向自己 → 染色成功。
+     */
+    private static volatile ReadActivity sActiveInstance;
+
+    /** 当前派生配色是否为深色（决定文字/图标用浅色还是深色）。 */
+    public static boolean isChromeDark() { return sIsDark; }
+
+    // ---- 派生色取值接口：供浮窗内 Fragment / Adapter 直接取用，避免再写死 #007AFF 之类 ----
+    public static int getAccentColor()            { return sAccent;  }  // 强调色（当前章节 / 进度条）
+    public static int getTextPrimaryColor()       { return sText1;   }  // 主文字
+    public static int getTextSecondaryColor()     { return sText2;   }  // 次文字
+    public static int getChromeBgColor()          { return sChrome1; }  // 浮窗主底
+    public static int getChromeBgSecondaryColor() { return sChrome2; }  // 二级底 / 分组底
+    public static int getChromeLineColor()        { return sLine;    }  // 分隔线
+
+    /** sRGB 相对亮度（WCAG 公式），用于判定背景明暗。 */
+    private static double relativeLuminance(int color) {
+        double r = ((color >> 16) & 0xFF) / 255.0;
+        double g = ((color >> 8) & 0xFF) / 255.0;
+        double b = (color & 0xFF) / 255.0;
+        r = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+        g = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+        b = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+
+    /** 按 a 的比例把 c1 混向 c2（a=0 得 c1，a=1 得 c2）。 */
+    private static int mixColors(int c1, int c2, float a) {
+        int r = (int) ((((c1 >> 16) & 0xFF) + ((((c2 >> 16) & 0xFF) - ((c1 >> 16) & 0xFF)) * a)));
+        int g = (int) ((((c1 >> 8) & 0xFF) + ((((c2 >> 8) & 0xFF) - ((c1 >> 8) & 0xFF)) * a)));
+        int b = (int) (((c1 & 0xFF) + (((c2 & 0xFF) - (c1 & 0xFF)) * a)));
+        r = Math.max(0, Math.min(255, r));
+        g = Math.max(0, Math.min(255, g));
+        b = Math.max(0, Math.min(255, b));
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
+    }
+
+    /**
+     * 取派生配色的基准色 = 页面实际显示的背景色（effectiveBgBase）。
+     * 纹理背景用其预览底色，夜间模式固定 #1A1A1A。
+     */
+    private int getChromeBaseColor() {
+        return effectiveBgBase;
+    }
+
+    /** 由当前背景色重新计算派生配色（不动 UI，仅更新静态色值）。 */
+    private void updateChromePalette() {
+        int base = getChromeBaseColor();
+        boolean dark = relativeLuminance(base) < DARK_LUM_THRESHOLD;
+
+        sIsDark  = dark;
+        sChrome1 = mixColors(base, Color.BLACK, dark ? CHROME_SHADE_DARK : CHROME_SHADE);
+        sChrome2 = mixColors(sChrome1, Color.BLACK, dark ? CHROME_SHADE_2_DARK : CHROME_SHADE_2);
+        sLine    = dark ? mixColors(sChrome1, Color.WHITE, 0.13f)
+                        : mixColors(sChrome1, Color.BLACK, 0.16f);
+        sText1   = dark ? Color.WHITE : Color.parseColor("#1D1D1F");
+        sText2   = dark ? Color.parseColor("#98989D") : Color.parseColor("#8E8E93");
+        // 上下导航栏文字：浅色模式统一用近黑（原灰色 sText2 改黑），深色模式沿用浅灰保证对比度
+        sNavText = dark ? sText2 : Color.parseColor("#1D1D1F");
+        sAccent  = dark ? Color.parseColor("#0A84FF") : Color.parseColor("#007AFF");
+
+        // 记录本轮派发过的色值，供后续重着色时识别「陈旧派生色」
+        sIssuedChrome1.add(sChrome1);
+        sIssuedChrome2.add(sChrome2);
+        sIssuedLine.add(sLine);
+    }
+
+    /**
+     * 应用派生配色：状态栏图标明暗 + 上下导航栏 + 图标/文字，并让已显示的浮窗实时跟随。
+     * 取代原先只按 isNightMode 二值切换的 applyNightModeToNavOnly()。
+     */
+    private void applyChromeTheme() {
+        updateChromePalette();
+        applyChromeColorsWith(sChrome1, sChrome2, sLine, sText1, sText2, sNavText, sAccent, sIsDark);
+        // 已显示的浮窗（目录 / 设置 / 更多 / 背景 / 字体）实时跟随
+        themeShowingPopups();
+    }
+
+    /**
+     * 用给定的一组配色刷新上下导航栏、图标、文字与状态栏图标明暗。
+     * 供「平滑色彩渐变」过渡逐帧调用（传入插值后的中间色）。
+     */
+    private void applyChromeColorsWith(int chrome1, int chrome2, int line,
+                                       int text1, int text2, int navText, int accent, boolean dark) {
+        // 状态栏图标：浅色背景用深色图标，深色背景用浅色图标
         View decorView = getWindow().getDecorView();
         int flags = decorView.getSystemUiVisibility();
-        if (isNightMode) {
+        if (dark) {
             flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
             flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         } else {
@@ -2596,88 +2823,240 @@ public class ReadActivity extends BaseActivity {
             flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         }
         decorView.setSystemUiVisibility(flags);
-        if (isNightMode) {
-            layoutTopNav.setBackgroundColor(Color.parseColor("#171718"));   // iOS 深色毛玻璃
-            layoutBottomNav.setBackgroundColor(Color.parseColor("#171718"));
-            tvToolbarTitle.setTextColor(Color.WHITE);
-            ivNightModeIcon.setImageResource(R.drawable.ic_day);
-            tvNightModeText.setText("日间");
-            tvNightModeText.setTextColor(Color.WHITE);
-        } else {
-            layoutTopNav.setBackgroundColor(Color.parseColor("#F9F9F9"));   // iOS 浅色毛玻璃
-            layoutBottomNav.setBackgroundColor(Color.parseColor("#F9F9F9"));
-            tvToolbarTitle.setTextColor(Color.parseColor("#1D1D1F"));      // iOS 主文字
-            ivNightModeIcon.setImageResource(R.drawable.ic_night);
-            tvNightModeText.setText("夜间");
-            tvNightModeText.setTextColor(Color.parseColor("#8E8E93"));    // iOS 次文字
+
+        layoutTopNav.setBackgroundColor(chrome1);
+        layoutBottomNav.setBackgroundColor(chrome1);
+        tvToolbarTitle.setTextColor(text1);
+
+        // 底栏顶部 0.5dp 分隔线（布局里的第一个子 View）
+        if (layoutBottomNav instanceof ViewGroup && ((ViewGroup) layoutBottomNav).getChildCount() > 0) {
+            View sep = ((ViewGroup) layoutBottomNav).getChildAt(0);
+            if (sep != null) sep.setBackgroundColor(line);
         }
-        setIconsForTheme(isNightMode);
+        // 章节进度条跟随强调色
+        try {
+            seekBarProgress.setProgressTintList(ColorStateList.valueOf(accent));
+            seekBarProgress.setThumbTintList(ColorStateList.valueOf(accent));
+        } catch (Throwable ignored) { }
+
+        ivNightModeIcon.setImageResource(dark ? R.drawable.ic_day : R.drawable.ic_night);
+        tvNightModeText.setText(dark ? "日间" : "夜间");
+        tvNightModeText.setTextColor(navText);
+
+        setIconsForThemeWith(text1, accent, navText, dark);
     }
 
-    private void setIconsForTheme(boolean isNight) {
+    private void setIconsForTheme() {
+        setIconsForThemeWith(sText1, sAccent, sNavText, sIsDark);
+    }
+
+    private void setIconsForThemeWith(int text1, int accent, int navText, boolean dark) {
         // 图标 drawable 自身颜色会被 ImageView 的 tint 覆盖，因此仅切换 src 无效，
-        // 必须同步切换 tint 才能让图标在日/夜间背景上都清晰可见。
-        int dayIcon = ContextCompat.getColor(this, R.color.ios_text_primary);
-        int nightIcon = Color.WHITE;
-        int tint = isNight ? nightIcon : dayIcon;
+        // 必须同步切换 tint 才能让图标在深色背景上都清晰可见。
+        // 配色不再按日/夜二值写死，而是取当前背景派生出的主文字色与强调色。
+        int tint = text1;
 
         ImageView ivBack = findViewById(R.id.iv_back);
         ImageView ivMore = findViewById(R.id.iv_more);
-        ivBack.setImageResource(isNight ? R.drawable.ic_back_white : R.drawable.ic_back_black);
-        ivMore.setImageResource(isNight ? R.drawable.ic_more_vert_white : R.drawable.ic_more_vert_black);
-        // 返回键日间使用主色蓝，其余图标与主文字同色；夜间统一浅色，确保深色背景上清晰可见
-        ivBack.setImageTintList(ColorStateList.valueOf(isNight ? nightIcon : ContextCompat.getColor(this, R.color.ios_blue)));
+        ivBack.setImageResource(dark ? R.drawable.ic_back_white : R.drawable.ic_back_black);
+        ivMore.setImageResource(dark ? R.drawable.ic_more_vert_white : R.drawable.ic_more_vert_black);
+        // 返回键使用强调色，其余图标与主文字同色
+        ivBack.setImageTintList(ColorStateList.valueOf(accent));
         ivMore.setImageTintList(ColorStateList.valueOf(tint));
 
         ImageView ivCatalog = findViewById(R.id.iv_catalog_icon);
         ImageView ivSettings = findViewById(R.id.iv_settings_icon);
-        ivCatalog.setImageResource(isNight ? R.drawable.ic_list_white : R.drawable.ic_list_black);
-        ivSettings.setImageResource(isNight ? R.drawable.ic_settings_white : R.drawable.ic_settings_black);
+        ivCatalog.setImageResource(dark ? R.drawable.ic_list_white : R.drawable.ic_list_black);
+        ivSettings.setImageResource(dark ? R.drawable.ic_settings_white : R.drawable.ic_settings_black);
         ivCatalog.setImageTintList(ColorStateList.valueOf(tint));
         ivSettings.setImageTintList(ColorStateList.valueOf(tint));
 
         // 夜间/日间切换图标自身也要跟随 tint（XML 中 tint 固定为深色，夜间会看不清）
         ivNightModeIcon.setImageTintList(ColorStateList.valueOf(tint));
 
-        int textColor = isNight ? Color.WHITE : ContextCompat.getColor(this, R.color.ios_text_secondary);
+        int textColor = navText;
         ((TextView) findViewById(R.id.tv_prev_chapter)).setTextColor(textColor);
         ((TextView) findViewById(R.id.tv_next_chapter)).setTextColor(textColor);
         ((TextView) findViewById(R.id.tv_catalog_text)).setTextColor(textColor);
         ((TextView) findViewById(R.id.tv_settings_text)).setTextColor(textColor);
+        // 主题切换会重置图标 tint；若此时设置浮窗仍开着，需把「设置」图标的选中态补回来
+        if (settingsPopupWindow != null && settingsPopupWindow.isShowing()) setSettingsNavActive(true);
     }
 
-    // ==================== 弹窗日/夜间配色跟随（iOS 浅色磨砂玻璃风） ====================
-    // 弹窗布局里写死了白底/深色文字，夜间模式下依旧刺眼。这里递归遍历视图树，
-    // 将已知的日间配色映射为夜间配色（反之亦然），让目录/设置/书签等浮窗全部跟随主题。
-    // 日间用 iOS 浅色调（#FFFFFF/#F2F2F7/#E5E5EA/#1D1D1F/#8E8E93/#C7C7CC/#007AFF），
-    // 夜间用 iOS 深色调（#000000/#1C1C1E/#38383A/#FFFFFF/#8E8E93/#0A84FF）。
-    private static final int NIGHT_BG_PRIMARY   = 0xFF000000; // 主背景（对应日间 ios_bg #FFFFFF）
-    private static final int NIGHT_BG_SECONDARY = 0xFF1C1C1E; // 次背景（对应日间 ios_bg_grouped #F2F2F7）
-    private static final int NIGHT_DIVIDER      = 0xFF38383A; // 分割线（对应日间 ios_separator #E5E5EA）
-    private static final int NIGHT_TEXT_PRIMARY = 0xFFFFFFFF; // 主文字（对应日间 ios_text_primary #1D1D1F）
-    private static final int NIGHT_TEXT_SECONDARY = 0xFF8E8E93; // 次文字（对应日间 ios_text_secondary #8E8E93）
-    private static final int NIGHT_TEXT_TERTIARY  = 0xFF8E8E93; // 三级文字（对应日间 ios_text_tertiary #C7C7CC）
+    // ==================== 日间 ⇄ 夜间 平滑过渡（平滑色彩渐变） ====================
+    /**
+     * 带「平滑色彩渐变」过渡地切换日/夜间：
+     * <ul>
+     *   <li>原生上下导航栏：用 {@link ValueAnimator} + {@link ArgbEvaluator} 在「旧配色→新配色」间逐帧补间；</li>
+     *   <li>WebView 阅读区：调用 JS {@code animateNightMode(...)}，由 Canvas 逐帧重绘背景与文字色；</li>
+     *   <li>过渡时长见 {@link #NIGHT_TRANSITION_MS}（默认 1000ms）。</li>
+     * </ul>
+     * 浮窗（目录/设置等）在过渡结束后再统一刷新，避免逐帧重染开销。
+     */
+    private void animateNightModeToggle() {
+        final boolean toNight = !isNightMode;
 
-    /** 递归为弹窗视图树应用日/夜间配色：背景、分割线、文字、TabLayout。 */
-    public static void themeViewTree(@Nullable View root, boolean isNight) {
+        // ---- WebView 阅读区起止颜色 ----
+        final String dayBg  = dayWebBgHex();
+        final String dayTx  = dayWebTextHex();
+        final String nightBg = "#1A1A1A";
+        final String nightTx = "#AAAAAA";
+        final String fromBg, fromTx, toBg, toTx;
+        if (toNight) { fromBg = dayBg;  fromTx = dayTx;  toBg = nightBg; toTx = nightTx; }
+        else         { fromBg = nightBg; fromTx = nightTx; toBg = dayBg;  toTx = dayTx;  }
+
+        // ---- 原生导航栏：先快照「旧」配色，翻转后再算「新」配色 ----
+        final int fromC1 = sChrome1, fromC2 = sChrome2, fromLine = sLine;
+        final int fromT1 = sText1,   fromT2 = sText2,   fromNav = sNavText, fromAcc = sAccent;
+        final boolean fromDark = sIsDark;
+
+        isNightMode = toNight;
+        effectiveBgBase = toNight ? Color.parseColor("#1A1A1A") : resolveBaseForMode(currentBgColor);
+        updateChromePalette(); // 此时静态字段 = 目标配色
+        final int toC1 = sChrome1, toC2 = sChrome2, toLine = sLine;
+        final int toT1 = sText1,   toT2 = sText2,   toNav = sNavText, toAcc = sAccent;
+        // 动画期间把静态字段回退为「旧」，避免其它读取方（浮窗/Getter）出现半成品
+        sChrome1 = fromC1; sChrome2 = fromC2; sLine = fromLine;
+        sText1 = fromT1;   sText2 = fromT2;   sNavText = fromNav; sAccent = fromAcc; sIsDark = fromDark;
+
+        // 状态栏图标按目标明暗立即切换（系统层不做补间）
+        applyChromeColorsWith(fromC1, fromC2, fromLine, fromT1, fromT2, fromNav, fromAcc, toNight);
+
+        // ---- WebView 阅读区补间（逐帧重绘）----
+        String js = "animateNightMode(" + toNight + "," + NIGHT_TRANSITION_MS + ",'"
+                + fromBg + "','" + fromTx + "','" + toBg + "','" + toTx + "')";
+        webView.evaluateJavascript(js, null);
+
+        // ---- 原生导航栏补间 ----
+        final ArgbEvaluator eval = new ArgbEvaluator();
+        ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f);
+        anim.setDuration(NIGHT_TRANSITION_MS);
+        anim.setInterpolator(new AccelerateDecelerateInterpolator());
+        anim.addUpdateListener(a -> {
+            float t = (float) a.getAnimatedValue();
+            applyChromeColorsWith(
+                    (int) eval.evaluate(t, fromC1, toC1),
+                    (int) eval.evaluate(t, fromC2, toC2),
+                    (int) eval.evaluate(t, fromLine, toLine),
+                    (int) eval.evaluate(t, fromT1, toT1),
+                    (int) eval.evaluate(t, fromT2, toT2),
+                    (int) eval.evaluate(t, fromNav, toNav),
+                    (int) eval.evaluate(t, fromAcc, toAcc),
+                    toNight);
+        });
+        anim.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                // 落定为目标配色
+                sChrome1 = toC1; sChrome2 = toC2; sLine = toLine;
+                sText1 = toT1;   sText2 = toT2;   sNavText = toNav; sAccent = toAcc; sIsDark = toNight;
+                applyChromeTheme(); // 完整刷新（含图标/状态栏/浮窗）
+                // 退出夜间模式后恢复当前选中的背景纹理/纯色（与原逻辑一致）
+                if (!toNight) applyBackgroundColorToWebView(currentBgColor);
+                saveReadingPreferences();
+            }
+        });
+        anim.start();
+    }
+
+    /** 当前选中背景（日间）在 WebView 中的底色十六进制串。 */
+    private String dayWebBgHex() {
+        int m = currentBgColor;
+        if (m >= 10) {
+            int tex = m - 10;
+            if (tex >= 0 && tex < BG_TEXTURE_PREVIEW_COLORS.length) return toHex(BG_TEXTURE_PREVIEW_COLORS[tex]);
+            return "#FFFFFF";
+        }
+        if (m < 0 || m >= BG_COLORS.length) m = 0;
+        return BG_COLORS[m];
+    }
+
+    /** 当前选中背景（日间）在 WebView 中的文字色十六进制串。 */
+    private String dayWebTextHex() {
+        int m = currentBgColor;
+        if (m >= 10) return "#1D1D1F"; // 纹理模式统一用近黑文字
+        if (m < 0 || m >= BG_TEXT_COLORS.length) m = 0;
+        return BG_TEXT_COLORS[m];
+    }
+
+    /** 打包色值 → "#RRGGBB"（供 JS 调用）。 */
+    private static String toHex(int c) {
+        return String.format("#%06X", c & 0xFFFFFF);
+    }
+
+    // ==================== 浮窗配色跟随当前背景色 ====================
+    // 浮窗布局里写死的是 iOS 浅色（ios_bg / ios_bg_grouped / ios_separator / ios_text_*），
+    // 之前靠一张固定的「浅↔深」映射表在夜间模式下整体翻色，与具体背景色无关。
+    // 现在改为映射到「由当前背景色派生出的配色」（见 updateChromePalette），
+    // 于是护眼绿背景得到偏绿的导航/浮窗底，黑色背景得到夜间效果。
+    // 旧映射表里的日/夜两套硬编码色仍然保留在识别列表中，保证历史颜色也能被正确收敛。
+    private static final int LEGACY_NIGHT_BG_PRIMARY   = 0xFF000000;
+    private static final int LEGACY_NIGHT_BG_SECONDARY = 0xFF1C1C1E;
+    private static final int LEGACY_NIGHT_DIVIDER      = 0xFF38383A;
+    private static final int LEGACY_CAPSULE_NORMAL     = 0xFF2C2C2E;
+    private static final int LEGACY_CAPSULE_INNER      = 0xFF48484A;
+    private static final int LEGACY_CAPSULE_PRESSED    = 0xFF3A3A3C;
+    private static final int LEGACY_DAY_TEXT_SECONDARY = 0xFF8E8E93;
+    private static final int LEGACY_NIGHT_TEXT_SECONDARY = 0xFF98989D;
+
+    /**
+     * 递归为浮窗视图树应用当前派生配色：背景、分割线、文字、TabLayout。
+     * <p>宿主判定：当前台 Activity 不是某个 ReadActivity 实例时（例如书城/书架/设置在前台，
+     * 而某个迟到的异步回调仍想调本方法），本方法会直接 return，杜绝外部页被染色。
+     * <p>判定依据是 {@link #sActiveInstance}（生命周期维护），而不是 root.getContext() 的
+     * ContextWrapper 链——后者在 PopupWindow + ViewPager2 嵌套时不可靠。
+     */
+    public static void themeViewTree(@Nullable View root) {
         if (root == null) return;
-        applyThemeRecursive(root, isNight);
+        ReadActivity owner = sActiveInstance;
+        if (owner == null || owner.isFinishing() || owner.isDestroyed()) return;
+        // ✅ 二次校验：owner 必须仍在 onResume（防御 paused 状态下的漏判）；
+        // ✅ root 的 Context 必须能从 ContextWrapper 链回溯到 owner，否则拒绝染色。
+        // 阅读器内的 popup（chapter/settings/moreMenu 等）虽然走独立 Window，
+        // 但它们的 Context 都是从 ReadActivity(this) 出发创建的，链上一定能找到 owner。
+        // BookDetailActivity 等外部页面的 view，Context 链只能回到 BookDetailActivity 自身，
+        // 永远找不到 owner → 被拒绝，杜绝「阅读器外页被染色」。
+        if (!owner.activityResumed) return;
+        if (!isContextTraceableTo(root, owner)) return;
+        applyThemeRecursive(root);
     }
 
-    private static void applyThemeRecursive(View view, boolean isNight) {
-        // 1) 背景：ColorDrawable / GradientDrawable 纯色
-        Drawable bg = view.getBackground();
-        if (bg instanceof ColorDrawable) {
-            int c = ((ColorDrawable) bg).getColor();
-            int mapped = mapBgColor(c, isNight);
-            if (mapped != c) view.setBackgroundColor(mapped);
-        } else if (bg instanceof GradientDrawable) {
+    /**
+     * 沿 ContextWrapper 链向上追溯 root.getContext()，看是否能找到 owner Activity。
+     * 命中则说明 root 是 owner 这条线创建的（阅读器内的 view 或内部 popup）；
+     * 追不到说明 root 来自外部 Activity（书城 / 书架 / 详情等），必须拒绝。
+     */
+    private static boolean isContextTraceableTo(View root, ReadActivity owner) {
+        try {
+            Context ctx = root.getContext();
+            int safety = 0;
+            while (ctx != null && safety++ < 16) {
+                if (ctx == owner) return true;
+                if (!(ctx instanceof ContextWrapper)) break;
+                Context base = ((ContextWrapper) ctx).getBaseContext();
+                if (base == ctx) break;
+                ctx = base;
+            }
+            return false;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static void applyThemeRecursive(View view) {
+        // 打了 tag_keep_own_color 的子树（如背景色块）必须显示自己的真实颜色，跳过
+        if (Boolean.TRUE.equals(view.getTag(R.id.tag_keep_own_color))) return;
+
+        // 1) 背景：纯色 / shape / selector / layer-list 递归重着色
+        //    本项目的夜间模式是「手动」的（未调用 AppCompatDelegate），
+        //    因此 res/drawable-night 资源限定符不会生效；胶囊这类 <selector> 必须在代码里
+        //    逐个子 <shape> 重着色，否则深色背景下仍是浅底 + 白字 = 内容不可见。
+        if (themeDrawable(view.getBackground())) view.invalidate();
+
+        // 1b) SeekBar 的进度轨道不是 background，需单独重着色
+        if (view instanceof android.widget.SeekBar) {
             try {
-                android.content.res.ColorStateList csl = ((GradientDrawable) bg).getColor(); // API29+
-                if (csl != null) {
-                    int c = csl.getDefaultColor();
-                    int mapped = mapBgColor(c, isNight);
-                    if (mapped != c) ((GradientDrawable) bg).setColor(mapped);
+                if (themeDrawable(((android.widget.SeekBar) view).getProgressDrawable())) {
+                    view.invalidate();
                 }
             } catch (Throwable ignored) { }
         }
@@ -2686,21 +3065,16 @@ public class ReadActivity extends BaseActivity {
         if (view instanceof TextView && !(view instanceof android.widget.Button)) {
             TextView tv = (TextView) view;
             int tc = tv.getCurrentTextColor();
-            int mapped = mapTextColor(tc, isNight);
+            int mapped = mapTextColor(tc);
             if (mapped != tc) tv.setTextColor(mapped);
         }
 
         // 3) TabLayout：标签栏背景与文字（不递归进其内部 tab 子视图，避免与 setTabTextColors 冲突）
         if (view instanceof TabLayout) {
             TabLayout tl = (TabLayout) view;
-            if (isNight) {
-                tl.setBackgroundColor(NIGHT_BG_PRIMARY);
-                tl.setTabTextColors(NIGHT_TEXT_SECONDARY, 0xFF0A84FF); // iOS 深色蓝
-            } else {
-                tl.setBackgroundColor(0xFFF2F2F7); // iOS 分组底
-                tl.setTabTextColors(0xFF8E8E93, 0xFF007AFF); // iOS 次灰 / 系统蓝
-            }
-            tl.setSelectedTabIndicatorColor(isNight ? 0xFF0A84FF : 0xFF007AFF); // iOS 蓝指示器
+            tl.setBackgroundColor(sChrome2);
+            tl.setTabTextColors(sText2, sAccent);
+            tl.setSelectedTabIndicatorColor(sAccent);
             return;
         }
 
@@ -2708,46 +3082,112 @@ public class ReadActivity extends BaseActivity {
         if (view instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) view;
             for (int i = 0; i < vg.getChildCount(); i++) {
-                applyThemeRecursive(vg.getChildAt(i), isNight);
+                applyThemeRecursive(vg.getChildAt(i));
             }
         }
     }
 
-    private static int mapBgColor(int c, boolean isNight) {
-        if (isNight) {
-            // 日间 iOS 浅色 → 夜间 iOS 深色
-            if (c == 0xFFFFFFFF) return NIGHT_BG_PRIMARY;                       // ios_bg
-            if (c == 0xFFF2F2F7 || c == 0xFFEFEFF4) return NIGHT_BG_SECONDARY;  // ios_bg_grouped
-            if (c == 0xFFE5E5EA || c == 0xFFC6C7CC) return NIGHT_DIVIDER;       // ios_separator
-            // 兼容旧色值（历史弹窗可能仍残留）
-            if (c == 0xFFFAFAFA || c == 0xFFF5F5F5) return NIGHT_BG_SECONDARY;
-            if (c == 0xFFE0E0E0 || c == 0xFFEEEEEE || c == 0xFFF0F0F0) return NIGHT_DIVIDER;
-        } else {
-            // 夜间 iOS 深色 → 日间 iOS 浅色
-            if (c == NIGHT_BG_PRIMARY) return 0xFFFFFFFF;        // ios_bg
-            if (c == NIGHT_BG_SECONDARY) return 0xFFF2F2F7;     // ios_bg_grouped
-            if (c == NIGHT_DIVIDER) return 0xFFE5E5EA;          // ios_separator
+    /**
+     * 把布局里写死的浅色体系映射到当前派生配色。
+     * 除了原始色值，也识别「历史上派发过的派生值」（sIssuedChrome*），
+     * 这样反复重着色时不依赖调用顺序，也不会残留旧底色。
+     */
+    private static int mapBgColor(int c) {
+        // 主背景：ios_bg / 旧夜间主底 / 任意一轮派发过的主底
+        if (c == 0xFFFFFFFF || c == 0xFFFAFAFA || c == 0xFFF5F5F5
+                || c == LEGACY_NIGHT_BG_PRIMARY || sIssuedChrome1.contains(c)) {
+            return sChrome1;
+        }
+        // 二级底：ios_bg_grouped / 旧夜间次底 / 任意一轮派发过的二级底
+        if (c == 0xFFF2F2F7 || c == 0xFFEFEFF4
+                || c == LEGACY_NIGHT_BG_SECONDARY || c == LEGACY_CAPSULE_NORMAL
+                || sIssuedChrome2.contains(c)) {
+            return sChrome2;
+        }
+        // 分隔线：ios_separator / 旧夜间分割线 / 任意一轮派发过的分隔线
+        if (c == 0xFFE5E5EA || c == 0xFFC6C7CC || c == 0xFFE0E0E0 || c == 0xFFEEEEEE
+                || c == LEGACY_NIGHT_DIVIDER || c == LEGACY_CAPSULE_PRESSED
+                || sIssuedLine.contains(c)) {
+            return sLine;
+        }
+        // 胶囊内胆（白胶囊）：与浮窗主底同级
+        if (c == LEGACY_CAPSULE_INNER) return sChrome1;
+        return c;
+    }
+
+    /** 文字颜色：主文字 / 次文字 / 三级文字 → 派生文字色。 */
+    private static int mapTextColor(int c) {
+        int rgb = c & 0x00FFFFFF;   // 去掉 alpha：?android:attr/textColorSecondary 会解析出带透明度的灰
+        if (rgb == 0x1D1D1F || rgb == 0x333333 || rgb == 0x000000 || rgb == 0xFFFFFF) return sText1;
+        if (rgb == 0x8E8E93 || rgb == 0x98989D || rgb == 0xC7C7CC
+                || rgb == 0x666666 || rgb == 0x999999) return sText2;
+        // 通用兜底：布局里用 ?android:attr/textColorPrimary / textColorSecondary 时，
+        // 解析出来的系统灰阶色（#000000、#8A000000…）不在上面的清单里，
+        // 会导致书签条目的标题/预览在深色背景上依旧是深色字（看起来"没跟随"）。
+        // 规则：低饱和（灰阶）文字 → 近黑/近白归主文字、中间灰归次文字；
+        //      有彩色（橙色备注 #FF6600、红色 #FF4444 等强调色）保持原样。
+        float[] hsv = new float[3];
+        Color.colorToHSV(0xFF000000 | rgb, hsv);
+        if (hsv[1] <= 0.25f) {
+            return (hsv[2] >= 0.85f || hsv[2] <= 0.45f) ? sText1 : sText2;
         }
         return c;
     }
 
-    private static int mapTextColor(int c, boolean isNight) {
-        if (isNight) {
-            // 日间 iOS 浅色文字 → 夜间 iOS 深色文字
-            if (c == 0xFF1D1D1F) return NIGHT_TEXT_PRIMARY;      // ios_text_primary
-            if (c == 0xFF8E8E93) return NIGHT_TEXT_SECONDARY;    // ios_text_secondary
-            if (c == 0xFFC7C7CC) return NIGHT_TEXT_TERTIARY;     // ios_text_tertiary
-            // 兼容旧色值
-            if (c == 0xFF333333) return NIGHT_TEXT_PRIMARY;
-            if (c == 0xFF666666) return NIGHT_TEXT_SECONDARY;
-            if (c == 0xFF999999) return NIGHT_TEXT_TERTIARY;
-        } else {
-            // 夜间 iOS 深色文字 → 日间 iOS 浅色文字
-            if (c == NIGHT_TEXT_PRIMARY) return 0xFF1D1D1F;      // ios_text_primary
-            if (c == NIGHT_TEXT_SECONDARY) return 0xFF8E8E93;   // ios_text_secondary
-            if (c == NIGHT_TEXT_TERTIARY) return 0xFFC7C7CC;    // ios_text_tertiary
-        }
-        return c;
+    /**
+     * 对 drawable 重着色，并递归处理 selector / layer-list / inset / scale 的子图。
+     * 全部走同一张派生色表（胶囊与面板已在派生规则里区分层级：胶囊底 = 二级底）。
+     * @return 是否发生变化
+     */
+    private static boolean themeDrawable(Drawable d) {
+        if (d == null) return false;
+        // ✅ 关键修复：先 mutate() 脱离「共享 ConstantState」。
+        // 从同一资源（@color/ios_bg、@drawable/bg_xxx 等）inflate 出来的 Drawable 在
+        // 进程内共享同一份 ConstantState；直接 setColor() 会改到全局共享状态，导致书城 /
+        // 书架 / 设置 / 详情等所有使用 ios_bg 的界面背景被「染色」跟随阅读器背景。
+        // mutate() 让本实例拿到一份独立状态，着色只作用于当前浮窗，不再泄漏到全 App。
+        d = d.mutate();
+        boolean changed = false;
+        try {
+            if (d instanceof ColorDrawable) {
+                int c = ((ColorDrawable) d).getColor();
+                int mapped = mapBgColor(c);
+                if (mapped != c) {
+                    ((ColorDrawable) d).setColor(mapped);
+                    changed = true;
+                }
+            } else if (d instanceof GradientDrawable) {
+                android.content.res.ColorStateList csl = ((GradientDrawable) d).getColor(); // API29+
+                if (csl != null) {
+                    int c = csl.getDefaultColor();
+                    int mapped = mapBgColor(c);
+                    if (mapped != c) {
+                        ((GradientDrawable) d).setColor(mapped);
+                        changed = true;
+                    }
+                }
+            } else if (d instanceof android.graphics.drawable.StateListDrawable) {
+                // <selector>：逐个重着色子 <shape>（常态 / 按下态）
+                android.graphics.drawable.Drawable.ConstantState cs = d.getConstantState();
+                if (cs instanceof android.graphics.drawable.DrawableContainer.DrawableContainerState) {
+                    android.graphics.drawable.DrawableContainer.DrawableContainerState dcs =
+                            (android.graphics.drawable.DrawableContainer.DrawableContainerState) cs;
+                    for (int i = 0; i < dcs.getChildCount(); i++) {
+                        changed |= themeDrawable(dcs.getChild(i));
+                    }
+                }
+            } else if (d instanceof android.graphics.drawable.LayerDrawable) {
+                android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) d;
+                for (int i = 0; i < ld.getNumberOfLayers(); i++) {
+                    changed |= themeDrawable(ld.getDrawable(i));
+                }
+            } else if (d instanceof android.graphics.drawable.InsetDrawable) {
+                changed |= themeDrawable(((android.graphics.drawable.InsetDrawable) d).getDrawable());
+            } else if (d instanceof android.graphics.drawable.ScaleDrawable) {
+                changed |= themeDrawable(((android.graphics.drawable.ScaleDrawable) d).getDrawable());
+            }
+        } catch (Throwable ignored) { }
+        return changed;
     }
 
     /** 夜间模式切换时，对当前已显示的浮窗视图树重新着色，实现实时跟随。 */
@@ -2761,21 +3201,247 @@ public class ReadActivity extends BaseActivity {
     }
 
     private void themeIfShowing(PopupWindow pw) {
-        if (pw != null && pw.isShowing()) themeViewTree(pw.getContentView(), isNightMode);
+        if (pw != null && pw.isShowing()) themeViewTree(pw.getContentView());
+    }
+
+    /**
+     * 设置系列浮窗的定位偏移：让浮窗底缘停在底部「目录/夜间/设置」这一行（第二行）的上沿，
+     * 从而盖住其上方的「上一章/下一章」行，同时露出底栏本行、不被覆盖也不变暗。
+     * 底栏第二行固定高度 60dp，故偏移取该值（含 0.5dp 分隔线误差可忽略）。
+     */
+    private int getNavBarHeightPx() {
+        return (int) (60 * getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * 设置浮窗开启时：「设置」图标由描边齿轮切换为<b>实心齿轮</b>（不加圆底），
+     * 齿轮颜色与平时保持一致（不随之变色）；底部「设置」文字颜色也不变。
+     * 关闭时恢复为描边齿轮 + 主题次色文字。
+     */
+    private void setSettingsNavActive(boolean active) {
+        ImageView iv = findViewById(R.id.iv_settings_icon);
+        TextView tv = findViewById(R.id.tv_settings_text);
+        if (iv == null || tv == null) return;
+
+        // 齿轮颜色不随选中态改变：日间跟随主文字色（近黑），夜间跟随其他图标用白色
+        int gearColor = sText1;
+
+        iv.setBackground(null);       // 不加圆底
+        iv.setPadding(0, 0, 0, 0);
+        iv.clearColorFilter();
+        iv.setImageResource(active ? R.drawable.ic_settings_filled
+                : (sIsDark ? R.drawable.ic_settings_white : R.drawable.ic_settings_black));
+        // 用 setImageTintList（与 XML 的 app:tint 同通道），setColorFilter 会被 AppCompat tint 覆盖
+        iv.setImageTintList(ColorStateList.valueOf(gearColor));
+
+        if (!active) {
+            tv.setTextColor(sNavText);
+        }
+        // active 时文字颜色保持不变（不改成蓝色）
     }
 
     @SuppressLint("InflateParams")
     private void showSettingsDialog() {
-        View popupView = LayoutInflater.from(this).inflate(R.layout.popup_reading_settings, null);
+        // 全屏透明根布局：scrim 负责点击上方区域关闭；面板贴在窗口下沿并贴着
+        // 「目录/夜间/设置」行的上沿。裁剪由**窗口下沿**完成（首帧会把窗口高度收缩到该行上沿），
+        // 窗口边界是唯一稳定生效的裁剪线，面板向下越界的部分必然被裁掉 ——
+        // 视觉上即「从该行里滑出/收回」，而不是整窗位移导致从屏幕底部飞入飞出、并盖住底栏。
+        // 用「跟手下滑关闭」容器作为根布局：它能抢在子 View（ViewPager2/按钮）之前拦截下拉手势，
+        // 且在按下点位于面板之外时负责点击关闭。
+        SwipeDismissLayout root = new SwipeDismissLayout(this);
+
+        View scrim = new View(this);
+        scrim.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        scrim.setOnClickListener(v -> dismissSettingsAnimated());
+
+        FrameLayout panelHost = new FrameLayout(this);
+        FrameLayout.LayoutParams hostLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        // 面板直接贴「窗口」下沿：OnPreDraw 里会把窗口高度收缩到「目录/夜间/设置」行上沿，
+        // 于是面板底缘自然停在该行上沿。裁剪由窗口边界完成——面板向下越过窗口下沿的部分
+        // 一定被裁掉，因此视觉上必然是从该行里滑出/收回，不再依赖父容器 clipChildren。
+        hostLp.gravity = Gravity.BOTTOM;
+        panelHost.setLayoutParams(hostLp);
+        // 保留容器裁剪，与窗口裁剪形成双重保险
+        panelHost.setClipChildren(true);
+
+        View popupView = LayoutInflater.from(this).inflate(R.layout.popup_reading_settings, panelHost, false);
         initSettingsPanel(popupView);
-        themeViewTree(popupView, isNightMode);
-        settingsPopupWindow = new PopupWindow(popupView, WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT, true);
-        settingsPopupWindow.setAnimationStyle(R.style.BottomSlideAnimation);
+        themeViewTree(popupView);
+        panelHost.addView(popupView);
+        settingsPanelView = popupView;
+        // 先隐藏，等窗口下沿收缩到该行上沿之后再播放入场，避免中间帧闪现
+        popupView.setVisibility(View.INVISIBLE);
+
+        root.addView(scrim);
+        root.addView(panelHost);
+
+        // 跟手拖拽平移 panelHost（外层容器）：向下拖动时被窗口下沿（该行上沿）裁掉，
+        // 观感即「面版缩回该行」，拖过阈值后 dismiss；
+        // 入场/收回动画平移 popupView（同样被窗口下沿裁掉 → 从该行里滑出/收回）。
+        // 两者是不同对象，互不干扰，因此这里传 panelHost。
+        root.setPanel(panelHost);
+        root.setRetractView(popupView);
+
+        // 跟手下滑关闭（面板整体可拖拽；已滑出后直接 dismiss，不再叠加收回动画）
+        root.setDismissAction(() -> {
+            if (settingsPopupWindow != null && settingsPopupWindow.isShowing()) settingsPopupWindow.dismiss();
+        });
+
+        settingsPopupWindow = new PopupWindow(root,
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, true);
+        settingsPopupWindow.setAnimationStyle(0); // 取消整窗位移动画
         settingsPopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        settingsPopupWindow.showAtLocation(layoutBottomNav, Gravity.BOTTOM, 0, 0);
-        dimBackground(true);
+        // 关键：弹窗是 focusable（模态）的，窗口高度又被收缩到「目录/夜间/设置」行上沿，
+        // 于是这一整行都落在弹窗窗口「之外」。点这一行（含设置按钮）时事件根本到不了 Activity
+        // 的按钮，而是被 PopupViewContainer 当成「点击弹窗外部」直接 dismiss() —— 无任何动画，
+        // 表现为「直接消失」。这里抢在它之前接管窗口外触摸，统一走带动画的收回。
+        settingsPopupWindow.setOutsideTouchable(true);
+        settingsPopupWindow.setTouchInterceptor((v, event) -> {
+            boolean outside = event.getAction() == android.view.MotionEvent.ACTION_OUTSIDE;
+            if (!outside && event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                int x = (int) event.getX();
+                int y = (int) event.getY();
+                outside = x < 0 || y < 0 || x >= v.getWidth() || y >= v.getHeight();
+            }
+            if (outside) {
+                dismissSettingsAnimated();
+                return true; // 吃掉事件，阻止 PopupWindow 自行 dismiss（那是不带动画的）
+            }
+            return false;
+        });
+        // 先按全屏显示（保证能拿到稳定坐标系测量），首帧 pre-draw 里再把高度收缩到该行上沿
+        settingsPopupWindow.showAtLocation(layoutBottomNav, Gravity.TOP, 0, 0);
+
+        // 返回键：先播放收回动画再关闭
+        root.setFocusableInTouchMode(true);
+        root.requestFocus();
+        root.setOnKeyListener((v, keyCode, event) -> {
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK
+                    && event.getAction() == android.view.KeyEvent.ACTION_UP) {
+                dismissSettingsAnimated();
+                return true;
+            }
+            return false;
+        });
+
+        setSettingsNavActive(true);
+        suspendAutoPage();
         mainHandler.removeCallbacks(hideNavRunnable);
-        settingsPopupWindow.setOnDismissListener(() -> { dimBackground(false); resetAutoHideTimer(); });
+        settingsPopupWindow.setOnDismissListener(() -> {
+            settingsPanelDismissing = false;
+            resetAutoHideTimer();
+            resumeAutoPageIfSuspended();
+            setSettingsNavActive(false);
+            settingsPanelView = null;
+        });
+
+        // 入场：① 把弹窗窗口下沿收缩到「目录/夜间/设置」行上沿（窗口边界即裁剪线）；
+        // ② 面板移到窗口下沿之外后滑上来。必须在首帧绘制「之前」完成，
+        // 否则会先按最终位置绘制一帧（闪现）再跳下去滑上来，故用 OnPreDrawListener 而非 post()。
+        final android.view.ViewTreeObserver.OnPreDrawListener enterListener =
+                new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    private boolean windowSized = false;
+                    private int heightBeforeResize = -1;
+
+                    @Override
+                    public boolean onPreDraw() {
+                        int targetH = measureBottomRowTopInRoot(root);
+                        if (!windowSized) {
+                            windowSized = true;
+                            heightBeforeResize = root.getHeight();
+                            if (targetH > 0 && Math.abs(targetH - heightBeforeResize) > 1) {
+                                try {
+                                    // 收缩窗口：下沿 == 「目录/夜间/设置」行上沿
+                                    settingsPopupWindow.update(0, 0,
+                                            ViewGroup.LayoutParams.MATCH_PARENT, targetH);
+                                } catch (Throwable ignored) { }
+                                return true; // 等窗口新尺寸生效后的下一帧再播入场
+                            }
+                        } else if (targetH > 0 && heightBeforeResize > 0
+                                && root.getHeight() == heightBeforeResize) {
+                            // 兜底：窗口收缩未生效时，退回「容器下沿对齐该行上沿」的老办法
+                            int margin = root.getHeight() - targetH;
+                            if (margin > 0) {
+                                FrameLayout.LayoutParams lp =
+                                        (FrameLayout.LayoutParams) panelHost.getLayoutParams();
+                                lp.bottomMargin = margin;
+                                panelHost.setLayoutParams(lp);
+                            }
+                        }
+                        root.getViewTreeObserver().removeOnPreDrawListener(this);
+                        startSettingsPanelEnter(popupView);
+                        return true;
+                    }
+                };
+        root.getViewTreeObserver().addOnPreDrawListener(enterListener);
+    }
+
+    /**
+     * 计算「目录/夜间/设置」行上沿在弹窗坐标系中的位置，即弹窗窗口应有的高度
+     * （窗口下沿将落在该行上沿）。用两个 View 的屏幕坐标差换算，与状态栏 inset、
+     * 是否存在系统导航栏全部无关；该行不可见/未测量到时退回「窗口高 - 60dp」。
+     */
+    private int measureBottomRowTopInRoot(View root) {
+        int[] rootLoc = new int[2];
+        root.getLocationOnScreen(rootLoc);
+        View bottomRow = findViewById(R.id.layout_bottom_row);
+        if (bottomRow != null && bottomRow.getVisibility() == View.VISIBLE
+                && bottomRow.getHeight() > 0) {
+            int[] rowLoc = new int[2];
+            bottomRow.getLocationOnScreen(rowLoc);
+            int h = rowLoc[1] - rootLoc[1];
+            if (h > 0) return h;
+        }
+        int fallback = root.getHeight() - getNavBarHeightPx();
+        return fallback > 0 ? fallback : root.getHeight();
+    }
+
+    /** 设置面板入场：从窗口下沿（=「目录/夜间/设置」行上沿）由下往上滑出 */
+    private void startSettingsPanelEnter(View panel) {
+        panel.setVisibility(View.VISIBLE);
+        int h = panel.getHeight();
+        if (h <= 0) return;
+        panel.setTranslationY(h);
+        panel.animate()
+                .translationY(0)
+                .setDuration(240)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .start();
+    }
+
+    /** 设置浮窗是否正在显示（用于底栏本行按钮的「先收起浮窗」判定） */
+    private boolean isSettingsPopupShowing() {
+        return settingsPopupWindow != null && settingsPopupWindow.isShowing();
+    }
+
+    /** 收回动画是否已在播放中：避免重复触发把动画 cancel 成「瞬间消失」 */
+    private boolean settingsPanelDismissing = false;
+
+    /** 设置面板收回：滑回「目录/夜间/设置」行内（被窗口下沿裁掉至消失）后再关闭浮窗 */
+    private void dismissSettingsAnimated() {
+        if (settingsPopupWindow == null || !settingsPopupWindow.isShowing()) return;
+        if (settingsPanelDismissing) return; // 已在收回，忽略重复触发，保证动画完整播放
+        final View panel = settingsPanelView;
+        int h = panel != null ? panel.getHeight() : 0;
+        if (panel == null || h <= 0) {
+            settingsPopupWindow.dismiss();
+            return;
+        }
+        settingsPanelDismissing = true;
+        panel.animate().cancel();
+        panel.animate()
+                .translationY(h)
+                .setDuration(240)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .withEndAction(() -> {
+                    settingsPanelDismissing = false;
+                    if (settingsPopupWindow != null && settingsPopupWindow.isShowing()) {
+                        settingsPopupWindow.dismiss();
+                    }
+                })
+                .start();
     }
 
     @SuppressLint("InflateParams")
@@ -2796,7 +3462,7 @@ public class ReadActivity extends BaseActivity {
             moreMenuPopupWindow.dismiss();
             shareBook();
         });
-        themeViewTree(popupView, isNightMode);
+        themeViewTree(popupView);
         int width = (int) (120 * getResources().getDisplayMetrics().density);
         moreMenuPopupWindow = new PopupWindow(popupView,
                 width,
@@ -3020,17 +3686,25 @@ public class ReadActivity extends BaseActivity {
             bgSwatches[i] = view.findViewById(swatchId);
             bgRings[i] = view.findViewById(ringId);
 
-            // 设置圆形背景色
+            // 设置圆角长方形背景色（R角长方形，与选中环匹配）
+            int swatchRadius = (int) (8 * getResources().getDisplayMetrics().density);
+            // 让选中环的圆角与色块完全一致（按 density 缩放，避免不同屏幕错位）
+            try { GradientDrawable rd = (GradientDrawable) bgRings[i].getBackground(); rd.mutate(); rd.setCornerRadius(swatchRadius); } catch (Exception ignore) {}
             GradientDrawable circle = new GradientDrawable();
-            circle.setShape(GradientDrawable.OVAL);
+            circle.setShape(GradientDrawable.RECTANGLE);
+            circle.setCornerRadius(swatchRadius);
             circle.setColor(Color.parseColor(BG_COLORS[i]));
             bgSwatches[i].setBackground(circle);
+            // 色块必须显示真实背景色，不能被「跟随背景色」重着色
+            bgSwatches[i].setTag(R.id.tag_keep_own_color, true);
+            if (bgRings[i] != null) bgRings[i].setTag(R.id.tag_keep_own_color, true);
 
             // 点击事件
             final int idx = i;
             bgSwatches[i].setOnClickListener(v -> {
                 currentBgColor = idx;
                 applyBackgroundColorToWebView(idx);
+                applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景
                 updateBgColorHighlight(bgSwatches, bgRings);
                 saveReadingPreferences();
             });
@@ -3041,8 +3715,10 @@ public class ReadActivity extends BaseActivity {
         // "更多 >"按钮
         view.findViewById(R.id.tv_bg_more).setOnClickListener(v -> showBgColorsDialog());
 
-        // "切换字体 >"按钮
-        view.findViewById(R.id.tv_switch_font).setOnClickListener(v -> showFontsDialog());
+        // "切换字体 >"按钮（文字与字体跟随当前字体）
+        TextView tvSwitchFont = view.findViewById(R.id.tv_switch_font);
+        tvSwitchFont.setOnClickListener(v -> showFontsDialog());
+        updateSwitchFontButton(tvSwitchFont);
 
         // 翻页动画模式选择
         TextView tvPageCover = view.findViewById(R.id.tv_page_cover);
@@ -3077,11 +3753,17 @@ public class ReadActivity extends BaseActivity {
                 startAutoPage();
             } else {
                 stopAutoPage();
+                autoPageSuspended = false;
             }
             saveReadingPreferences();
         });
 
-        view.findViewById(R.id.layout_auto_page).setOnClickListener(v -> switchAutoPage.setChecked(!switchAutoPage.isChecked()));
+        // 点击区域只挂在「自动翻页」文字 + 开关这一组上：
+        // 若挂整行，点击「更多阅读设置」左侧的空白（占位 View）也会误触开关。
+        View autoToggle = view.findViewById(R.id.layout_auto_toggle);
+        if (autoToggle != null) {
+            autoToggle.setOnClickListener(v -> switchAutoPage.setChecked(!switchAutoPage.isChecked()));
+        }
 
         view.findViewById(R.id.tv_more_settings).setOnClickListener(v -> showMoreSettingsDialog());
     }
@@ -3126,9 +3808,10 @@ public class ReadActivity extends BaseActivity {
 
         float density = getResources().getDisplayMetrics().density;
         int swatchSize = (int) (44 * density);
-        int ringSize = (int) (50 * density);
+        int ringSize = swatchSize;
         int frameSize = (int) (52 * density);
         int marginEnd = (int) (8 * density);
+        float ringCorner = 8 * density;
 
         // ===== 构建纯色网格 =====
         int colsPerRow = 5;
@@ -3147,16 +3830,19 @@ public class ReadActivity extends BaseActivity {
             frame.setLayoutParams(new LinearLayout.LayoutParams(frameSize, frameSize));
             ((LinearLayout.LayoutParams) frame.getLayoutParams()).setMargins(0, 0, marginEnd, 0);
 
-            // 色块
+            // 色块（圆角长方形）
             View swatch = new View(this);
             FrameLayout.LayoutParams swatchLp = new FrameLayout.LayoutParams(swatchSize, swatchSize);
             swatchLp.gravity = android.view.Gravity.CENTER;
             swatch.setLayoutParams(swatchLp);
             GradientDrawable circle = new GradientDrawable();
-            circle.setShape(GradientDrawable.OVAL);
+            circle.setShape(GradientDrawable.RECTANGLE);
+            circle.setCornerRadius(8 * density);
             circle.setColor(Color.parseColor(BG_COLORS[i]));
             if (BG_COLORS[i].equals("#FFFFFF")) circle.setStroke(2, Color.parseColor("#CCCCCC"));
             swatch.setBackground(circle);
+            // 色块必须显示真实背景色，不能被「跟随背景色」重着色
+            swatch.setTag(R.id.tag_keep_own_color, true);
 
             // 选中环
             View ring = new View(this);
@@ -3164,6 +3850,7 @@ public class ReadActivity extends BaseActivity {
             ringLp.gravity = android.view.Gravity.CENTER;
             ring.setLayoutParams(ringLp);
             ring.setBackgroundResource(R.drawable.bg_color_ring);
+            try { GradientDrawable rd = (GradientDrawable) ring.getBackground(); rd.mutate(); rd.setCornerRadius(ringCorner); } catch (Exception ignore) {}
             ring.setVisibility(i == currentBgColor ? View.VISIBLE : View.GONE);
 
             frame.addView(swatch);
@@ -3174,6 +3861,7 @@ public class ReadActivity extends BaseActivity {
             swatch.setOnClickListener(v -> {
                 currentBgColor = idx;
                 applyBackgroundColorToWebView(idx);
+                applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景
                 saveReadingPreferences();
                 refreshPopupSelection(solidContainer, texContainer);
             });
@@ -3209,12 +3897,13 @@ public class ReadActivity extends BaseActivity {
                 is.close();
                 Bitmap scaled = Bitmap.createScaledBitmap(bmp, swatchSize, swatchSize, true);
                 RoundedBitmapDrawable drawable = RoundedBitmapDrawableFactory.create(getResources(), scaled);
-                drawable.setCircular(true);
+                drawable.setCornerRadius(8 * density);
                 swatch.setImageDrawable(drawable);
             } catch (Exception e) {
-                // 加载失败时用预览色兜底
+                // 加载失败时用预览色兜底（圆角长方形）
                 GradientDrawable fallback = new GradientDrawable();
-                fallback.setShape(GradientDrawable.OVAL);
+                fallback.setShape(GradientDrawable.RECTANGLE);
+                fallback.setCornerRadius(8 * density);
                 fallback.setColor(BG_TEXTURE_PREVIEW_COLORS[i]);
                 swatch.setBackground(fallback);
             }
@@ -3225,6 +3914,7 @@ public class ReadActivity extends BaseActivity {
             ringLp.gravity = android.view.Gravity.CENTER;
             ring.setLayoutParams(ringLp);
             ring.setBackgroundResource(R.drawable.bg_color_ring);
+            try { GradientDrawable rd = (GradientDrawable) ring.getBackground(); rd.mutate(); rd.setCornerRadius(ringCorner); } catch (Exception ignore) {}
             int texModeIdx = 10 + i;
             ring.setVisibility(texModeIdx == currentBgColor ? View.VISIBLE : View.GONE);
 
@@ -3236,35 +3926,35 @@ public class ReadActivity extends BaseActivity {
             swatch.setOnClickListener(v -> {
                 currentBgColor = texIdx;
                 applyBackgroundColorToWebView(texIdx);
+                applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景（纹理取预览底色）
                 saveReadingPreferences();
                 refreshPopupSelection(solidContainer, texContainer);
             });
             texRow.addView(frame);
         }
 
-        // 关闭和确定按钮
+        // 关闭按钮（色块点击即生效，无需"确定"按钮）
         popupView.findViewById(R.id.iv_bg_popup_close).setOnClickListener(v -> {
-            if (bgColorsPopupWindow != null) bgColorsPopupWindow.dismiss();
-        });
-        popupView.findViewById(R.id.tv_bg_popup_done).setOnClickListener(v -> {
-            if (bgColorsPopupWindow != null) bgColorsPopupWindow.dismiss();
+            SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
+            if (h != null) h.dismissAnimated();
+            else if (bgColorsPopupWindow != null) bgColorsPopupWindow.dismiss();
         });
 
         // ✅ 背景色选择浮窗外壳跟随主题（色块本身为实际背景色，不在映射表内故不会被改）
-        themeViewTree(popupView, isNightMode);
+        themeViewTree(popupView);
 
-        bgColorsPopupWindow = new PopupWindow(popupView,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                true);
-        bgColorsPopupWindow.setAnimationStyle(R.style.BottomSlideAnimation);
-        bgColorsPopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        bgColorsPopupWindow.showAtLocation(findViewById(android.R.id.content), Gravity.BOTTOM, 0, 0);
-        dimBackground(true);
+        // 弹窗高度固定为屏幕一半，内容过多时由内部 ScrollView 滚动
+        android.util.DisplayMetrics bgDm = new android.util.DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(bgDm);
+        int bgPopupHeight = bgDm.heightPixels / 2;
+
+        // 以全屏透明窗口 + 跟手下滑容器承载面板（面板下移时不会被半屏窗口边界裁掉）
+        bgColorsPopupWindow = showSwipeDismissPopup(popupView, bgPopupHeight, "bg");
+        suspendAutoPage();
         mainHandler.removeCallbacks(hideNavRunnable);
         bgColorsPopupWindow.setOnDismissListener(() -> {
-            dimBackground(false);
             resetAutoHideTimer();
+            resumeAutoPageIfSuspended();
         });
     }
 
@@ -3297,6 +3987,24 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
+     * 字体网格卡片数据项
+     */
+    private static class FontCardItem {
+        final String displayName;
+        final String cssName;
+        final boolean isBackend;
+        final com.example.myapplication.bean.FontItem backendFont;
+
+        FontCardItem(String displayName, String cssName, boolean isBackend,
+                     com.example.myapplication.bean.FontItem backendFont) {
+            this.displayName = displayName;
+            this.cssName = cssName;
+            this.isBackend = isBackend;
+            this.backendFont = backendFont;
+        }
+    }
+
+    /**
      * 显示字体选择弹窗
      */
     @SuppressLint({"InflateParams", "SetTextI18n"})
@@ -3304,35 +4012,36 @@ public class ReadActivity extends BaseActivity {
         View popupView = LayoutInflater.from(this).inflate(R.layout.popup_fonts, null);
         LinearLayout container = popupView.findViewById(R.id.container_fonts);
 
-        float density = getResources().getDisplayMetrics().density;
-
         // 构建字体列表
         rebuildFontList(container);
 
         // 关闭按钮
         popupView.findViewById(R.id.iv_font_popup_close).setOnClickListener(v -> {
-            if (fontsPopupWindow != null) fontsPopupWindow.dismiss();
+            SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
+            if (h != null) h.dismissAnimated();
+            else if (fontsPopupWindow != null) fontsPopupWindow.dismiss();
         });
 
-        themeViewTree(popupView, isNightMode);
+        themeViewTree(popupView);
 
-        fontsPopupWindow = new PopupWindow(popupView,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                true);
-        fontsPopupWindow.setAnimationStyle(R.style.BottomSlideAnimation);
-        fontsPopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        fontsPopupWindow.showAtLocation(findViewById(android.R.id.content), Gravity.BOTTOM, 0, 0);
-        dimBackground(true);
+        // 弹窗高度固定为屏幕一半，内容过多时由内部 ScrollView 滚动
+        android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(dm);
+        int popupHeight = dm.heightPixels / 2;
+
+        // 以全屏透明窗口 + 跟手下滑容器承载面板
+        fontsPopupWindow = showSwipeDismissPopup(popupView, popupHeight, "font");
+        suspendAutoPage();
         mainHandler.removeCallbacks(hideNavRunnable);
         fontsPopupWindow.setOnDismissListener(() -> {
-            dimBackground(false);
             resetAutoHideTimer();
+            resumeAutoPageIfSuspended();
         });
     }
 
     /**
-     * 从后端获取字体列表
+     * 从后端获取字体列表。container 为 null 时仅用于后台预加载（不刷新弹窗 UI，
+     * 但会在拿到列表后刷新「切换字体」按钮文案，避免未打开弹窗时显示 cssName）。
      */
     private void fetchFontsFromBackend(LinearLayout container) {
         RetrofitClient.getApiService().getFonts().enqueue(new retrofit2.Callback<ApiResponse<java.util.List<com.example.myapplication.bean.FontItem>>>() {
@@ -3342,18 +4051,22 @@ public class ReadActivity extends BaseActivity {
                 if (response.isSuccessful() && response.body() != null && response.body().getData() != null) {
                     backendFonts = response.body().getData();
                     runOnUiThread(() -> {
-                        // 移除加载提示
-                        View loading = container.findViewWithTag("tv_loading");
-                        if (loading != null) container.removeView(loading);
-                        // 渲染字体列表
-                        float density = getResources().getDisplayMetrics().density;
-                        buildBackendFontRows(container, density);
+                        if (container != null) {
+                            // 移除加载提示并重建 3 列网格
+                            View loading = container.findViewWithTag("tv_loading");
+                            if (loading != null) container.removeView(loading);
+                            rebuildFontList(container);
+                        }
+                        // 列表就绪后刷新「切换字体」按钮：可能已从 cssName 解析出中文展示名
+                        applyCurrentFontToSwitchButton();
                     });
                 } else {
                     runOnUiThread(() -> {
-                        View loading = container.findViewWithTag("tv_loading");
-                        if (loading instanceof TextView) {
-                            ((TextView) loading).setText("暂无在线字体");
+                        if (container != null) {
+                            View loading = container.findViewWithTag("tv_loading");
+                            if (loading instanceof TextView) {
+                                ((TextView) loading).setText("暂无在线字体");
+                            }
                         }
                     });
                 }
@@ -3363,9 +4076,11 @@ public class ReadActivity extends BaseActivity {
             public void onFailure(@NonNull retrofit2.Call<ApiResponse<java.util.List<com.example.myapplication.bean.FontItem>>> call,
                                   @NonNull Throwable t) {
                 runOnUiThread(() -> {
-                    View loading = container.findViewWithTag("tv_loading");
-                    if (loading instanceof TextView) {
-                        ((TextView) loading).setText("网络异常，请稍后再试");
+                    if (container != null) {
+                        View loading = container.findViewWithTag("tv_loading");
+                        if (loading instanceof TextView) {
+                            ((TextView) loading).setText("网络异常，请稍后再试");
+                        }
                     }
                 });
             }
@@ -3373,135 +4088,268 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
-     * 构建后端字体行
+     * 启动后后台预拉取字体列表：仅当当前选中的是在线字体且列表尚未加载时，
+     * 这样即使从未打开过字体弹窗，「切换字体」按钮也能显示中文名而非 cssName。
      */
-    private void buildBackendFontRows(LinearLayout container, float density) {
-        for (com.example.myapplication.bean.FontItem font : backendFonts) {
-            boolean downloaded = downloadedFonts.contains(font.getCssName());
-            boolean isCurrent = font.getCssName().equals(currentFontFamily);
-            View row = buildFontRow(font.getName(), font.getCssName(),
-                    font.getFileSize() != null ? font.getFileSize() : "",
-                    !downloaded, isCurrent, density);
-            container.addView(row);
+    private void preloadBackendFontsIfNeeded() {
+        if (!FONT_SYSTEM_CSS.equals(currentFontFamily)
+                && !FONT_DEFAULT_CSS.equals(currentFontFamily)
+                && backendFonts.isEmpty()) {
+            fetchFontsFromBackend(null);
+        }
+    }
 
-            if (!downloaded) {
-                TextView btnDl = row.findViewWithTag("btn_download");
-                if (btnDl != null) {
-                    btnDl.setOnClickListener(v -> {
-                        btnDl.setText("下载中...");
-                        btnDl.setTextColor(Color.parseColor("#8E8E93"));
-                        btnDl.setEnabled(false);
-                        downloadFontFromUrl(font.getFileUrl(), font.getCssName(), font.getName(),
-                                btnDl, container);
-                    });
+    /**
+     * 长按已下载字体 → 弹出删除确认对话框
+     */
+    private void showDeleteFontDialog(FontCardItem item, LinearLayout container) {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("删除字体")
+                .setMessage("确定要删除「" + item.displayName + "」吗？删除后需重新下载。")
+                .setPositiveButton("删除", (d, w) -> deleteDownloadedFont(item, container))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /**
+     * 删除已下载的在线字体：删除本地文件 + 移除已下载记录 + 必要时回退当前字体
+     */
+    private void deleteDownloadedFont(FontCardItem item, LinearLayout container) {
+        // 1. 删除内部存储中的字体文件
+        java.io.File f = new java.io.File(getFilesDir(), "fonts/" + item.cssName + ".ttf");
+        if (f.exists()) f.delete();
+        // 2. 从已下载集合移除
+        downloadedFonts.remove(item.cssName);
+        // 3. 若当前正在使用该字体，回退到默认字体
+        if (currentFontFamily.equals(item.cssName)) {
+            currentFontFamily = FONT_DEFAULT_CSS;
+            applyFontFamilyToWebView();
+        }
+        // 4. 持久化并刷新列表
+        saveReadingPreferences();
+        rebuildFontList(container);
+        applyCurrentFontToSwitchButton();
+        Toast.makeText(this, "已删除「" + item.displayName + "」", Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * 处理字体卡片点击：已下载/内置直接切换；未下载在线字体触发下载并显示进度
+     */
+    private void onFontCardClick(FontCardItem item, View card, LinearLayout container) {
+        boolean downloaded = !item.isBackend || downloadedFonts.contains(item.cssName);
+        if (item.isBackend && !downloaded) {
+            if (downloadingFonts.contains(item.cssName)) return; // 已在下载中
+            downloadingFonts.add(item.cssName);
+
+            // 切换到下载进度 UI
+            TextView tvName = card.findViewWithTag("font_name");
+            TextView tvProgress = card.findViewWithTag("font_progress_text");
+            android.widget.ProgressBar pb = card.findViewWithTag("font_progress_bar");
+            if (tvName != null) tvName.setAlpha(0.6f);
+            if (tvProgress != null) {
+                tvProgress.setVisibility(View.VISIBLE);
+                tvProgress.setText("0%");
+            }
+            if (pb != null) {
+                pb.setVisibility(View.VISIBLE);
+                pb.setProgress(0);
+            }
+
+            downloadFontFromUrl(item.backendFont.getId(), item.cssName, item.displayName,
+                    card, container);
+            return;
+        }
+
+        currentFontFamily = item.cssName;
+        currentFontDisplay = item.displayName;
+        applyFontFamilyToWebView();
+        saveReadingPreferences();
+        rebuildFontList(container);
+        applyCurrentFontToSwitchButton();
+    }
+
+    /**
+     * 计算当前字体对应的 Typeface（用于「切换字体」按钮文字预览）
+     * 默认字体 / 系统字体 → 系统默认样式；在线字体 → 已下载到本地的字体文件
+     */
+    private android.graphics.Typeface currentFontTypeface() {
+        // 默认字体 / 系统字体 用系统默认样式；在线字体用下载到本地的字体文件预览
+        if (!FONT_SYSTEM_CSS.equals(currentFontFamily) && !FONT_DEFAULT_CSS.equals(currentFontFamily)) {
+            if (downloadedFonts.contains(currentFontFamily)) {
+                java.io.File f = new java.io.File(getFilesDir(), "fonts/" + currentFontFamily + ".ttf");
+                if (f.exists()) {
+                    try {
+                        return android.graphics.Typeface.createFromFile(f);
+                    } catch (Exception ignored) {
+                        // 回退到默认
+                    }
                 }
-            } else {
-                final String cssName = font.getCssName();
-                row.setOnClickListener(v -> {
-                    currentFontFamily = cssName;
-                    applyFontFamilyToWebView();
-                    saveReadingPreferences();
-                    rebuildFontList(container);
-                });
             }
         }
+        return null;
     }
 
-    private void addSectionHeader(LinearLayout container, String title, float density) {
-        TextView header = new TextView(this);
-        header.setText(title);
-        header.setTextSize(13);
-        header.setTextColor(Color.parseColor("#8E8E93"));
-        header.setPadding((int)(8 * density), (int)(12 * density), 0, (int)(4 * density));
-        container.addView(header);
+    /**
+     * 计算当前字体的展示名称（用于「切换字体」按钮文字）
+     * 默认/系统字体用固定文案；在线字体从后端字体列表中取 displayName
+     */
+    private String currentFontDisplayName() {
+        if (FONT_SYSTEM_CSS.equals(currentFontFamily)) return "系统字体";
+        if (FONT_DEFAULT_CSS.equals(currentFontFamily)) return "默认字体";
+        if (currentFontDisplay != null && !currentFontDisplay.isEmpty()
+                && !"默认字体".equals(currentFontDisplay) && !"系统字体".equals(currentFontDisplay)) {
+            return currentFontDisplay;
+        }
+        for (com.example.myapplication.bean.FontItem font : backendFonts) {
+            if (font.getCssName().equals(currentFontFamily)) {
+                return font.getName();
+            }
+        }
+        return currentFontFamily;
     }
 
+    /**
+     * 更新「切换字体」按钮：文字显示当前字体名 + 字体跟随当前字体样式
+     */
+    private void updateSwitchFontButton(TextView tv) {
+        if (tv == null) return;
+        tv.setText(currentFontDisplayName() + " >");
+        tv.setTypeface(currentFontTypeface());
+    }
+
+    /**
+     * 让「切换字体 >」按钮的文字与字体跟随当前选中的字体
+     * 仅在阅读设置弹窗显示时生效
+     */
+    private void applyCurrentFontToSwitchButton() {
+        if (settingsPopupWindow == null || !settingsPopupWindow.isShowing()) return;
+        TextView tv = settingsPopupWindow.getContentView().findViewById(R.id.tv_switch_font);
+        updateSwitchFontButton(tv);
+    }
+
+    /**
+     * 构建 3 列网格中的单个字体卡片
+     */
     @SuppressLint("SetTextI18n")
-    private View buildFontRow(String displayName, String subInfo, String sizeInfo,
-                              boolean downloadable, boolean isCurrent, float density) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        int padH = (int) (12 * density);
-        int padV = (int) (10 * density);
-        row.setPadding(padH, padV, padH, padV);
+    private View buildFontCard(FontCardItem item, float density, int cardHeight, boolean downloaded) {
+        boolean isCurrent = item.cssName.equals(currentFontFamily);
+        boolean isDownloading = item.isBackend && !downloaded && downloadingFonts.contains(item.cssName);
 
-        // 左侧：字体名称 + 副信息
-        LinearLayout textBlock = new LinearLayout(this);
-        textBlock.setOrientation(LinearLayout.VERTICAL);
-        textBlock.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        // 已下载的在线字体：用字体文件本身预览字体名
+        android.graphics.Typeface preview = null;
+        if (item.isBackend && downloaded) {
+            java.io.File f = new java.io.File(getFilesDir(), "fonts/" + item.cssName + ".ttf");
+            if (f.exists()) {
+                try {
+                    preview = android.graphics.Typeface.createFromFile(f);
+                } catch (Exception ignored) {
+                    preview = null;
+                }
+            }
+        }
 
+        // 卡片配色：只随「日/夜」切换（两套固定值），不随阅读器背景纹理/纯色变化，
+        // 保证切换字体重建卡片时颜色稳定，同时夜间模式下也不会是刺眼的白底。
+        int cardBgNormal = sIsDark ? Color.parseColor("#2C2C2E") : Color.parseColor("#FFFFFF");
+        int cardBgSelected = sIsDark ? Color.parseColor("#3A2E24") : Color.parseColor("#FFF5EE");
+        int strokeNormal = sIsDark ? Color.parseColor("#3A3A3C") : Color.parseColor("#E5E5EA");
+        int nameNormal = sIsDark ? Color.parseColor("#E5E5EA") : Color.parseColor("#1D1D1F");
+
+        // 卡片容器
+        android.widget.FrameLayout card = new android.widget.FrameLayout(this);
+        int radius = (int) (8 * density);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setCornerRadius(radius);
+        bg.setColor(isCurrent ? cardBgSelected : cardBgNormal);
+        bg.setStroke((int) (1 * density), isCurrent ? Color.parseColor("#FF6600") : strokeNormal);
+        card.setBackground(bg);
+        // ✅ 字体卡片是「可选项 + 选中态」的功能性组件：底色必须表达自身状态，
+        // 不能被浮窗重着色（否则白色底色会被映射成阅读器派生底色，切换字体重建卡片时
+        // 整片卡片颜色跳变，且选中/未选中的区分消失；深色背景下卡片文字还会被改成白字而不可见）。
+        card.setTag(R.id.tag_keep_own_color, true);
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setForeground(getRippleOrNull());
+
+        // 字体名（居中）
         TextView tvName = new TextView(this);
-        tvName.setText(displayName);
+        tvName.setTag("font_name");
+        tvName.setText(item.displayName);
         tvName.setTextSize(16);
-        tvName.setTextColor(Color.parseColor("#1D1D1F"));
-        textBlock.addView(tvName);
+        tvName.setTextColor(isCurrent ? Color.parseColor("#FF6600") : nameNormal);
+        tvName.setGravity(android.view.Gravity.CENTER);
+        if (preview != null) tvName.setTypeface(preview);
+        if (isDownloading) tvName.setAlpha(0.6f);
+        android.widget.FrameLayout.LayoutParams nameLp = new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.CENTER);
+        tvName.setLayoutParams(nameLp);
+        card.addView(tvName);
 
-        TextView tvSub = new TextView(this);
-        tvSub.setText(subInfo);
-        tvSub.setTextSize(12);
-        tvSub.setTextColor(Color.parseColor("#8E8E93"));
-        textBlock.addView(tvSub);
+        // 选中对勾（右上角）
+        TextView tvCheck = new TextView(this);
+        tvCheck.setTag("font_check");
+        tvCheck.setText("✓");
+        tvCheck.setTextSize(14);
+        tvCheck.setTextColor(Color.parseColor("#FF6600"));
+        tvCheck.setPadding((int) (6 * density), (int) (4 * density), (int) (6 * density), 0);
+        tvCheck.setVisibility(isCurrent ? View.VISIBLE : View.GONE);
+        android.widget.FrameLayout.LayoutParams checkLp = new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.TOP | android.view.Gravity.END);
+        tvCheck.setLayoutParams(checkLp);
+        card.addView(tvCheck);
 
-        row.addView(textBlock);
+        // 下载进度：百分比文字 + 水平进度条（未下载时默认隐藏，点击后显示）
+        TextView tvProgress = new TextView(this);
+        tvProgress.setTag("font_progress_text");
+        tvProgress.setText("0%");
+        tvProgress.setTextSize(10);
+        tvProgress.setTextColor(Color.parseColor("#FF6600"));
+        tvProgress.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
+        android.widget.FrameLayout.LayoutParams pctLp = new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
+        pctLp.bottomMargin = (int) (10 * density);
+        tvProgress.setLayoutParams(pctLp);
+        card.addView(tvProgress);
 
-        // 右侧：大小标签 + 操作按钮
-        LinearLayout rightBlock = new LinearLayout(this);
-        rightBlock.setOrientation(LinearLayout.HORIZONTAL);
-        rightBlock.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        android.widget.ProgressBar pb = new android.widget.ProgressBar(this, null,
+                android.R.attr.progressBarStyleHorizontal);
+        pb.setTag("font_progress_bar");
+        pb.setIndeterminate(false);
+        pb.setProgressDrawable(getResources().getDrawable(android.R.drawable.progress_horizontal, getTheme()));
+        pb.getProgressDrawable().mutate().setColorFilter(Color.parseColor("#FF6600"), android.graphics.PorterDuff.Mode.SRC_IN);
+        pb.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
+        pb.setProgress(0);
+        pb.setMax(100);
+        int pbWidth = (int) (cardHeight * 1.2f);
+        android.widget.FrameLayout.LayoutParams pbLp = new android.widget.FrameLayout.LayoutParams(
+                pbWidth, (int) (3 * density),
+                android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
+        pbLp.bottomMargin = (int) (5 * density);
+        pb.setLayoutParams(pbLp);
+        card.addView(pb);
 
-        if (sizeInfo != null && !sizeInfo.isEmpty()) {
-            TextView tvSize = new TextView(this);
-            tvSize.setText(sizeInfo);
-            tvSize.setTextSize(12);
-            tvSize.setTextColor(Color.parseColor("#AAAAAA"));
-            int marginR = (int) (8 * density);
-            LinearLayout.LayoutParams sizeLp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            sizeLp.setMarginEnd(marginR);
-            tvSize.setLayoutParams(sizeLp);
-            rightBlock.addView(tvSize);
-        }
+        return card;
+    }
 
-        if (downloadable) {
-            // 下载按钮
-            TextView btnDl = new TextView(this);
-            btnDl.setText("下载");
-            btnDl.setTextSize(14);
-            btnDl.setTextColor(Color.parseColor("#FF6600"));
-            btnDl.setPadding((int)(12 * density), (int)(4 * density),
-                    (int)(12 * density), (int)(4 * density));
-            btnDl.setTag("btn_download");
-            rightBlock.addView(btnDl);
-        } else {
-            // 选中勾选
-            TextView tvCheck = new TextView(this);
-            tvCheck.setText(isCurrent ? "✓" : "");
-            tvCheck.setTextSize(18);
-            tvCheck.setTextColor(Color.parseColor("#007AFF"));
-            tvCheck.setTag("check_mark");
-            rightBlock.addView(tvCheck);
-        }
-
-        row.addView(rightBlock);
-        row.setTag("font_row_" + subInfo);
-
-        // wrapper + 分隔线
-        LinearLayout wrapper = new LinearLayout(this);
-        wrapper.setOrientation(LinearLayout.VERTICAL);
-        wrapper.setClickable(true);
-        wrapper.setFocusable(true);
+    /**
+     * 获取 Android 波纹前景（如可用），否则返回 null
+     */
+    private android.graphics.drawable.Drawable getRippleOrNull() {
         android.util.TypedValue typedVal = new android.util.TypedValue();
-        getTheme().resolveAttribute(android.R.attr.selectableItemBackground, typedVal, true);
-        wrapper.setBackgroundResource(typedVal.resourceId);
-        wrapper.addView(row);
-        View divider = new View(this);
-        divider.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 1));
-        divider.setBackgroundColor(Color.parseColor("#E5E5EA"));
-        wrapper.addView(divider);
-
-        return wrapper;
+        if (getTheme().resolveAttribute(android.R.attr.selectableItemBackground, typedVal, true)) {
+            try {
+                return getResources().getDrawable(typedVal.resourceId, getTheme());
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return null;
     }
 
     /**
@@ -3512,41 +4360,22 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
-     * 构建/重建字体列表
+     * 构建/重建字体列表：按图中 3 列网格卡片样式
      */
     private void rebuildFontList(LinearLayout container) {
         container.removeAllViews();
         float density = getResources().getDisplayMetrics().density;
 
-        // ===== 本地字体 =====
-        addSectionHeader(container, "本地", density);
+        // 收集全部卡片数据：系统字体 + 默认字体 + 在线字体
+        java.util.List<FontCardItem> items = new java.util.ArrayList<>();
+        items.add(new FontCardItem("系统字体", FONT_SYSTEM_CSS, false, null));
+        items.add(new FontCardItem("默认字体", FONT_DEFAULT_CSS, false, null));
+        for (com.example.myapplication.bean.FontItem font : backendFonts) {
+            items.add(new FontCardItem(font.getName(), font.getCssName(), true, font));
+        }
 
-        // 默认字体
-        View defaultRow = buildFontRow("默认字体", "sans-serif",
-                "内置", false, FONT_DEFAULT_CSS.equals(currentFontFamily), density);
-        container.addView(defaultRow);
-        defaultRow.setOnClickListener(v -> {
-            currentFontFamily = FONT_DEFAULT_CSS;
-            applyFontFamilyToWebView();
-            saveReadingPreferences();
-            rebuildFontList(container);
-        });
-
-        // 系统字体
-        View systemRow = buildFontRow("系统字体", "跟随手机",
-                "内置", false, FONT_SYSTEM_CSS.equals(currentFontFamily), density);
-        container.addView(systemRow);
-        systemRow.setOnClickListener(v -> {
-            currentFontFamily = FONT_SYSTEM_CSS;
-            applyFontFamilyToWebView();
-            saveReadingPreferences();
-            rebuildFontList(container);
-        });
-
-        // ===== 在线字体 =====
-        addSectionHeader(container, "在线字体", density);
-
-        if (backendFonts.isEmpty()) {
+        if (items.size() == 2 && backendFonts.isEmpty()) {
+            // 在线字体尚未加载：先显示 loading，同时拉取列表
             TextView tvLoading = new TextView(this);
             tvLoading.setText("加载中...");
             tvLoading.setTextSize(14);
@@ -3555,25 +4384,61 @@ public class ReadActivity extends BaseActivity {
             tvLoading.setTag("tv_loading");
             container.addView(tvLoading);
             fetchFontsFromBackend(container);
-        } else {
-            buildBackendFontRows(container, density);
+            return;
+        }
+
+        final int cols = 3;
+        int margin = (int) (4 * density);
+        int cardHeight = (int) (56 * density);
+
+        LinearLayout currentRow = null;
+        for (int i = 0; i < items.size(); i++) {
+            if (i % cols == 0) {
+                currentRow = new LinearLayout(this);
+                currentRow.setOrientation(LinearLayout.HORIZONTAL);
+                currentRow.setLayoutParams(new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                container.addView(currentRow);
+            }
+            FontCardItem item = items.get(i);
+            View card = buildFontCard(item, density, cardHeight, item.isBackend && downloadedFonts.contains(item.cssName));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, cardHeight, 1);
+            lp.setMargins(margin, margin, margin, margin);
+            card.setLayoutParams(lp);
+            currentRow.addView(card);
+
+            // 点击切换 / 下载
+            card.setOnClickListener(v -> onFontCardClick(item, card, container));
+
+            // 已下载的在线字体可长按删除
+            if (item.isBackend && downloadedFonts.contains(item.cssName)) {
+                card.setOnLongClickListener(v -> {
+                    showDeleteFontDialog(item, container);
+                    return true;
+                });
+            }
+        }
+
+        // 补齐最后一行的空白占位，保持网格对齐
+        int remainder = items.size() % cols;
+        if (currentRow != null && remainder != 0) {
+            for (int i = 0; i < cols - remainder; i++) {
+                View spacer = new View(this);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, cardHeight, 1);
+                lp.setMargins(margin, margin, margin, margin);
+                spacer.setLayoutParams(lp);
+                currentRow.addView(spacer);
+            }
         }
     }
 
     /**
-     * 从 URL 下载字体文件到内部存储
+     * 从 URL 下载字体文件到内部存储（在卡片内显示下载进度）
      */
-    private void downloadFontFromUrl(String fileUrl, String cssName, String displayName,
-                                     TextView btnRef, LinearLayout container) {
-        // 对路径中的中文/特殊字符做 URL 编码
-        String encodedPath;
-        try {
-            java.net.URI uri = new java.net.URI("http", "47.99.126.75:8080", fileUrl, null);
-            encodedPath = uri.toASCIIString();
-        } catch (Exception e) {
-            encodedPath = RetrofitClient.getFullImageUrl(fileUrl);
-        }
-        final String fullUrl = encodedPath;
+    private void downloadFontFromUrl(long fontId, String cssName, String displayName,
+                                     View card, LinearLayout container) {
+        // 通过字体 id 走后端流式下载接口，避免 URL 中出现中文文件名导致下载失败（400/500）
+        final String fullUrl = RetrofitClient.getFullImageUrl("/api/fonts/file/" + fontId);
         new Thread(() -> {
             try {
                 java.io.File fontsDir = new java.io.File(getFilesDir(), "fonts");
@@ -3592,43 +4457,54 @@ public class ReadActivity extends BaseActivity {
                 if (!response.isSuccessful() || response.body() == null) {
                     throw new java.io.IOException("下载失败: " + response.code());
                 }
+                long total = response.body().contentLength();
                 java.io.InputStream is = response.body().byteStream();
                 java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile);
+
                 byte[] buf = new byte[8192];
                 int len;
+                long downloadedBytes = 0;
                 while ((len = is.read(buf)) != -1) {
                     fos.write(buf, 0, len);
+                    downloadedBytes += len;
+                    if (total > 0 && card != null) {
+                        final int pct = (int) (downloadedBytes * 100 / total);
+                        runOnUiThread(() -> updateFontCardProgress(card, pct));
+                    }
                 }
                 fos.close();
                 is.close();
 
                 runOnUiThread(() -> {
+                    downloadingFonts.remove(cssName);
                     downloadedFonts.add(cssName);
-                    saveReadingPreferences();
                     Toast.makeText(this, displayName + " 下载完成", Toast.LENGTH_SHORT).show();
                     // 自动切换到新下载的字体
                     currentFontFamily = cssName;
+                    currentFontDisplay = displayName;
                     applyFontFamilyToWebView();
                     saveReadingPreferences();
                     refreshFontSelection(container);
-                    // 更新按钮状态
-                    if (btnRef != null) {
-                        btnRef.setText("✓");
-                        btnRef.setTextColor(Color.parseColor("#007AFF"));
-                        btnRef.setEnabled(false);
-                    }
+                    applyCurrentFontToSwitchButton();
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
+                    downloadingFonts.remove(cssName);
                     Toast.makeText(this, "下载失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    if (btnRef != null) {
-                        btnRef.setText("重试");
-                        btnRef.setTextColor(Color.parseColor("#FF6600"));
-                        btnRef.setEnabled(true);
-                    }
+                    refreshFontSelection(container);
                 });
             }
         }).start();
+    }
+
+    /**
+     * 更新卡片下载进度 UI
+     */
+    private void updateFontCardProgress(View card, int pct) {
+        TextView tvProgress = card.findViewWithTag("font_progress_text");
+        android.widget.ProgressBar pb = card.findViewWithTag("font_progress_bar");
+        if (tvProgress != null) tvProgress.setText(pct + "%");
+        if (pb != null) pb.setProgress(pct);
     }
 
     /**
@@ -3700,8 +4576,39 @@ public class ReadActivity extends BaseActivity {
         switchSwipePage.setChecked(swipePageTurn);
         switchSwipePage.setOnCheckedChangeListener((buttonView, isChecked) -> {
             swipePageTurn = isChecked;
+            // 同步给前端：关闭后 reader.html 不再启用跟手拖拽
+            if (isWebViewReady) webView.evaluateJavascript("setSwipeEnabled(" + swipePageTurn + ")", null);
             saveReadingPreferences();
         });
+
+        // ===== 自动翻页速度（慢10s / 中5s / 快3s）=====
+        TextView tvAutoSlow = popupView.findViewById(R.id.tv_auto_slow);
+        TextView tvAutoNormal = popupView.findViewById(R.id.tv_auto_normal);
+        TextView tvAutoFast = popupView.findViewById(R.id.tv_auto_fast);
+        final TextView[] speedViews = {tvAutoSlow, tvAutoNormal, tvAutoFast};
+        final int[] speedValues = {10000, 5000, 3000};
+        // 当前选中的下标
+        int selIdx = 1;
+        for (int i = 0; i < speedValues.length; i++) {
+            if (speedValues[i] == autoPageInterval) { selIdx = i; break; }
+        }
+        final int[] selRef = {selIdx};
+        updateAutoSpeedUI(speedViews, selRef[0]);
+        for (int i = 0; i < speedViews.length; i++) {
+            final int idx = i;
+            speedViews[i].setOnClickListener(v -> {
+                selRef[0] = idx;
+                autoPageInterval = speedValues[idx];
+                updateAutoSpeedUI(speedViews, idx);
+                saveReadingPreferences();
+                // 若正在自动翻页，立即以新间隔重启
+                if (autoPageEnabled) {
+                    stopAutoPage();
+                    if (!autoPageSuspended) startAutoPage();
+                }
+                Toast.makeText(ReadActivity.this, "翻页间隔：" + (autoPageInterval / 1000) + " 秒", Toast.LENGTH_SHORT).show();
+            });
+        }
 
         TextView tvHeaderFooterMinus = popupView.findViewById(R.id.tv_header_footer_minus);
         TextView tvHeaderFooterPlus = popupView.findViewById(R.id.tv_header_footer_plus);
@@ -3730,24 +4637,26 @@ public class ReadActivity extends BaseActivity {
         });
 
         popupView.findViewById(R.id.tv_more_settings_done).setOnClickListener(v -> {
-            if (moreSettingsPopupWindow != null) moreSettingsPopupWindow.dismiss();
+            SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
+            if (h != null) h.dismissAnimated();
+            else if (moreSettingsPopupWindow != null) moreSettingsPopupWindow.dismiss();
         });
 
-        themeViewTree(popupView, isNightMode);
+        themeViewTree(popupView);
 
-        moreSettingsPopupWindow = new PopupWindow(popupView,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                true);
-        moreSettingsPopupWindow.setAnimationStyle(R.style.BottomSlideAnimation);
-        moreSettingsPopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        moreSettingsPopupWindow.showAtLocation(layoutBottomNav, Gravity.BOTTOM, 0, 0);
+        // 弹窗高度固定为屏幕一半，内容过多时由内部 ScrollView 滚动
+        android.util.DisplayMetrics msDm = new android.util.DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(msDm);
+        int msPopupHeight = msDm.heightPixels / 2;
 
-        dimBackground(true);
+        // 以全屏透明窗口 + 跟手下滑容器承载面板
+        moreSettingsPopupWindow = showSwipeDismissPopup(popupView, msPopupHeight, "more");
+        suspendAutoPage();
+
         mainHandler.removeCallbacks(hideNavRunnable);
         moreSettingsPopupWindow.setOnDismissListener(() -> {
-            dimBackground(false);
             resetAutoHideTimer();
+            resumeAutoPageIfSuspended();
         });
     }
 
@@ -3788,16 +4697,312 @@ public class ReadActivity extends BaseActivity {
 
 
     // ==================== 自动翻页 ====================
+    private long autoPageCycleStart = 0; // 当前翻页周期起点（用于页眉倒计时）
+    private final Runnable autoPageCountdownRunnable = new Runnable() {
+        @Override public void run() {
+            if (!autoPageEnabled || autoPageSuspended || !activityResumed) return;
+            if (autoPageInterval <= 0) return;
+            long elapsed = System.currentTimeMillis() - autoPageCycleStart;
+            long remaining = autoPageInterval - (elapsed % autoPageInterval);
+            int sec = (int) Math.ceil(remaining / 1000.0);
+            if (sec <= 0) sec = 1;
+            if (isWebViewReady) webView.evaluateJavascript("setAutoPageCountdown(" + sec + ")", null);
+            autoPageHandler.postDelayed(this, 1000);
+        }
+    };
+
     private void startAutoPage() {
+        if (!autoPageEnabled) return;
         stopAutoPage();
+        autoPageCycleStart = System.currentTimeMillis();
         autoPageRunnable = () -> {
-            webView.evaluateJavascript("nextPage()", null);
-            autoPageHandler.postDelayed(autoPageRunnable, 8000);
+            // 仅在阅读器就绪且当前没有弹窗遮挡时翻页；翻页动画中 nextPage 会自动忽略
+            if (isWebViewReady && !isAnySettingsPopupShowing()) {
+                webView.evaluateJavascript("nextPage()", null);
+            }
+            // 翻页后开启新周期，让倒计时同步归位
+            autoPageCycleStart = System.currentTimeMillis();
+            autoPageHandler.postDelayed(autoPageRunnable, autoPageInterval);
         };
-        autoPageHandler.postDelayed(autoPageRunnable, 8000);
+        autoPageHandler.postDelayed(autoPageRunnable, autoPageInterval);
+        // 启动页眉倒计时刷新（每秒一次）
+        autoPageHandler.removeCallbacks(autoPageCountdownRunnable);
+        autoPageHandler.postDelayed(autoPageCountdownRunnable, 1000);
     }
+
+    /** 仅移除定时回调，保留 autoPageEnabled 状态（用于挂起/恢复）；同时隐藏页眉倒计时 */
     private void stopAutoPage() {
         if (autoPageRunnable != null) autoPageHandler.removeCallbacks(autoPageRunnable);
+        autoPageHandler.removeCallbacks(autoPageCountdownRunnable);
+        if (isWebViewReady) webView.evaluateJavascript("setAutoPageCountdown(0)", null);
+    }
+
+    /**
+     * 跟手下滑关闭容器：作为 PopupWindow 的 contentView（全屏透明），内部承载底部面板。
+     * <p>之所以用「自定义 ViewGroup + onInterceptTouchEvent」而不是 OnTouchListener：
+     * 面板里有 ViewPager2 / RecyclerView / 按钮，它们会消费 ACTION_DOWN，挂在父布局上的
+     * OnTouchListener 根本收不到后续 MOVE；而 onInterceptTouchEvent 发生在子 View 之前，
+     * 能正确抢下手势。同时全屏容器保证面板下移时不会被 PopupWindow 的半屏窗口边界裁掉。
+     */
+    private static class SwipeDismissLayout extends FrameLayout {
+        private View panel;
+        private View retractView;    // 收回动画的作用对象（被容器裁剪的面板本体）
+        private View scrollable;
+        private Runnable dismissAction;
+        private float startRawX, startRawY;
+        private boolean dragging;
+        private boolean maybeDrag;
+        private boolean outsideDown;
+        private VelocityTracker vt;
+        private final float slop;
+        private final float threshold;
+
+        SwipeDismissLayout(Context c) {
+            super(c);
+            float d = c.getResources().getDisplayMetrics().density;
+            slop = 8 * d;
+            threshold = 90 * d;
+            setClickable(true);          // 保证空白区域的 DOWN 也能进入 onTouchEvent
+            setClipChildren(false);      // 面板下移时不被容器裁掉
+        }
+
+        void setPanel(View v) { panel = v; }
+        void setRetractView(View v) { retractView = v; }
+        void setScrollable(View v) { scrollable = v; }
+        void setDismissAction(Runnable r) { dismissAction = r; }
+
+        /** 可滚动内容是否已在顶部（只有置顶时才允许下拉关闭） */
+        private boolean canDrag() {
+            if (scrollable == null) return true;
+            if (scrollable instanceof ScrollView) return ((ScrollView) scrollable).getScrollY() <= 0;
+            if (scrollable instanceof AbsListView) {
+                AbsListView lv = (AbsListView) scrollable;
+                return lv.getChildCount() == 0
+                        || (lv.getFirstVisiblePosition() == 0 && lv.getChildAt(0).getTop() >= 0);
+            }
+            if (scrollable instanceof RecyclerView) return !((RecyclerView) scrollable).canScrollVertically(-1);
+            return scrollable.getScrollY() <= 0;
+        }
+
+        /** 跟手关闭：外层容器（panel）继续向下滑出屏幕后关闭，全程可见 */
+        void dismissByDrag() {
+            animateOut(panel, 180);
+        }
+
+        /** 收回关闭：面板（retractView，被容器裁剪）收回到「目录/夜间/设置」行内后关闭 */
+        void dismissAnimated() {
+            animateOut(retractView != null ? retractView : panel, 200);
+        }
+
+        private void animateOut(View target, long duration) {
+            if (target == null) { if (dismissAction != null) dismissAction.run(); return; }
+            float from = target.getTranslationY();
+            float to = target.getHeight() > 0 ? target.getHeight() : from + 300f;
+            if (to <= from) to = from + 1f;
+            target.animate().cancel();
+            target.animate().translationY(to)
+                    .setDuration(duration)
+                    .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                    .withEndAction(() -> {
+                        target.setTranslationY(0f);
+                        if (dismissAction != null) dismissAction.run();
+                    }).start();
+        }
+
+        /** 从任意子 View 向上找到承载它的 SwipeDismissLayout（用于关闭按钮触发带动画关闭） */
+        static SwipeDismissLayout findHost(View v) {
+            android.view.ViewParent p = v != null ? v.getParent() : null;
+            while (p != null) {
+                if (p instanceof SwipeDismissLayout) return (SwipeDismissLayout) p;
+                p = p.getParent();
+            }
+            return null;
+        }
+
+        /** 按下点是否落在面板上方（面板之外的空白区域） */
+        private boolean isOutside(MotionEvent ev) {
+            if (panel == null) return false;
+            int[] loc = new int[2];
+            panel.getLocationOnScreen(loc);
+            return ev.getRawY() < loc[1] - 1;
+        }
+
+        private boolean shouldStartDrag(MotionEvent ev) {
+            if (panel == null || outsideDown) return false;
+            float dy = ev.getRawY() - startRawY;
+            float adx = Math.abs(ev.getRawX() - startRawX);
+            return dy > slop && dy > adx && canDrag();
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent ev) {
+            if (panel == null) return false;
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    startRawX = ev.getRawX();
+                    startRawY = ev.getRawY();
+                    dragging = false;
+                    maybeDrag = true;
+                    outsideDown = isOutside(ev);
+                    obtainVt(ev);
+                    return false; // 先让子 View 正常处理 DOWN
+                case MotionEvent.ACTION_MOVE:
+                    if (maybeDrag && !dragging && shouldStartDrag(ev)) {
+                        dragging = true;   // 抢下手势，子 View 会收到 ACTION_CANCEL
+                    }
+                    return dragging;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    return dragging;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent ev) {
+            if (panel == null) return false;
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) obtainVt(ev);
+            else if (vt != null) vt.addMovement(ev);
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    startRawX = ev.getRawX();
+                    startRawY = ev.getRawY();
+                    dragging = false;
+                    maybeDrag = true;
+                    outsideDown = isOutside(ev);
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    if (maybeDrag && !dragging && shouldStartDrag(ev)) dragging = true;
+                    if (dragging) {
+                        panel.setTranslationY(Math.max(0f, ev.getRawY() - startRawY));
+                        return true;
+                    }
+                    return outsideDown; // 面板外按下：保持消费，便于抬起时关闭
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL: {
+                    boolean up = ev.getActionMasked() == MotionEvent.ACTION_UP;
+                    if (dragging) {
+                        if (vt != null) vt.computeCurrentVelocity(1000);
+                        float yv = vt != null ? vt.getYVelocity() : 0f;
+                        float ty = panel.getTranslationY();
+                        if (ty > threshold || yv > 1200) {
+                            dismissByDrag();   // 跟手：外层容器继续下滑出屏幕
+                        } else {
+                            panel.animate().translationY(0f).setDuration(160).start();
+                        }
+                        dragging = false;
+                        maybeDrag = false;
+                        releaseVt();
+                        return true;
+                    }
+                    maybeDrag = false;
+                    releaseVt();
+                    if (outsideDown && up && Math.abs(ev.getRawY() - startRawY) < slop
+                            && Math.abs(ev.getRawX() - startRawX) < slop) {
+                        dismissAnimated();   // 点击面板外部关闭
+                        return true;
+                    }
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        private void obtainVt(MotionEvent ev) {
+            if (vt == null) vt = VelocityTracker.obtain(); else vt.clear();
+            vt.addMovement(ev);
+        }
+
+        private void releaseVt() {
+            if (vt != null) { vt.recycle(); vt = null; }
+        }
+    }
+
+    /** 用跟手下滑容器包住底部面板，并以全屏透明窗口承载（保证下滑时不被窗口边界裁掉） */
+    private PopupWindow showSwipeDismissPopup(View popupView, int panelHeight, String logTag) {
+        // 其它浮窗保持原有呈现：面板直接贴屏幕底（不抬高、不做容器裁剪），
+        // 仅用全屏透明窗口承载，使跟手下拉时面板不会被窗口边界裁掉。
+        SwipeDismissLayout host = new SwipeDismissLayout(this);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                panelHeight > 0 ? panelHeight : ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.gravity = Gravity.BOTTOM;
+        popupView.setLayoutParams(lp);
+        host.addView(popupView);
+        host.setPanel(popupView);
+        View sc = popupView.findViewById(R.id.popup_scroll);
+        if (sc != null) host.setScrollable(sc);
+
+        PopupWindow popup = new PopupWindow(host,
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, true);
+        // ❌ 不能用整窗位移动画：slide_in_bottom 的 100% 是相对「窗口高度」，
+        // 窗口改成全屏后位移 = 整屏高，面板前一半路程都在屏幕外，看上去就是「从屏幕底部飞入」。
+        // 改为取消整窗动画，只对面板本身做入场位移（仅在其最终位置范围内滑出）。
+        popup.setAnimationStyle(0);
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        host.setDismissAction(() -> popup.dismiss());
+        popup.showAtLocation(findViewById(android.R.id.content), Gravity.BOTTOM, 0, 0);
+
+        // 入场：必须在首帧绘制「之前」把面板移到容器下沿之外。
+        // 用 post() 会在首帧绘制「之后」才执行，于是先按最终位置画出完整面板（一闪），
+        // 接着才被移到屏幕外（消失），再滑回来 —— 即「全部显现 → 消失 → 从底部滑出」。
+        // 故与设置面板一致改用 OnPreDrawListener：首帧绘制前完成位移。
+        popupView.setVisibility(View.INVISIBLE); // INVISIBLE 仍参与测量布局，仅不绘制，避免首帧闪现
+        host.getViewTreeObserver().addOnPreDrawListener(
+                new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    @Override
+                    public boolean onPreDraw() {
+                        float h = popupView.getHeight() > 0 ? popupView.getHeight() : (float) panelHeight;
+                        if (h <= 0) return true; // 尚未测量完成，等下一帧
+                        popupView.getViewTreeObserver().removeOnPreDrawListener(this);
+                        popupView.setVisibility(View.VISIBLE);
+                        popupView.setTranslationY(h);
+                        popupView.animate().translationY(0f).setDuration(220)
+                                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+                        return true;
+                    }
+                });
+        return popup;
+    }
+
+    /** 打开设置弹窗时挂起自动翻页，避免页面在面板背后继续翻动 */
+    private void suspendAutoPage() {
+        if (autoPageEnabled && autoPageRunnable != null) {
+            stopAutoPage();
+            autoPageSuspended = true;
+        }
+    }
+
+    /** 设置弹窗关闭后，若仍处于开启状态且 Activity 在前台则恢复自动翻页 */
+    private void resumeAutoPageIfSuspended() {
+        if (autoPageEnabled && autoPageSuspended && activityResumed) {
+            autoPageSuspended = false;
+            startAutoPage();
+        }
+    }
+
+    /** 是否有任意设置类弹窗正在显示（自动翻页应暂停） */
+    private boolean isAnySettingsPopupShowing() {
+        return (settingsPopupWindow != null && settingsPopupWindow.isShowing())
+                || (moreSettingsPopupWindow != null && moreSettingsPopupWindow.isShowing())
+                || (fontsPopupWindow != null && fontsPopupWindow.isShowing())
+                || (bgColorsPopupWindow != null && bgColorsPopupWindow.isShowing());
+    }
+
+    /** 书末自动关闭时，若设置弹窗正打开则同步开关 UI */
+    private void syncAutoPageSwitchUI() {
+        if (settingsPopupWindow != null && settingsPopupWindow.isShowing()) {
+            SwitchCompat sw = settingsPopupWindow.getContentView().findViewById(R.id.switch_auto_page);
+            if (sw != null) sw.setChecked(false);
+        }
+    }
+
+    /** 高亮当前选中的自动翻页速度按钮（蓝字为选中） */
+    private void updateAutoSpeedUI(TextView[] views, int idx) {
+        for (int i = 0; i < views.length; i++) {
+            views[i].setTextColor(i == idx ? getColor(R.color.ios_blue) : getColor(R.color.ios_text_secondary));
+        }
     }
 
     // ==================== 缓存与本地书 ====================
@@ -3957,6 +5162,13 @@ public class ReadActivity extends BaseActivity {
     // ==================== 生命周期 ====================
     @Override protected void onPause() {
         super.onPause();
+        activityResumed = false;
+        // ✅ 离开前台时清空 sActiveInstance：防止 paused 的 ReadActivity 仍被 themeViewTree
+        // 误判为「前台活跃」，导致迟到的回调（比如某些 popup post、RecyclerView bind 等）把
+        // 当前 Activity（比如 BookDetailActivity / 书城 / 书架）的 view 染色。
+        if (sActiveInstance == this) sActiveInstance = null;
+        // 离开阅读器时暂停自动翻页，回到前台再恢复
+        suspendAutoPage();
         if (readStartTime > 0) {
             long minutes = (System.currentTimeMillis() - readStartTime) / 60000;
             if (minutes > 0) {
@@ -3972,12 +5184,17 @@ public class ReadActivity extends BaseActivity {
     }
     @Override protected void onResume() {
         super.onResume();
+        activityResumed = true;
+        // 标记本实例为前台活跃，供 themeViewTree 宿主判定使用
+        sActiveInstance = this;
         readStartTime = System.currentTimeMillis();
         mainHandler.postDelayed(hideNavRunnable, 3000);
         if (showBatteryTime && showHeaderFooter) {
             updateBatteryAndTime();
             timeUpdateHandler.postDelayed(timeUpdateRunnable, 60000);
         }
+        // 从后台回来：若自动翻页被挂起则恢复
+        resumeAutoPageIfSuspended();
     }
 
     /** 上一个全局未捕获异常处理器（进入 Activity 时保存，销毁时恢复） */
