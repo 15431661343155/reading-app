@@ -40,11 +40,6 @@
 
     </LinearLayout>
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/ios_separator" />
-
     <!-- 内容区：固定半屏，超出滚动 -->
     <ScrollView
         android:id="@+id/popup_scroll"

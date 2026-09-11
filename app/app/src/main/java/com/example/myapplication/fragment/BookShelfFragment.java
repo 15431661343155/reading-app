@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.myapplication.R;
+import com.example.myapplication.activity.BookDetailActivity;
 import com.example.myapplication.activity.ReadActivity;
 import com.example.myapplication.activity.UploadBookActivity;
 import com.example.myapplication.adapter.BookAdapter;
@@ -29,6 +30,7 @@ import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.Bookshelf;
 import com.example.myapplication.bean.ReadingProgress;
+import com.example.myapplication.utils.LocalBookParser;
 import com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView;
 
 import java.io.File;
@@ -94,6 +96,16 @@ public class BookShelfFragment extends Fragment {
         loadCustomGroups();
         buildGroupTabs();
 
+        // 后台清扫孤儿 HTML 缓存目录（local_book_html/<bookId> 中 bookId 已不在 local_books）
+        // 兜住"重导入同一本书但未先删除旧书"产生的残留；失败不影响主流程
+        new Thread(() -> {
+            try {
+                if (getActivity() != null) {
+                    LocalBookParser.cleanupOrphanHtmlCache(getActivity().getApplicationContext());
+                }
+            } catch (Throwable ignored) {}
+        }, "html-cache-sweep").start();
+
         // 设置下拉刷新颜色
         swipeRefresh.setColorSchemeResources(R.color.ios_blue, R.color.ios_blue);
 
@@ -127,9 +139,7 @@ public class BookShelfFragment extends Fragment {
                 Integer stObj = book.getStatus();
                 int st = stObj == null ? 0 : stObj;
                 if (st == -2) {
-                    intent.putExtra("isExternal", true);
-                    // 章节走 ReadActivity 内部的三级兜底：Intent extra → 共享缓存 → API 拉取
-                    startActivity(intent);
+                    openExternalBook(book);
                     return;
                 }
 
@@ -160,6 +170,46 @@ public class BookShelfFragment extends Fragment {
 
         loadReadTime();
         return view;
+    }
+
+    /**
+     * 外站书籍：复用书城可靠的"章节列表获取"逻辑（内存缓存 → 持久化缓存 → 网络），
+     * 拿到章节列表后再带进阅读器。这样阅读器不再需要在内部异步拉取章节列表（该路径偶发卡在"正在加载"），
+     * 与书城"在线阅读"表现一致：缓存命中即时进入，未命中先拉取再进入。
+     */
+    private void openExternalBook(Book book) {
+        if (getActivity() == null) return;
+        List<String[]> cached = BookDetailActivity.getExternalChapters(getActivity(), book);
+        if (cached != null && !cached.isEmpty()) {
+            launchExternalRead(book, cached);
+            return;
+        }
+        // 缓存未命中：先可靠拉取章节列表（与书城在线阅读同一套逻辑），成功后再进入阅读器
+        android.widget.Toast.makeText(getActivity(), "加载章节列表...", android.widget.Toast.LENGTH_SHORT).show();
+        BookDetailActivity.fetchOnlineChapters(getActivity(), book, new BookDetailActivity.ChaptersCallback() {
+            @Override
+            public void onSuccess(List<String[]> chapters) {
+                if (getActivity() != null) launchExternalRead(book, chapters);
+            }
+            @Override
+            public void onFail(String msg, boolean sourceMayDown) {
+                if (getActivity() != null) {
+                    android.widget.Toast.makeText(getActivity(),
+                            sourceMayDown ? "书源暂不可用，请稍后重试" : msg,
+                            android.widget.Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    /** 带章节列表进入阅读器（小书走 Intent，大书走共享缓存，与书城一致）。 */
+    private void launchExternalRead(Book book, List<String[]> chapters) {
+        Intent intent = new Intent(getActivity(), ReadActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        intent.putExtra("book", book);
+        intent.putExtra("isExternal", true);
+        BookDetailActivity.putChaptersExtra(getActivity(), intent, book, chapters);
+        startActivity(intent);
     }
 
     /**
@@ -683,9 +733,10 @@ public class BookShelfFragment extends Fragment {
         List<String> names = new ArrayList<>();
         List<String> authors = new ArrayList<>();
         List<String> covers = new ArrayList<>();
+        List<String> coverPaths = new ArrayList<>();
+        List<String> intros = new ArrayList<>();
         List<Integer> chapterCounts = new ArrayList<>();
         List<List<String>> allTitles = new ArrayList<>();
-        List<List<String>> allContents = new ArrayList<>();
 
         for (int i = 0; i < count; i++) {
             long id = sp.getLong("book_id_" + i, 0);
@@ -695,17 +746,17 @@ public class BookShelfFragment extends Fragment {
             names.add(sp.getString("book_name_" + i, ""));
             authors.add(sp.getString("book_author_" + i, ""));
             covers.add(sp.getString("book_cover_" + i, ""));
+            coverPaths.add(sp.getString("book_cover_path_" + i, ""));
+            intros.add(sp.getString("book_intro_" + i, ""));
             int chCount = sp.getInt("chapter_count_" + i, 0);
             chapterCounts.add(chCount);
 
+            // 正文已改为文件缓存，这里只需搬运章节标题
             List<String> titles = new ArrayList<>();
-            List<String> contents = new ArrayList<>();
             for (int j = 0; j < chCount; j++) {
                 titles.add(sp.getString("chapter_title_" + i + "_" + j, ""));
-                contents.add(sp.getString("chapter_content_" + i + "_" + j, ""));
             }
             allTitles.add(titles);
-            allContents.add(contents);
         }
 
         // 重新写入 SharedPreferences
@@ -718,12 +769,12 @@ public class BookShelfFragment extends Fragment {
             editor.putString("book_name_" + i, names.get(i));
             editor.putString("book_author_" + i, authors.get(i));
             editor.putString("book_cover_" + i, covers.get(i));
+            editor.putString("book_cover_path_" + i, coverPaths.get(i));
+            editor.putString("book_intro_" + i, intros.get(i));
             editor.putInt("chapter_count_" + i, chapterCounts.get(i));
             List<String> titles = allTitles.get(i);
-            List<String> contents = allContents.get(i);
             for (int j = 0; j < titles.size(); j++) {
                 editor.putString("chapter_title_" + i + "_" + j, titles.get(j));
-                editor.putString("chapter_content_" + i + "_" + j, contents.get(j));
             }
         }
         editor.apply();
@@ -786,6 +837,10 @@ public class BookShelfFragment extends Fragment {
         // 4) 分组归属 shelf_group_assign：移除 id_{bookId}
         getActivity().getSharedPreferences(PREF_GROUP_ASSIGN, Context.MODE_PRIVATE)
                 .edit().remove("id_" + bookId).apply();
+
+        // 5) EPUB「保留样式」HTML 文件缓存：删除 filesDir/local_book_html/<bookId> 整目录
+        //    否则重导入同书会生成新 bookId 目录，旧目录残留成为孤儿文件
+        LocalBookParser.deleteHtmlCache(getActivity(), bookId);
     }
 
     /**

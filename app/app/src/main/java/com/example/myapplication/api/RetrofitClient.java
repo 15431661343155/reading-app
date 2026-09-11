@@ -54,6 +54,15 @@ public class RetrofitClient {
         if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
             return relativePath;
         }
+        // ✅ 本地文件（例如导入电子书解析出的封面，保存在应用私有目录）直接返回 file:// URI。
+        //    否则会被拼成 "http://服务器/data/user/0/.../cover_x.jpg" 这种根本不存在的地址，
+        //    Glide 加载失败 → 一直显示默认占位封面（书架看上去就是「本书暂无封面」）。
+        if (relativePath.startsWith("file://") || relativePath.startsWith("content://")) {
+            return relativePath;
+        }
+        if (relativePath.startsWith("/") && new java.io.File(relativePath).exists()) {
+            return "file://" + relativePath;
+        }
         String baseUrl = BASE_URL;
         if (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);

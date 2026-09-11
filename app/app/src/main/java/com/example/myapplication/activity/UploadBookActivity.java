@@ -14,6 +14,13 @@ import android.widget.Toast;
 import androidx.appcompat.widget.Toolbar;
 
 import com.example.myapplication.R;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.utils.ThemeManager;
 
@@ -135,28 +142,59 @@ public class UploadBookActivity extends BaseActivity {
         return lower.endsWith(".txt") || lower.endsWith(".epub");
     }
 
+    @SuppressWarnings("deprecation")
     private void submitBookInfo(){
-        String bookName = etBookName.getText().toString().trim();
-        String author = etAuthor.getText().toString().trim();
+        final String inputName = etBookName.getText().toString().trim();
+        final String inputAuthor = etAuthor.getText().toString().trim();
 
         if(selectedFileUri == null){
             Toast.makeText(this,"请选择TXT/EPUB电子书文件",Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // ========== 解析书籍 ==========
-        long bookId = System.currentTimeMillis();
+        final Uri fileUri = selectedFileUri;
+        final String fileName = selectedFileName;
 
-        LocalBookParser.BookInfo bookInfo = LocalBookParser.parse(this, selectedFileUri, selectedFileName, bookId);
+        // ========== 解析书籍（后台线程） ==========
+        // 大 EPUB 解压 + 图片内联可能耗时数秒，放 UI 线程会卡死甚至 ANR。
+        // 注意：本地导入全程不联网，离线状态同样可用。
+        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
+        pd.setMessage("正在导入，请稍候…");
+        pd.setCancelable(false);
+        pd.show();
+        btnSubmit.setEnabled(false);
 
-        if(bookName.isEmpty()) bookName = bookInfo.title;
-        if(author.isEmpty()) author = bookInfo.author;
+        new Thread(() -> {
+            final long bookId = System.currentTimeMillis();
+            LocalBookParser.BookInfo parsed = null;
+            String errMsg = null;
+            try {
+                parsed = LocalBookParser.parse(this, fileUri, fileName, bookId);
+                String finalName = inputName.isEmpty() ? parsed.title : inputName;
+                String finalAuthor = inputAuthor.isEmpty() ? parsed.author : inputAuthor;
+                cacheLocalBook(bookId, finalName, finalAuthor, parsed);
+            } catch (Throwable t) {
+                errMsg = (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage());
+                android.util.Log.e("UploadBookActivity", "本地书导入失败", t);
+                // 兜底：解析/缓存中途失败，清掉可能已写入的半成品 HTML 缓存
+                LocalBookParser.deleteHtmlCache(this, bookId);
+            }
 
-        // 缓存到本地
-        cacheLocalBook(bookId, bookName, author, bookInfo);
-
-        Toast.makeText(this,"成功导入：" + bookName + "（" + bookInfo.chapters.size() + "章）",Toast.LENGTH_SHORT).show();
-        finish();
+            final LocalBookParser.BookInfo bookInfo = parsed;
+            final String err = errMsg;
+            runOnUiThread(() -> {
+                if (pd.isShowing()) pd.dismiss();
+                if (isFinishing() || isDestroyed()) return;
+                if (err != null || bookInfo == null) {
+                    btnSubmit.setEnabled(true);
+                    Toast.makeText(this, "导入失败：" + (err != null ? err : "未知错误"), Toast.LENGTH_LONG).show();
+                    return;
+                }
+                String okName = inputName.isEmpty() ? bookInfo.title : inputName;
+                Toast.makeText(this, "成功导入：" + okName + "（" + bookInfo.chapters.size() + "章）", Toast.LENGTH_SHORT).show();
+                finish();
+            });
+        }, "local-book-import").start();
     }
 
     private void cacheLocalBook(long bookId, String bookName, String author, LocalBookParser.BookInfo bookInfo) {
@@ -171,12 +209,20 @@ public class UploadBookActivity extends BaseActivity {
         editor.putString("book_author_" + count, author);
         editor.putString("book_cover_" + count, bookInfo.cover != null ? bookInfo.cover : "");
         editor.putString("book_cover_path_" + count, bookInfo.coverPath != null ? bookInfo.coverPath : "");
+        // 简介（来自 EPUB 的 dc:description 或「内容简介」章）；很短，放 SP 无压力
+        editor.putString("book_intro_" + count, bookInfo.intro != null ? bookInfo.intro : "");
         editor.putInt("chapter_count_" + count, bookInfo.chapters.size());
 
         for (int i = 0; i < bookInfo.chapters.size(); i++) {
-            editor.putString("chapter_title_" + count + "_" + i, bookInfo.chapters.get(i).title);
-            editor.putString("chapter_content_" + count + "_" + i, bookInfo.chapters.get(i).content);
+            LocalBookParser.Chapter ch = bookInfo.chapters.get(i);
+            editor.putString("chapter_title_" + count + "_" + i, ch.title);
         }
+        // 正文与 HTML 一律落文件缓存，不进 SharedPreferences：
+        // SP 是整文件 DOM 读写，1000+ 章的正文序列化出的 XML 有十几 MB，
+        // 每次写入都要重建整棵 DOM 并全量落盘，会导致「正在导入」长时间卡住。
+        // 且整本书只写**一个**容器文件（按章各写一个文件时，1800 章会产生 3600 个文件，
+        // 实测这种规模的光是建文件就要 70 秒以上）。
+        LocalBookParser.writeBookChapters(this, bookId, bookInfo.chapters);
 
         editor.apply();
     }

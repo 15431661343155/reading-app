@@ -29,6 +29,13 @@ public class Chapter {
     @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String content;
 
+    /**
+     * 保留样式的正文（EPUB 导入时写入，自包含 HTML 片段）。
+     * 为空表示只有纯文本，阅读器按纯文本渲染。
+     */
+    @Column(name = "content_html", columnDefinition = "LONGTEXT")
+    private String contentHtml;
+
     @Column(name = "sort_order", nullable = false, columnDefinition = "INT DEFAULT 0")
     private Integer sortOrder = 0;
 

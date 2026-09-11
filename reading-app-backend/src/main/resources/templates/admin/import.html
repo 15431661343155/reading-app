@@ -1,137 +1,142 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="UTF-8">
+<html xmlns:th="http://www.thymeleaf.org" data-page-node-id="FeElbATzGcXXsNawMBF5Qt">
+<head data-page-node-id="r1W5LmolN0cf0E2JwQmuM8">
+  <meta charset="UTF-8" data-page-node-id="GzFCobw11hF29flTsFRrru">
   <title>数据导入</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" data-page-node-id="3WCc3HmV4wtOpsAkIuxTGZ">
 </head>
-<body>
-<nav class="navbar navbar-dark bg-dark">
-  <div class="container-fluid">
-    <a href="/admin" class="navbar-brand">📚 阅读App管理后台</a>
-    <div>
-      <a href="/admin" class="btn btn-outline-light btn-sm me-2">🏠 首页</a>
-      <a href="/admin/books" class="btn btn-outline-light btn-sm me-2">书籍管理</a>
-      <a href="/admin/chapters" class="btn btn-outline-light btn-sm me-2">章节管理</a>
-      <a href="/admin/import" class="btn btn-outline-light btn-sm me-2">数据导入</a>
-      <a href="/admin/online-source" class="btn btn-outline-light btn-sm me-2">🌐 在线书源</a>
-      <a href="/admin/book-source" class="btn btn-outline-light btn-sm me-2">⚙️ 书源管理</a>
-      <a href="/admin/users" class="btn btn-outline-light btn-sm me-2">用户管理</a>
-      <a href="/admin/resource" class="btn btn-outline-light btn-sm me-2">📦 资源管理</a>
-      <a href="/admin/feedback" class="btn btn-outline-light btn-sm">💬 意见反馈</a>
+<body data-page-node-id="QtCmnkO7XejsgeDY6ZynVo">
+<nav class="navbar navbar-dark bg-dark" data-page-node-id="5KYhYoSRCAijSZj51rzVCp">
+  <div class="container-fluid" data-page-node-id="EjH5ME0GIQ0mvW1zKYxH4n">
+    <a href="/admin" class="navbar-brand" data-page-node-id="L1tU31EfMoTH1puFcMe1aW">📚 阅读App管理后台</a>
+    <div data-page-node-id="9Mg8gfwe4gw7ogOzjQNDFP">
+      <a href="/admin" class="btn btn-outline-light btn-sm me-2" data-page-node-id="YMviZwiGHSAgn1pbiVGUHG">🏠 首页</a>
+      <a href="/admin/books" class="btn btn-outline-light btn-sm me-2" data-page-node-id="UV0g0l7ccBiILDTZGWQY7B">书籍管理</a>
+      <a href="/admin/chapters" class="btn btn-outline-light btn-sm me-2" data-page-node-id="g9oy0huMRhW2nelF3G2Bf8">章节管理</a>
+      <a href="/admin/import" class="btn btn-outline-light btn-sm me-2" data-page-node-id="7AMuhU6uv0GE6RnxdViigG">数据导入</a>
+      <a href="/admin/online-source" class="btn btn-outline-light btn-sm me-2" data-page-node-id="1Weaxl8ktbB1xPE5v2QLKU">🌐 在线书源</a>
+      <a href="/admin/book-source" class="btn btn-outline-light btn-sm me-2" data-page-node-id="JFACPIO5lhHZOhwLbhCwA7">⚙️ 书源管理</a>
+      <a href="/admin/users" class="btn btn-outline-light btn-sm me-2" data-page-node-id="u76olnh8vrERDcTdSvl6Si">用户管理</a>
+      <a href="/admin/resource" class="btn btn-outline-light btn-sm me-2" data-page-node-id="uWcw98GC4sADNG0mPcvPLG">📦 资源管理</a>
+      <a href="/admin/feedback" class="btn btn-outline-light btn-sm" data-page-node-id="VhRkENBlGpCgoEukso1hyb">💬 意见反馈</a>
     </div>
   </div>
 </nav>
 
-<div class="container mt-4">
-  <div class="row">
+<div class="container mt-4" data-page-node-id="RIxzQZN5wCRWtZCMUNsUU7">
+  <div class="row" data-page-node-id="aExacvTO7m00m5yJYUUPkn">
     <!-- 批量导入 SQL -->
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header bg-primary text-white">📋 批量导入 SQL</div>
-        <div class="card-body">
-          <p>粘贴 INSERT SQL 语句，批量导入书籍和章节</p>
+    <div class="col-md-6" data-page-node-id="hHeMHpmzt6oN9j2EylxNNK">
+      <div class="card" data-page-node-id="6TVSA2xGxv569AMOttwPm7">
+        <div class="card-header bg-primary text-white" data-page-node-id="zzFmwucZjaDugZATXsy3fl">📋 批量导入 SQL</div>
+        <div class="card-body" data-page-node-id="9CptOEAide3mT8iUeVoV82">
+          <p data-page-node-id="lhmTUJEZOfGGZJXAYPs7Hp">粘贴 INSERT SQL 语句，批量导入书籍和章节</p>
           <textarea id="sqlInput" class="form-control mb-3" rows="10"
                     placeholder="INSERT INTO book ...&#10;INSERT INTO chapter ..."></textarea>
-          <button class="btn btn-primary" onclick="importSQL()">执行导入</button>
-          <div id="sqlResult" class="mt-2"></div>
+          <button class="btn btn-primary" onclick="importSQL()" data-page-node-id="vC0NY3C80rDxiSOa1GgRmK">执行导入</button>
+          <div id="sqlResult" class="mt-2" data-page-node-id="1k7QHIres6KZJw6C9rLefr"></div>
         </div>
       </div>
     </div>
 
     <!-- 快速添加测试数据 -->
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header bg-success text-white">🚀 快速生成测试数据</div>
-        <div class="card-body">
-          <div class="mb-3">
-            <label class="form-label">书名</label>
-            <input type="text" class="form-control" id="bookTitle" placeholder="输入书名">
+    <div class="col-md-6" data-page-node-id="ORiLMoswz9P9vlhboBNlLB">
+      <div class="card" data-page-node-id="K2UBKaMCkIGSwbBSgKuQZh">
+        <div class="card-header bg-success text-white" data-page-node-id="fmbXNhynPsSa7xd8kWCQMg">🚀 快速生成测试数据</div>
+        <div class="card-body" data-page-node-id="AOh9HYyLAUsEFAnKAhwzcJ">
+          <div class="mb-3" data-page-node-id="w4C1FDnMQ9ecRQFjzjPRO0">
+            <label class="form-label" data-page-node-id="8L0s47cwnSrKoQsLwjHzA7">书名</label>
+            <input type="text" class="form-control" id="bookTitle" placeholder="输入书名" data-page-node-id="rg4dS8cqG6U8Flc11PQBXC">
           </div>
-          <div class="mb-3">
-            <label class="form-label">作者</label>
-            <input type="text" class="form-control" id="bookAuthor" placeholder="输入作者">
+          <div class="mb-3" data-page-node-id="PeEQPSQLZXwiwRhzN0aZpW">
+            <label class="form-label" data-page-node-id="fZdYC1yAkhhkab0szmPd9Y">作者</label>
+            <input type="text" class="form-control" id="bookAuthor" placeholder="输入作者" data-page-node-id="ls9jN5RlhvxBEF7wNBKvNE">
           </div>
-          <div class="mb-3">
-            <label class="form-label">分类</label>
-            <input type="text" class="form-control" id="bookCategory" placeholder="玄幻/仙侠/武侠...">
+          <div class="mb-3" data-page-node-id="Bw7Y82VChdGQGP5Uyet9YE">
+            <label class="form-label" data-page-node-id="LYe9OpJLZQSvu7brC5qZoP">分类</label>
+            <input type="text" class="form-control" id="bookCategory" placeholder="玄幻/仙侠/武侠..." data-page-node-id="PM1TngPqLAVVtb0SFJt2Iw">
           </div>
-          <div class="mb-3">
-            <label class="form-label">简介</label>
+          <div class="mb-3" data-page-node-id="2KAqlpk8S2hVXk9zbqxiYF">
+            <label class="form-label" data-page-node-id="R7agPXIxTXkoUv3B04pD7p">简介</label>
             <textarea class="form-control" id="bookIntro" rows="3"></textarea>
           </div>
-          <div class="mb-3">
-            <label class="form-label">章节数</label>
-            <input type="number" class="form-control" id="chapterCount" value="10">
+          <div class="mb-3" data-page-node-id="CGzgA71k6fZleDV7b7SFyP">
+            <label class="form-label" data-page-node-id="gTB6Vbmh1LTcK23kwD2vVr">章节数</label>
+            <input type="number" class="form-control" id="chapterCount" value="10" data-page-node-id="rzRteAEW4k2MrnHBDWCHTQ">
           </div>
-          <button class="btn btn-success" onclick="generateData()">生成测试数据</button>
-          <div id="genResult" class="mt-2"></div>
+          <button class="btn btn-success" onclick="generateData()" data-page-node-id="923IutF4rCHMp6sGPQZOBz">生成测试数据</button>
+          <div id="genResult" class="mt-2" data-page-node-id="bA1288yRUC8uOdpOwG6quh"></div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- 上传 TXT 文件 -->
-  <div class="row mt-4">
-    <div class="col-md-12">
-      <div class="card">
-        <div class="card-header bg-warning text-dark">📄 上传 TXT 文件自动分章</div>
-        <div class="card-body">
-          <p>上传 TXT 文件，自动按"第X章"分割生成章节，并自动提取书名、作者、简介信息</p>
-          <div class="mb-3">
-            <label class="form-label">书名 <span class="text-muted">(留空则自动提取)</span></label>
-            <input type="text" class="form-control" id="txtBookTitle" placeholder="从文件中自动提取">
+  <div class="row mt-4" data-page-node-id="R8LXkwEDsUtniI0wshiY3f">
+    <div class="col-md-12" data-page-node-id="sBW3O45vTVYbkrhoZxSshS">
+      <div class="card" data-page-node-id="RJzanLTTqqyH4BOQR5hcRA">
+        <div class="card-header bg-warning text-dark" data-page-node-id="I0I94MldOC4uuF20hl8byE">📄 上传 TXT 文件自动分章</div>
+        <div class="card-body" data-page-node-id="uamflybC64xGGE6hyherJv">
+          <p data-page-node-id="YzYda5coPMN6Kp4AHitSuz">上传 TXT 文件，自动识别编码、按"第X章"等切分章节，并从文件名/正文中提取书名、作者、简介</p>
+          <div class="mb-3" data-page-node-id="E8wFPEoyFAXX68zWobi5it">
+            <label class="form-label" data-page-node-id="7c3zp5BtRzyuZxY8F0PEy9">书名 <span class="text-muted" data-page-node-id="UAvZA1uoMKDE3SrB76VuDj">(留空则自动提取，优先级：手动 &gt; 正文标注 &gt; 文件名)</span></label>
+            <input type="text" class="form-control" id="txtBookTitle" placeholder="从文件中自动提取" data-page-node-id="uu7RWuVYRrdEERaWvrGa5z">
           </div>
-          <div class="mb-3">
-            <label class="form-label">作者 <span class="text-muted">(留空则自动提取)</span></label>
-            <input type="text" class="form-control" id="txtAuthor" placeholder="从文件中自动提取">
+          <div class="mb-3" data-page-node-id="GCVJBwuTfLVyWhbjRlZTPR">
+            <label class="form-label" data-page-node-id="05oLAg30rQKb1CiX1YWXAJ">作者 <span class="text-muted" data-page-node-id="mzVORmRBXpNEUONBuUBoFq">(留空则自动提取，识别不到为"佚名")</span></label>
+            <input type="text" class="form-control" id="txtAuthor" placeholder="从文件中自动提取" data-page-node-id="L75TTloAqXdntJI5BwLVKV">
           </div>
-          <div class="mb-3">
-            <label class="form-label">分类</label>
-            <input type="text" class="form-control" id="txtCategory" placeholder="玄幻/仙侠/武侠...">
+          <div class="mb-3" data-page-node-id="DjJDJZincIBO2NmT1WKJUB">
+            <label class="form-label" data-page-node-id="nUgVLCCTxs5xhXpwJvN5bM">分类</label>
+            <input type="text" class="form-control" id="txtCategory" placeholder="玄幻/仙侠/武侠..." data-page-node-id="D5dOAvEM6eNob0iXupQAXN">
           </div>
-          <div class="mb-3">
-            <label class="form-check">
-              <input type="checkbox" class="form-check-input" id="autoExtract" checked>
-              <span class="form-check-label">启用自动提取（书名、作者、简介）</span>
+          <div class="mb-3" data-page-node-id="LXIFS2kBjjKZgOxxfuNtXJ">
+            <label class="form-check" data-page-node-id="GJ30gAjUZOj3eNFRnHE7tH">
+              <input type="checkbox" class="form-check-input" id="autoExtract" checked data-page-node-id="351OBcClGoeLjWkUX0sCPy">
+              <span class="form-check-label" data-page-node-id="oOAH7NKiCBCf63vX3FKxMC">启用自动提取（书名、作者、简介）</span>
             </label>
           </div>
-          <div class="mb-3">
-            <label class="form-label">选择 TXT 文件</label>
-            <input type="file" class="form-control" id="txtFile" accept=".txt">
+          <div class="mb-3" data-page-node-id="syLAMRc2AODyueIZIzhQZf">
+            <label class="form-label" data-page-node-id="K4bN6aGOFZGnOjt7mAZKyI">选择 TXT 文件</label>
+            <input type="file" class="form-control" id="txtFile" accept=".txt" onchange="onTxtFilePicked(this)" data-page-node-id="K6Pd14caFFLiDUzPCXfsfb">
+            <div id="txtFileNameHint" class="form-text text-muted" data-page-node-id="Q8iWSciImsHBmEKtlEwekT"></div>
           </div>
-          <button class="btn btn-warning" onclick="uploadTxt()">上传并解析</button>
-          <div id="txtResult" class="mt-2"></div>
+          <button class="btn btn-warning" onclick="uploadTxt()" data-page-node-id="XU8A06muSq4Y5ht2oetckL">上传并解析</button>
+          <div id="txtResult" class="mt-2" data-page-node-id="UvAHZSvt4bp6N4s2nDBIaj"></div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- 上传 EPUB 文件 -->
-  <div class="row mt-4">
-    <div class="col-md-12">
-      <div class="card">
-        <div class="card-header bg-info text-white">📚 上传 EPUB 电子书</div>
-        <div class="card-body">
-          <p>上传 EPUB 格式电子书，自动提取书名、作者、简介和所有章节内容</p>
-          <div class="mb-3">
-            <label class="form-label">书名 <span class="text-muted">(留空则自动提取)</span></label>
-            <input type="text" class="form-control" id="epubBookTitle" placeholder="从EPUB元数据中自动提取">
+  <div class="row mt-4" data-page-node-id="lSjsHNDadAk4DaUQzcFlVz">
+    <div class="col-md-12" data-page-node-id="zW3NHaQx4VGrm7ox5kv89C">
+      <div class="card" data-page-node-id="Z3uQloIGx8A2KAi3wEGRTy">
+        <div class="card-header bg-info text-white" data-page-node-id="tLrnTgGGgx1dzaEusEwUZu">📚 上传 EPUB 电子书</div>
+        <div class="card-body" data-page-node-id="QqnQVPOc7y5uuMLTdJk7Z9">
+          <p data-page-node-id="0QvHYgYctylOTsJbJx90lD">上传 EPUB 格式电子书，自动提取书名、作者、简介和所有章节内容</p>
+          <div class="mb-3" data-page-node-id="hyTdcBfrmbvIvUMEwCd9p5">
+            <label class="form-label" data-page-node-id="e1umGzWkrPv1fl4dHdJWTE">书名 <span class="text-muted" data-page-node-id="ld6W9to7hadsHy3RKbZela">(留空则自动提取)</span></label>
+            <input type="text" class="form-control" id="epubBookTitle" placeholder="从EPUB元数据中自动提取" data-page-node-id="D1TkFRzhsXGNJ8ElvZIVQL">
           </div>
-          <div class="mb-3">
-            <label class="form-label">作者 <span class="text-muted">(留空则自动提取)</span></label>
-            <input type="text" class="form-control" id="epubAuthor" placeholder="从EPUB元数据中自动提取">
+          <div class="mb-3" data-page-node-id="9zksQWrdq7Ioj87jTLbGZZ">
+            <label class="form-label" data-page-node-id="cRu6YcTRQVg0uA6VUIhVve">作者 <span class="text-muted" data-page-node-id="PAhN7pBncC3umrDtHLPUH6">(留空则自动提取)</span></label>
+            <input type="text" class="form-control" id="epubAuthor" placeholder="从EPUB元数据中自动提取" data-page-node-id="V3KcnEB88ZcwtmNQPlGtY5">
           </div>
-          <div class="mb-3">
-            <label class="form-label">分类</label>
-            <input type="text" class="form-control" id="epubCategory" placeholder="玄幻/仙侠/武侠...">
+          <div class="mb-3" data-page-node-id="0jzvtNNEbje4kfes0TxQmG">
+            <label class="form-label" data-page-node-id="abG9Cb4wj5rDMfS6clUnRn">分类</label>
+            <input type="text" class="form-control" id="epubCategory" placeholder="玄幻/仙侠/武侠..." data-page-node-id="FIicjOXJaa3Zd8JJIShl0I">
           </div>
-          <div class="mb-3">
-            <label class="form-label">选择 EPUB 文件</label>
-            <input type="file" class="form-control" id="epubFile" accept=".epub">
+          <div class="mb-3 form-check" data-page-node-id="epubKeepStyleWrap">
+            <input type="checkbox" class="form-check-input" id="epubKeepStyle" checked data-page-node-id="epubKeepStyle">
+            <label class="form-check-label" for="epubKeepStyle">保留原文样式（内联 CSS，图片作为独立资源存储）</label>
           </div>
-          <button class="btn btn-info" onclick="uploadEpub()">上传并解析</button>
-          <div id="epubResult" class="mt-2"></div>
+          <div class="mb-3" data-page-node-id="SiTMkOdgmk81gFiG9N8l59">
+            <label class="form-label" data-page-node-id="a2ZlxCXC60X8PdLqoaDsFY">选择 EPUB 文件</label>
+            <input type="file" class="form-control" id="epubFile" accept=".epub" data-page-node-id="J7MT42R8GJOZFBWRnpGFWO">
+          </div>
+          <button class="btn btn-info" onclick="uploadEpub()" data-page-node-id="I1C19lP9dZICEnbECLd5Uf">上传并解析</button>
+          <div id="epubResult" class="mt-2" data-page-node-id="Hxzq0nmyH32ZiMynWb5AAf"></div>
         </div>
       </div>
     </div>
@@ -179,6 +184,49 @@
             });
   }
 
+  // 选中 TXT 后，用文件名预填书名/作者（仅作提示，后端仍会做完整解析）
+  function parseNameFromFile(name) {
+    let n = (name || '').replace(/\.(txt|epub|umd|azw3|mobi)$/i, '').trim();
+    n = n.replace(/[（(\[【][^）)\]】]{0,40}(小说网|文学网|书屋|笔趣阁|全文阅读|免费下载|txt下载|最新章节|完本|全集|校对|精校|无删减|纯净版|整理|首发)[^）)\]】]{0,40}[）)\]】]/gi, '');
+    n = n.replace(/(?:www\.)?[a-z0-9-]{1,30}\.(?:com|cn|net|org|cc|xyz|co|me)(?:\.[a-z]{2,3})?/gi, '');
+    n = n.replace(/(笔趣阁|八一中文|顶点小说|起点中文网|纵横中文网|番茄小说|小说下载|全文阅读|免费下载|txt下载|最新章节目录|最新章节|全集下载|精校版|无删减版)/gi, '');
+    n = n.replace(/[\s\-—_.]+$/, '').replace(/^[\s\-—_.]+/, '').trim();
+
+    const junk = /(全集|完本|完结|全文|校对|精校|无删减|纯净版|整理|转自|来自|下载|更新|最新|目录|章节|小说网|笔趣|首发|推荐|收藏|阅读|书签|txt|epub|第[〇零一二三四五六七八九十百千万亿两廿0-9]{1,12}[章节回卷部篇集])/i;
+    let title = n, author = '';
+
+    let m = n.match(/^《([^》]{1,60})》\s*(.*)$/);
+    if (m) {
+      title = m[1].trim();
+      const tail = m[2].trim();
+      const am = tail.match(/^[（(\[【]\s*([^\s（）()\[\]【】]{1,20})\s*[）)\]】]$/);
+      if (am && !junk.test(am[1])) author = am[1];
+    } else {
+      m = n.match(/^(.+?)\s*[（(\[【]\s*([^\s（）()\[\]【】]{1,20})\s*[）)\]】]\s*$/);
+      if (m) {
+        title = m[1].trim();
+        if (!junk.test(m[2])) author = m[2].trim();
+      }
+    }
+    title = title.replace(/[《》]/g, '').trim();
+    if (junk.test(title)) title = n.replace(/[《》]/g, '').trim();
+    return { title, author };
+  }
+
+  function onTxtFilePicked(input) {
+    const hint = document.getElementById('txtFileNameHint');
+    const file = input.files && input.files[0];
+    if (!file) { hint.textContent = ''; return; }
+    const r = parseNameFromFile(file.name);
+    const tEl = document.getElementById('txtBookTitle');
+    const aEl = document.getElementById('txtAuthor');
+    if (!tEl.value && r.title) tEl.value = r.title;
+    if (!aEl.value && r.author) aEl.value = r.author;
+    hint.textContent = '识别结果：书名「' + (r.title || '未识别') + '」'
+            + (r.author ? '，作者「' + r.author + '」' : '，未识别到作者')
+            + '（可手动修改，最终以后端解析为准）';
+  }
+
   // 上传 TXT
   function uploadTxt() {
     const file = document.getElementById('txtFile').files[0];
@@ -213,6 +261,7 @@
     const title = document.getElementById('epubBookTitle').value;
     const author = document.getElementById('epubAuthor').value;
     const category = document.getElementById('epubCategory').value;
+    const keepStyle = document.getElementById('epubKeepStyle').checked;
 
     if (!file) { alert('请选择EPUB文件'); return; }
 
@@ -221,6 +270,7 @@
     if (title) formData.append('title', title);
     if (author) formData.append('author', author);
     if (category) formData.append('category', category);
+    formData.append('keepStyle', keepStyle);
 
     fetch('/api/admin/import/epub', {
       method: 'POST',

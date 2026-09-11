@@ -17,6 +17,7 @@ import com.example.myapplication.R;
 import com.example.myapplication.adapter.ReadingRecordAdapter;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
+import com.example.myapplication.activity.BookDetailActivity;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.ReadingProgress;
 import com.example.myapplication.bean.ReadingRecord;
@@ -481,13 +482,24 @@ public class ReadingRecordActivity extends BaseActivity {
             book.setSourceType(record.getSourceType());
             book.setSourceUrl(record.getSourceUrl());
 
-            Intent intent = new Intent(this, ReadActivity.class);
-            intent.putExtra("book", book);
-            intent.putExtra("isExternal", true);
-            intent.putExtra("chapterIndex", record.getChapterIndex());
-            // 外站书籍的 ReadActivity.restoreReadingPosition() 会从 external_reading_records
-            // 按 sourceType|sourceUrl 组合键自动查出 page 并恢复到具体页码
-            startActivity(intent);
+            // 复用书城可靠取章节列表逻辑，带列表进阅读器，避免阅读器内异步拉取偶发卡"正在加载"
+            final int idx = record.getChapterIndex();
+            List<String[]> cached = BookDetailActivity.getExternalChapters(this, book);
+            if (cached != null && !cached.isEmpty()) {
+                launchExternalRead(book, cached, idx);
+            } else {
+                BookDetailActivity.fetchOnlineChapters(this, book, new BookDetailActivity.ChaptersCallback() {
+                    @Override
+                    public void onSuccess(List<String[]> chapters) {
+                        launchExternalRead(book, chapters, idx);
+                    }
+                    @Override
+                    public void onFail(String msg, boolean sourceMayDown) {
+                        Toast.makeText(ReadingRecordActivity.this,
+                                sourceMayDown ? "书源暂不可用，请稍后重试" : msg, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
             return;
         }
 
@@ -515,6 +527,17 @@ public class ReadingRecordActivity extends BaseActivity {
         intent.putExtra("chapterIndex", record.getChapterIndex());
         intent.putExtra("chapterProgress", record.getChapterProgress());
         intent.putExtra("isLocal", isLocalBook);
+        startActivity(intent);
+    }
+
+    /** 带章节列表进入外站阅读器（小书走 Intent，大书走共享缓存，与书城一致）。 */
+    private void launchExternalRead(Book book, List<String[]> chapters, int chapterIndex) {
+        Intent intent = new Intent(this, ReadActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        intent.putExtra("book", book);
+        intent.putExtra("isExternal", true);
+        if (chapterIndex >= 0) intent.putExtra("chapterIndex", chapterIndex);
+        BookDetailActivity.putChaptersExtra(this, intent, book, chapters);
         startActivity(intent);
     }
 

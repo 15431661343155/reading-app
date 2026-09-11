@@ -24,6 +24,7 @@ import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.Bookshelf;
 import com.example.myapplication.bean.ChapterDto;
 import com.example.myapplication.bean.ReadingProgress;
+import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.utils.ThemeManager;
 
 import java.util.List;
@@ -134,6 +135,17 @@ public class BookDetailActivity extends BaseActivity{
 
     @SuppressLint("SetTextI18n")
     private void displayBookInfo() {
+        // 本地书：intro 可能没随 Book 一起传进来（书架 → 阅读器 → 更多 → 书籍详情；
+        // 或阅读记录 → 阅读器 → 更多），这里统一按 bookId 从 local_books 回查一次。
+        // 查不到就保持原值，下面照常显示"暂无简介"。
+        if ((currentBook.getIntro() == null || currentBook.getIntro().isEmpty())
+                && currentBook.getId() != null && !isExternalBook()) {
+            String localIntro = LocalBookParser.findLocalBookIntro(this, currentBook.getId());
+            if (!localIntro.isEmpty()) {
+                currentBook.setIntro(localIntro);
+            }
+        }
+
         // 加载封面图片
         String coverUrl = currentBook.getCover();
         if (coverUrl != null && !coverUrl.isEmpty()) {
@@ -776,7 +788,7 @@ public class BookDetailActivity extends BaseActivity{
         // 先合并内存与持久化缓存
         List<String[]> cached = ONLINE_CHAPTER_CACHE.get(externalCacheKey());
         if (cached == null || cached.isEmpty()) {
-            cached = readChapterCacheFromDisk();
+            cached = readChapterCacheFromDisk(this, currentBook);
             if (cached != null && !cached.isEmpty()) {
                 ONLINE_CHAPTER_CACHE.put(externalCacheKey(), cached);
             }
@@ -857,7 +869,7 @@ public class BookDetailActivity extends BaseActivity{
 
     // ========== 外站章节列表：统一获取（内存 → 持久化 → 网络） ==========
 
-    private interface ChaptersCallback {
+    public interface ChaptersCallback {
         void onSuccess(List<String[]> chapters);
         void onFail(String msg, boolean sourceMayDown);
     }
@@ -933,32 +945,53 @@ public class BookDetailActivity extends BaseActivity{
 
     /**
      * 统一获取外站章节列表：内存缓存 → 持久化缓存 → 网络。
-     * 成功时更新内存缓存、持久化缓存、currentBook.chapterCount、tvLatestChapter。
-     * 失败时通过 callback 透传原因（sourceMayDown=true 表示可能书源失效，需兜底提示）。
+     * 实例版供详情页使用（会顺带刷新 tvLatestChapter）；静态版供书架等外部入口复用，避免重复实现。
      */
     private void fetchOnlineChapters(ChaptersCallback callback) {
-        String sourceType = currentBook.getSourceType();
-        String sourceBookId = currentBook.getSourceUrl();
+        fetchExternalChaptersCore(this, currentBook, new ChaptersCallback() {
+            @Override
+            public void onSuccess(List<String[]> chapters) {
+                currentBook.setChapterCount(chapters.size());
+                tvLatestChapter.setText("共" + chapters.size() + "章");
+                callback.onSuccess(chapters);
+            }
+            @Override
+            public void onFail(String msg, boolean sourceMayDown) {
+                callback.onFail(msg, sourceMayDown);
+            }
+        });
+    }
+
+    /** 静态版：供书架等外部入口复用，逻辑与详情页一致（缓存 → 网络），不带详情页 UI。 */
+    public static void fetchOnlineChapters(android.content.Context ctx, Book book, ChaptersCallback callback) {
+        fetchExternalChaptersCore(ctx, book, callback);
+    }
+
+    /**
+     * 外站章节列表核心获取逻辑：内存缓存 → 持久化缓存 → 网络。
+     * 成功时写回内存+磁盘缓存，失败时透传原因（sourceMayDown=true 表示可能书源失效）。
+     * 与书城"在线阅读"完全同一套逻辑，书架入口复用它即可避免阅读器内异步拉取偶发卡在"正在加载"。
+     */
+    private static void fetchExternalChaptersCore(android.content.Context ctx, Book book, ChaptersCallback callback) {
+        if (book == null) { callback.onFail("书籍信息缺失", false); return; }
+        String sourceType = book.getSourceType();
+        String sourceBookId = book.getSourceUrl();
         if (sourceType == null || sourceBookId == null || sourceBookId.isEmpty()) {
             callback.onFail("书源信息缺失", false);
             return;
         }
 
         // 1. 内存缓存
-        List<String[]> cached = ONLINE_CHAPTER_CACHE.get(externalCacheKey());
+        List<String[]> cached = ONLINE_CHAPTER_CACHE.get(externalCacheKeyFor(book));
         if (cached != null && !cached.isEmpty()) {
-            currentBook.setChapterCount(cached.size());
-            tvLatestChapter.setText("共" + cached.size() + "章");
             callback.onSuccess(cached);
             return;
         }
 
         // 2. 持久化缓存（SharedPreferences，App 重启后仍可用）
-        List<String[]> persisted = readChapterCacheFromDisk();
+        List<String[]> persisted = readChapterCacheFromDisk(ctx, book);
         if (persisted != null && !persisted.isEmpty()) {
-            ONLINE_CHAPTER_CACHE.put(externalCacheKey(), persisted);
-            currentBook.setChapterCount(persisted.size());
-            tvLatestChapter.setText("共" + persisted.size() + "章");
+            ONLINE_CHAPTER_CACHE.put(externalCacheKeyFor(book), persisted);
             callback.onSuccess(persisted);
             return;
         }
@@ -968,38 +1001,42 @@ public class BookDetailActivity extends BaseActivity{
                 .enqueue(new Callback<ApiResponse<List<String[]>>>() {
                     @Override
                     public void onResponse(@NonNull Call<ApiResponse<List<String[]>>> call,
-                                           Response<ApiResponse<List<String[]>>> response) {
-                        runOnUiThread(() -> {
-                            if (response.isSuccessful() && response.body() != null
-                                    && response.body().isSuccess()
-                                    && response.body().getData() != null
-                                    && !response.body().getData().isEmpty()) {
-                                List<String[]> chapters = response.body().getData();
-                                ONLINE_CHAPTER_CACHE.put(externalCacheKey(), chapters);
-                                writeChapterCacheToDisk(chapters);
-                                currentBook.setChapterCount(chapters.size());
-                                tvLatestChapter.setText("共" + chapters.size() + "章");
-                                callback.onSuccess(chapters);
-                            } else {
-                                String msg = response.body() != null ? response.body().getMessage() : "获取章节失败";
-                                if (msg == null || msg.isEmpty()) msg = "获取章节失败";
-                                callback.onFail(msg, true);
-                            }
-                        });
+                                           @NonNull Response<ApiResponse<List<String[]>>> response) {
+                        if (ctx instanceof android.app.Activity) {
+                            ((android.app.Activity) ctx).runOnUiThread(() -> onChaptersResult(ctx, response, book, callback));
+                        } else {
+                            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> onChaptersResult(ctx, response, book, callback));
+                        }
                     }
                     @Override
                     public void onFailure(@NonNull Call<ApiResponse<List<String[]>>> call, @NonNull Throwable t) {
-                        runOnUiThread(() -> callback.onFail("网络错误: " + t.getMessage(), true));
+                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> callback.onFail("网络错误: " + t.getMessage(), true));
                     }
                 });
     }
 
+    private static void onChaptersResult(android.content.Context ctx, @NonNull Response<ApiResponse<List<String[]>>> response, Book book, ChaptersCallback callback) {
+        if (response.isSuccessful() && response.body() != null
+                && response.body().isSuccess()
+                && response.body().getData() != null
+                && !response.body().getData().isEmpty()) {
+            List<String[]> chapters = response.body().getData();
+            ONLINE_CHAPTER_CACHE.put(externalCacheKeyFor(book), chapters);
+            writeChapterCacheToDisk(ctx, book, chapters);
+            callback.onSuccess(chapters);
+        } else {
+            String msg = response.body() != null ? response.body().getMessage() : "获取章节失败";
+            if (msg == null || msg.isEmpty()) msg = "获取章节失败";
+            callback.onFail(msg, true);
+        }
+    }
+
     // ========== 章节列表持久化（SharedPreferences，JSON 序列化） ==========
 
-    private List<String[]> readChapterCacheFromDisk() {
+    private static List<String[]> readChapterCacheFromDisk(android.content.Context ctx, Book book) {
         try {
-            SharedPreferences sp = getSharedPreferences("external_chapter_cache", MODE_PRIVATE);
-            String json = sp.getString(externalCacheKey(), "");
+            SharedPreferences sp = ctx.getSharedPreferences("external_chapter_cache", android.content.Context.MODE_PRIVATE);
+            String json = sp.getString(externalCacheKeyFor(book), "");
             if (json == null || json.isEmpty()) return null;
             org.json.JSONArray arr = new org.json.JSONArray(json);
             List<String[]> list = new java.util.ArrayList<>(arr.length());
@@ -1017,7 +1054,7 @@ public class BookDetailActivity extends BaseActivity{
         }
     }
 
-    private void writeChapterCacheToDisk(List<String[]> chapters) {
+    private static void writeChapterCacheToDisk(android.content.Context ctx, Book book, List<String[]> chapters) {
         try {
             org.json.JSONArray arr = new org.json.JSONArray();
             for (String[] pair : chapters) {
@@ -1027,8 +1064,8 @@ public class BookDetailActivity extends BaseActivity{
                 }
                 arr.put(item);
             }
-            SharedPreferences sp = getSharedPreferences("external_chapter_cache", MODE_PRIVATE);
-            sp.edit().putString(externalCacheKey(), arr.toString()).apply();
+            SharedPreferences sp = ctx.getSharedPreferences("external_chapter_cache", android.content.Context.MODE_PRIVATE);
+            sp.edit().putString(externalCacheKeyFor(book), arr.toString()).apply();
         } catch (Exception ignored) {
         }
     }
