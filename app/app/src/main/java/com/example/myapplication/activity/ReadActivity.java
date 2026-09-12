@@ -68,6 +68,7 @@ import com.example.myapplication.fragment.PopupChapterFragment;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.example.myapplication.api.RetrofitClient;
+import com.bumptech.glide.Glide;
 import com.example.myapplication.bean.ChapterDto;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.ReadTimeRequest;
@@ -207,6 +208,18 @@ public class ReadActivity extends BaseActivity {
 
     // ========== 章节数据 ==========
     private final List<Chapter> chapterList = new ArrayList<>();
+    /**
+     * 本地书的分卷结构（来自导入时持久化的紧凑卷表）；空列表表示该书无分卷信息，
+     * 目录浮窗按平铺章节列表显示。仅在 {@link #loadLocalBookChapters} 中填充。
+     */
+    private final List<LocalBookParser.VolumeInfo> localVolumes = new ArrayList<>();
+
+    // 本地书元信息（目录浮窗顶部信息头的兜底来源）：仅在 loadLocalBookChapters 里填充。
+    // 从阅读记录/详情页进来时 currentBook 可能缺书名/作者/封面，这里用 local_books 记录补齐。
+    private String localBookName = "";
+    private String localBookAuthor = "";
+    private String localBookCover = "";
+    private String localBookCoverPath = "";
     private final List<String> chapterContents = new ArrayList<>();
     /** 保留样式的 HTML（与 chapterContents 一一对应；为空表示用纯文本渲染） */
     private final List<String> chapterHtmlContents = new ArrayList<>();
@@ -2543,6 +2556,55 @@ public class ReadActivity extends BaseActivity {
     }
 
     // ==================== 目录 / 书签弹窗 ====================
+
+    /**
+     * 目录/书签浮窗顶部的书籍信息头：封面 / 书名 / 作者。
+     * 书名作者优先取 currentBook（从书架/详情/阅读记录带过来），缺失时回落到本地书 SP 记录；
+     * 封面取 currentBook 的封面，其次本地封面文件，最后本地书里的封面串（可能是 base64 或 URL）。
+     */
+    private void bindPopupBookInfoHeader(View popupView) {
+        try {
+            ImageView ivCover = popupView.findViewById(R.id.iv_popup_book_cover);
+            TextView tvTitle = popupView.findViewById(R.id.tv_popup_book_title);
+            TextView tvAuthor = popupView.findViewById(R.id.tv_popup_book_author);
+            if (ivCover == null || tvTitle == null || tvAuthor == null) return;
+
+            String title = (currentBook == null || currentBook.getTitle() == null)
+                    ? "" : currentBook.getTitle().trim();
+            if (title.isEmpty() && currentBook != null && currentBook.getBookName() != null) {
+                title = currentBook.getBookName().trim();
+            }
+            if (title.isEmpty() && localBookName != null) title = localBookName.trim();
+            tvTitle.setText(title.isEmpty() ? "未知书名" : title);
+
+            String author = (currentBook == null || currentBook.getAuthor() == null)
+                    ? "" : currentBook.getAuthor().trim();
+            if (author.isEmpty() && localBookAuthor != null) author = localBookAuthor.trim();
+            tvAuthor.setText(author.isEmpty() ? "未知作者" : author);
+
+            // 封面优先级：currentBook.cover → 本地封面文件 → 本地封面串
+            String cover = (currentBook == null || currentBook.getCover() == null)
+                    ? "" : currentBook.getCover().trim();
+            if (cover.isEmpty() && localBookCoverPath != null && !localBookCoverPath.isEmpty()
+                    && new java.io.File(localBookCoverPath).exists()) {
+                cover = localBookCoverPath;
+            }
+            if (cover.isEmpty() && localBookCover != null) cover = localBookCover.trim();
+
+            if (cover.isEmpty()) {
+                ivCover.setImageResource(R.drawable.default_book_cover);
+            } else {
+                Glide.with(this)
+                        .load(RetrofitClient.getFullImageUrl(cover))
+                        .placeholder(R.drawable.default_book_cover)
+                        .error(R.drawable.default_book_cover)
+                        .into(ivCover);
+            }
+        } catch (Throwable t) {
+            android.util.Log.e("ReadActivity", "目录浮窗书籍信息头填充失败", t);
+        }
+    }
+
     @SuppressLint("InflateParams")
     private void showChapterPopup() {
         try {
@@ -2553,6 +2615,9 @@ public class ReadActivity extends BaseActivity {
             View popupView = LayoutInflater.from(this).inflate(R.layout.popup_chapter_list, null);
             TabLayout tabLayout = popupView.findViewById(R.id.tab_layout_popup);
             ViewPager2 vpPopup = popupView.findViewById(R.id.view_pager_popup);
+
+            // 顶部书籍信息头（封面 / 书名 / 作者），目录与书签共用
+            bindPopupBookInfoHeader(popupView);
 
             vpPopup.setAdapter(createPopupPagerAdapter());
             new TabLayoutMediator(tabLayout, vpPopup, (tab, position) -> tab.setText(position == 0 ? "目录" : "书签")).attach();
@@ -2648,7 +2713,10 @@ public class ReadActivity extends BaseActivity {
         // 防御性拷贝：避免底层 chapterList 在加载完服务器新列表时被 replaceAll 清空导致 Popup 渲染崩溃/空白
         final List<Chapter> safeCopy = new ArrayList<>(chapterList);
         final int safeIndex = Math.max(0, Math.min(currentChapterIndex, safeCopy.size() - 1));
-        PopupChapterFragment chapterFragment = new PopupChapterFragment(safeCopy, safeIndex);
+        // 仅本地书带分卷结构；在线书的目录保持平铺（localVolumes 此时为空）
+        final List<LocalBookParser.VolumeInfo> safeVolumes =
+                isLocalBook ? new ArrayList<>(localVolumes) : new ArrayList<>();
+        PopupChapterFragment chapterFragment = new PopupChapterFragment(safeCopy, safeIndex, safeVolumes);
         chapterFragment.setOnChapterSelectedListener(chapterIndex -> {
             if (chapterPopupWindow != null) chapterPopupWindow.dismiss();
             if (chapterIndex < 0 || chapterIndex >= chapterList.size()) {
@@ -2927,6 +2995,11 @@ public class ReadActivity extends BaseActivity {
     private static final float CHROME_SHADE_2     = 0.12f;  // 二级底（浅色）
     private static final float CHROME_SHADE_2_DARK= 0.20f;  // 二级底（深色）
     private static final double DARK_LUM_THRESHOLD = 0.42;  // 低于该亮度即视为深色背景
+
+    // 目录浮窗「定位当前章节」悬浮按钮：圆盘 = 浮窗主底向主文字色微调 TOC_LOCATE_DISC_TINT_RATIO，
+    // 再叠加 TOC_LOCATE_DISC_ALPHA 的半透明；图标用主文字色（浅色主题即近黑，夜间自动转近白）。
+    private static final float TOC_LOCATE_DISC_TINT_RATIO = 0.10f;
+    private static final int   TOC_LOCATE_DISC_ALPHA      = 0xC0;
 
     private static int sChrome1 = 0xFFEFEFEF;   // 当前派生：导航 / 浮窗主底（白底 6% 压暗的初值）
     private static int sChrome2 = 0xFFD2D2D2;   // 当前派生：二级底
@@ -3273,6 +3346,24 @@ public class ReadActivity extends BaseActivity {
     private static void applyThemeRecursive(View view) {
         // 打了 tag_keep_own_color 的子树（如背景色块）必须显示自己的真实颜色，跳过
         if (Boolean.TRUE.equals(view.getTag(R.id.tag_keep_own_color))) return;
+
+        // 0) 目录浮窗「定位当前章节」悬浮按钮：半透明圆盘 + 主文字色图标。
+        //    圆盘底色由浮窗主底向主文字色微调（浅色主题=奶油白盘+深图标、夜间=深灰盘+浅图标），
+        //    因此不能走下面那张「已知色 → 派生色」的映射表（自定义混色不在表内），
+        //    这里直接按当前调色板生成，夜间切换时由 themeShowingPopups → 本方法实时重刷。
+        if (view.getId() == R.id.btn_toc_locate) {
+            try {
+                android.graphics.drawable.GradientDrawable disc = new android.graphics.drawable.GradientDrawable();
+                disc.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                int base = mixColors(sChrome1, sText1, TOC_LOCATE_DISC_TINT_RATIO);
+                disc.setColor((TOC_LOCATE_DISC_ALPHA << 24) | (base & 0x00FFFFFF));
+                view.setBackground(disc);
+                if (view instanceof ImageView) {
+                    ((ImageView) view).setImageTintList(ColorStateList.valueOf(sText1));
+                }
+            } catch (Throwable ignored) { }
+            return;
+        }
 
         // 1) 背景：纯色 / shape / selector / layer-list 递归重着色
         //    本项目的夜间模式是「手动」的（未调用 AppCompatDelegate），
@@ -5320,12 +5411,23 @@ public class ReadActivity extends BaseActivity {
         chapterList.clear();
         chapterContents.clear();
         chapterHtmlContents.clear();
+        localVolumes.clear();
+        localBookName = "";
+        localBookAuthor = "";
+        localBookCover = "";
+        localBookCoverPath = "";
         boolean found = false;
         for (int i = 0; i < count; i++) {
             if (sp.getLong("book_id_" + i, 0) == bookId) {
                 found = true;
                 int chCount = sp.getInt("chapter_count_" + i, 0);
                 android.util.Log.d("ReadActivity", "Found local book at index " + i + ", chapterCount=" + chCount);
+
+                // 书名/作者/封面：目录浮窗顶部信息头用（currentBook 缺字段时兜底）
+                localBookName = sp.getString("book_name_" + i, "");
+                localBookAuthor = sp.getString("book_author_" + i, "");
+                localBookCover = sp.getString("book_cover_" + i, "");
+                localBookCoverPath = sp.getString("book_cover_path_" + i, "");
 
                 for (int j = 0; j < chCount; j++) {
                     Chapter ch = new Chapter();
@@ -5337,6 +5439,18 @@ public class ReadActivity extends BaseActivity {
                     //    这里统一填等长占位，真正翻到该章时由 fetchChapterContent → reloadLocalChapterContent 按需读入。
                     chapterContents.add(LOCAL_CHAPTER_PLACEHOLDER);
                     chapterHtmlContents.add("");
+                }
+
+                // 分卷结构（导入时写入的紧凑卷表）：供目录浮窗做分卷折叠分组
+                int volCount = sp.getInt("book_volume_count_" + i, 0);
+                for (int v = 0; v < volCount; v++) {
+                    LocalBookParser.VolumeInfo vi = new LocalBookParser.VolumeInfo();
+                    vi.index = v + 1;
+                    vi.title = sp.getString("book_volume_title_" + i + "_" + v, "");
+                    vi.start = sp.getInt("book_volume_start_" + i + "_" + v, 0);
+                    vi.childStart = sp.getInt("book_volume_child_" + i + "_" + v, vi.start);
+                    vi.end = sp.getInt("book_volume_end_" + i + "_" + v, vi.start);
+                    localVolumes.add(vi);
                 }
                 break;
             }

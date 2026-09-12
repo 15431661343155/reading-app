@@ -737,6 +737,9 @@ public class BookShelfFragment extends Fragment {
         List<String> intros = new ArrayList<>();
         List<Integer> chapterCounts = new ArrayList<>();
         List<List<String>> allTitles = new ArrayList<>();
+        // 分卷结构：删书重排会重写整个 local_books，必须一并搬运，
+        // 否则删掉任意一本书后，其余 TXT 的分卷折叠目录会全部丢失（退化成平铺）。
+        List<List<LocalBookParser.VolumeInfo>> allVolumes = new ArrayList<>();
 
         for (int i = 0; i < count; i++) {
             long id = sp.getLong("book_id_" + i, 0);
@@ -757,6 +760,20 @@ public class BookShelfFragment extends Fragment {
                 titles.add(sp.getString("chapter_title_" + i + "_" + j, ""));
             }
             allTitles.add(titles);
+
+            // 搬运分卷结构（无分卷的书长度为 0）
+            int volCount = sp.getInt("book_volume_count_" + i, 0);
+            List<LocalBookParser.VolumeInfo> vols = new ArrayList<>();
+            for (int v = 0; v < volCount; v++) {
+                LocalBookParser.VolumeInfo vi = new LocalBookParser.VolumeInfo();
+                vi.index = v + 1;
+                vi.title = sp.getString("book_volume_title_" + i + "_" + v, "");
+                vi.start = sp.getInt("book_volume_start_" + i + "_" + v, 0);
+                vi.childStart = sp.getInt("book_volume_child_" + i + "_" + v, vi.start);
+                vi.end = sp.getInt("book_volume_end_" + i + "_" + v, vi.start);
+                vols.add(vi);
+            }
+            allVolumes.add(vols);
         }
 
         // 重新写入 SharedPreferences
@@ -775,6 +792,16 @@ public class BookShelfFragment extends Fragment {
             List<String> titles = allTitles.get(i);
             for (int j = 0; j < titles.size(); j++) {
                 editor.putString("chapter_title_" + i + "_" + j, titles.get(j));
+            }
+            // 回写分卷结构
+            List<LocalBookParser.VolumeInfo> vols = allVolumes.get(i);
+            editor.putInt("book_volume_count_" + i, vols.size());
+            for (int v = 0; v < vols.size(); v++) {
+                LocalBookParser.VolumeInfo vi = vols.get(v);
+                editor.putString("book_volume_title_" + i + "_" + v, vi.title != null ? vi.title : "");
+                editor.putInt("book_volume_start_" + i + "_" + v, vi.start);
+                editor.putInt("book_volume_child_" + i + "_" + v, vi.childStart);
+                editor.putInt("book_volume_end_" + i + "_" + v, vi.end);
             }
         }
         editor.apply();

@@ -44,6 +44,19 @@
         <item name="android:textColor">@color/ios_text_secondary</item>
     </style>
 
+    <!-- 目录「正序/倒序」切换按钮：阅读器与详情页目录共用，文字按钮样式 -->
+    <style name="TocSortButton" parent="Widget.AppCompat.TextView">
+        <item name="android:minWidth">56dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/ios_text_secondary</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
     <style name="Theme.Default" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/purple_500</item>
         <item name="colorOnPrimary">@color/white</item>

@@ -63,16 +63,13 @@
 
         </LinearLayout>
 
-        <!-- 正序/倒序切换按钮 -->
-        <ImageView
-            android:id="@+id/iv_sort_order"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="6dp"
-            android:src="@drawable/ic_sort_asc"
-            app:tint="@color/ios_text_primary"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="切换排序" />
+        <!-- 正序/倒序切换按钮（与阅读器目录一致：文字按钮） -->
+        <TextView
+            android:id="@+id/btn_toc_sort"
+            style="@style/TocSortButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="正序" />
 
     </LinearLayout>
 

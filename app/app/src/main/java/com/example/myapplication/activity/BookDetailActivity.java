@@ -4,7 +4,16 @@ import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.text.Layout;
+import android.text.StaticLayout;
+import android.text.TextUtils;
+import android.text.TextPaint;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ImageView;
@@ -43,6 +52,14 @@ public class BookDetailActivity extends BaseActivity{
     private int savedChapterIndex = 0;
     private String savedChapterTitle = "";
     private boolean hasRead = false;
+
+    // 简介折叠相关
+    private static final int INTRO_MAX_LINES = 3;
+    private static final int INTRO_ANIM_DURATION = 260;
+    private TextView tvIntroToggle;
+    private String introFullText = "";
+    private boolean introExpanded = false;
+    private ValueAnimator introAnim = null;
 
     private Book currentBook;
 
@@ -109,6 +126,12 @@ public class BookDetailActivity extends BaseActivity{
         tvBookName = findViewById(R.id.tv_detail_book_name);
         tvAuthor = findViewById(R.id.tv_detail_author);
         tvIntro = findViewById(R.id.tv_detail_intro);
+        tvIntroToggle = findViewById(R.id.tv_intro_toggle);
+
+        // 简介：点击正文区域或"展开/收起"按钮均可切换折叠状态
+        View.OnClickListener introToggleListener = v -> toggleIntro();
+        tvIntro.setOnClickListener(introToggleListener);
+        tvIntroToggle.setOnClickListener(introToggleListener);
         tvStatus = findViewById(R.id.tv_detail_status);
         tvLastRead = findViewById(R.id.tv_last_read);
         btnRead = findViewById(R.id.btn_start_read);
@@ -162,9 +185,14 @@ public class BookDetailActivity extends BaseActivity{
         tvAuthor.setText("作者：" + currentBook.getAuthor());
         String intro = currentBook.getIntro();
         if (intro == null || intro.isEmpty()) {
+            introFullText = "";
             tvIntro.setText("暂无简介");
+            tvIntroToggle.setVisibility(View.GONE);
         } else {
+            introFullText = intro;
             tvIntro.setText(intro);
+            // 等布局完成后再判断是否超 3 行，决定是否显示折叠按钮
+            tvIntro.post(this::refreshIntroToggle);
         }
 
         // 显示书籍状态（分类·状态·字数）
@@ -189,6 +217,126 @@ public class BookDetailActivity extends BaseActivity{
         btnRead.setEnabled(true);
         btnRead.setText(isExternalBook() ? "在线阅读" : "开始阅读");
         btnRead.setAlpha(1.0f);
+    }
+
+    /**
+     * 根据简介真实行数决定是否显示"展开/收起"按钮，并套用当前折叠状态。
+     * 用 StaticLayout 测量（不触发真实重布局，避免先全显再折叠的闪烁）。
+     */
+    private void refreshIntroToggle() {
+        if (introFullText.isEmpty()) {
+            tvIntroToggle.setVisibility(View.GONE);
+            return;
+        }
+        if (introNeedsToggle(introFullText)) {
+            tvIntroToggle.setVisibility(View.VISIBLE);
+            applyIntroCollapsed(!introExpanded);
+        } else {
+            // 不足 3 行，直接全显，不显示按钮
+            tvIntroToggle.setVisibility(View.GONE);
+            tvIntro.setMaxLines(Integer.MAX_VALUE);
+            tvIntro.setEllipsize(null);
+        }
+    }
+
+    /**
+     * 用与 tvIntro 完全相同的排版参数测量真实行数，判断是否超过 INTRO_MAX_LINES。
+     */
+    private boolean introNeedsToggle(String text) {
+        int width = tvIntro.getWidth();
+        if (width <= 0) return false;
+        int avail = width - tvIntro.getPaddingLeft() - tvIntro.getPaddingRight();
+        if (avail <= 0) return false;
+        TextPaint paint = tvIntro.getPaint();
+        StaticLayout sl = StaticLayout.Builder.obtain(
+                        text, 0, text.length(), paint, avail)
+                .setLineSpacing(tvIntro.getLineSpacingExtra(), tvIntro.getLineSpacingMultiplier())
+                .setIncludePad(tvIntro.getIncludeFontPadding())
+                .build();
+        return sl.getLineCount() > INTRO_MAX_LINES;
+    }
+
+    /** 点击简介正文或按钮时切换折叠/展开（带高度过渡动画） */
+    private void toggleIntro() {
+        if (tvIntroToggle.getVisibility() != View.VISIBLE) return;
+        animateIntroCollapsed(introExpanded);
+    }
+
+    /** collapsed=true 折叠（最多 3 行 + 省略号，按钮显示"展开"）；false 展开（全显，按钮显示"收起"）。
+     *  用于初始/异步重渲染时的瞬时设置，不做动画。 */
+    private void applyIntroCollapsed(boolean collapsed) {
+        introExpanded = !collapsed;
+        if (collapsed) {
+            tvIntro.setMaxLines(INTRO_MAX_LINES);
+            tvIntro.setEllipsize(TextUtils.TruncateAt.END);
+            tvIntroToggle.setText("展开");
+        } else {
+            tvIntro.setMaxLines(Integer.MAX_VALUE);
+            tvIntro.setEllipsize(null);
+            tvIntroToggle.setText("收起");
+        }
+    }
+
+    /** 用户手动切换：在折叠/展开之间做高度过渡动画 */
+    private void animateIntroCollapsed(boolean collapsed) {
+        // 先取消可能存在的旧动画，避免叠加
+        if (introAnim != null && introAnim.isRunning()) {
+            introAnim.cancel();
+        }
+        tvIntroToggle.setText(collapsed ? "展开" : "收起");
+        introExpanded = !collapsed;
+
+        int width = tvIntro.getWidth();
+        if (width <= 0) {
+            applyIntroCollapsed(collapsed);
+            return;
+        }
+        int specW = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY);
+        int specH = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+
+        // 完整高度
+        tvIntro.setMaxLines(Integer.MAX_VALUE);
+        tvIntro.setEllipsize(null);
+        tvIntro.measure(specW, specH);
+        int fullHeight = tvIntro.getMeasuredHeight();
+
+        // 折叠高度（最多 3 行）
+        tvIntro.setMaxLines(INTRO_MAX_LINES);
+        tvIntro.setEllipsize(TextUtils.TruncateAt.END);
+        tvIntro.measure(specW, specH);
+        int collapsedHeight = tvIntro.getMeasuredHeight();
+
+        // 动画期间始终按完整高度排版，仅靠改变 TextView 高度裁切来实现视觉折叠
+        tvIntro.setMaxLines(Integer.MAX_VALUE);
+        tvIntro.setEllipsize(null);
+
+        int startHeight = tvIntro.getHeight();
+        int endHeight = collapsed ? collapsedHeight : fullHeight;
+
+        final ViewGroup.LayoutParams lp = tvIntro.getLayoutParams();
+        introAnim = ValueAnimator.ofInt(startHeight, endHeight);
+        introAnim.setDuration(INTRO_ANIM_DURATION);
+        introAnim.setInterpolator(new AccelerateDecelerateInterpolator());
+        introAnim.addUpdateListener(animation -> {
+            lp.height = (int) animation.getAnimatedValue();
+            tvIntro.setLayoutParams(lp);
+        });
+        introAnim.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                // 动画结束后恢复为 WRAP_CONTENT，避免固定高度影响后续布局
+                if (collapsed) {
+                    tvIntro.setMaxLines(INTRO_MAX_LINES);
+                    tvIntro.setEllipsize(TextUtils.TruncateAt.END);
+                } else {
+                    tvIntro.setMaxLines(Integer.MAX_VALUE);
+                    tvIntro.setEllipsize(null);
+                }
+                lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                tvIntro.setLayoutParams(lp);
+            }
+        });
+        introAnim.start();
     }
 
     /**

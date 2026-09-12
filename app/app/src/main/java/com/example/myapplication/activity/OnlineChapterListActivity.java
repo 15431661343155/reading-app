@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.myapplication.R;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.utils.ActivityTransition;
+import com.example.myapplication.utils.TocOrder;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,10 +34,12 @@ public class OnlineChapterListActivity extends AppCompatActivity {
 
     private RecyclerView rvChapters;
     private TextView tvChapterCount;
+    private TextView btnTocSort;
     private List<String[]> chapters = new ArrayList<>();
     private Book book;
     private int currentChapterIndex = -1;
     private LinearLayoutManager layoutManager;
+    private final TocOrder order = new TocOrder();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,6 +55,11 @@ public class OnlineChapterListActivity extends AppCompatActivity {
 
         tvChapterCount = findViewById(R.id.tv_chapter_count);
         rvChapters = findViewById(R.id.rv_chapters);
+
+        // 正序/倒序切换按钮（与阅读器目录一致：文字按钮）
+        btnTocSort = findViewById(R.id.btn_toc_sort);
+        btnTocSort.setText(TocOrder.label(order.isDescending()));
+        btnTocSort.setOnClickListener(v -> toggleSortOrder());
 
         book = (Book) getIntent().getSerializableExtra("book");
         if (book == null) {
@@ -133,10 +141,26 @@ public class OnlineChapterListActivity extends AppCompatActivity {
         tvChapterCount.setText("共" + chapters.size() + "章");
         ChapterAdapter adapter = (ChapterAdapter) rvChapters.getAdapter();
         if (adapter != null) adapter.notifyDataSetChanged();
+        scrollToCurrentChapter();
+    }
+
+    /** 当前阅读章节在「当前排序」下的显示位置（用于高亮后自动定位） */
+    private void scrollToCurrentChapter() {
         if (currentChapterIndex >= 0 && currentChapterIndex < chapters.size()) {
-            final int target = Math.max(0, currentChapterIndex - 2);
+            int displayPos = order.toDisplayPosition(currentChapterIndex, chapters.size());
+            final int target = Math.max(0, displayPos - 2);
             rvChapters.post(() -> layoutManager.scrollToPositionWithOffset(target, 0));
         }
+    }
+
+    /** 正序/倒序切换：仅改变列表展示顺序，chapters 始终保留服务器原始顺序 */
+    private void toggleSortOrder() {
+        order.toggle();
+        btnTocSort.setText(TocOrder.label(order.isDescending()));
+        ChapterAdapter adapter = (ChapterAdapter) rvChapters.getAdapter();
+        if (adapter != null) adapter.notifyDataSetChanged();
+        // 正序第一行=第一章；倒序第一行=最后一章（display 0 在倒序下即 realIndex=size-1）
+        TocOrder.scrollToFirstRow(rvChapters);
     }
 
     private void showErrorDialog(String reason) {
@@ -206,10 +230,13 @@ public class OnlineChapterListActivity extends AppCompatActivity {
 
         @Override
         public void onBindViewHolder(@NonNull VH holder, int position) {
-            String[] ch = chapters.get(position);
-            String title = ch.length > 0 ? ch[0] : "第" + (position + 1) + "章";
-            boolean isCurrent = (position == currentChapterIndex);
-            ((TextView) holder.itemView).setText((position + 1) + ". " + title);
+            // 显示位置 → 真实章节下标（倒序时反转，但 chapters 始终保持服务器原始顺序，
+            // 以保证阅读记录/阅读器的 chapterIndex 含义不变）
+            int realIndex = order.toRealIndex(position, chapters.size());
+            String[] ch = chapters.get(realIndex);
+            String title = ch.length > 0 ? ch[0] : "第" + (realIndex + 1) + "章";
+            boolean isCurrent = (realIndex == currentChapterIndex);
+            ((TextView) holder.itemView).setText((realIndex + 1) + ". " + title);
 
             if (isCurrent) {
                 // 当前阅读章节：iOS 蓝高亮
@@ -228,14 +255,14 @@ public class OnlineChapterListActivity extends AppCompatActivity {
                 intent.putExtra("isExternal", true);
                 // 小书走 Intent，大书走共享缓存（始终写缓存，失败兜底）
                 BookDetailActivity.putChaptersExtra(OnlineChapterListActivity.this, intent, book, chapters);
-                intent.putExtra("chapterIndex", position);
+                intent.putExtra("chapterIndex", realIndex);
                 try { startActivity(intent); }
                 catch (RuntimeException te) {
                     Intent fallback = new Intent(OnlineChapterListActivity.this, ReadActivity.class);
                     fallback.putExtra("book", book);
                     fallback.putExtra("isExternal", true);
                     fallback.putExtra("chaptersViaCache", true);
-                    fallback.putExtra("chapterIndex", position);
+                    fallback.putExtra("chapterIndex", realIndex);
                     startActivity(fallback);
                 }
             });

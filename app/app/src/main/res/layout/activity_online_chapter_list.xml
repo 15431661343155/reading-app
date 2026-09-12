@@ -14,15 +14,34 @@
         app:titleTextColor="@color/ios_text_primary"
         app:navigationIcon="@drawable/ic_back_black" />
 
-    <TextView
-        android:id="@+id/tv_chapter_count"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="12dp"
-        android:text="共0章"
-        android:textColor="?attr/colorOnSurface"
-        android:background="?attr/colorSurface"
-        android:textSize="13sp" />
+        android:orientation="horizontal"
+        android:background="@color/ios_bg"
+        android:gravity="center_vertical"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:id="@+id/tv_chapter_count"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:padding="12dp"
+            android:text="共0章"
+            android:textColor="?attr/colorOnSurface"
+            android:background="?attr/colorSurface"
+            android:textSize="13sp" />
+
+        <!-- 正序/倒序切换按钮（与阅读器目录一致：文字按钮） -->
+        <TextView
+            android:id="@+id/btn_toc_sort"
+            style="@style/TocSortButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="正序" />
+
+    </LinearLayout>
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipe_refresh"

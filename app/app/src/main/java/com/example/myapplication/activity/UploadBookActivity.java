@@ -21,6 +21,7 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.util.List;
 import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.utils.ThemeManager;
 
@@ -216,6 +217,20 @@ public class UploadBookActivity extends BaseActivity {
         for (int i = 0; i < bookInfo.chapters.size(); i++) {
             LocalBookParser.Chapter ch = bookInfo.chapters.get(i);
             editor.putString("chapter_title_" + count + "_" + i, ch.title);
+        }
+
+        // 分卷结构（TXT 的「第X卷」/「（第X卷完）」、EPUB 的 NCX 层级）。
+        // 只存「每卷起始章 + 目录子项起始章 + 卷标题」这一张紧凑表（卷数量级为个位数），
+        // 不为每章各存一个卷号键——SP 是整文件读写，键越多导入越慢。
+        // 阅读器目录据此把卷渲染成可折叠分组；无分卷的书这张表为空，目录保持平铺。
+        List<LocalBookParser.VolumeInfo> volumes = LocalBookParser.buildVolumeInfos(bookInfo);
+        editor.putInt("book_volume_count_" + count, volumes.size());
+        for (int v = 0; v < volumes.size(); v++) {
+            LocalBookParser.VolumeInfo vi = volumes.get(v);
+            editor.putString("book_volume_title_" + count + "_" + v, vi.title != null ? vi.title : "");
+            editor.putInt("book_volume_start_" + count + "_" + v, vi.start);
+            editor.putInt("book_volume_child_" + count + "_" + v, vi.childStart);
+            editor.putInt("book_volume_end_" + count + "_" + v, vi.end);
         }
         // 正文与 HTML 一律落文件缓存，不进 SharedPreferences：
         // SP 是整文件 DOM 读写，1000+ 章的正文序列化出的 XML 有十几 MB，

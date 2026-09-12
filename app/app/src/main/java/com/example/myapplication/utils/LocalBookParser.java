@@ -334,14 +334,22 @@ public class LocalBookParser {
         info.author = "未知作者";
 
         String[] patterns = {
-                "^(第[\\d零一二三四五六七八九十百千万]+[卷集册部篇])\\s*(第[\\d零一二三四五六七八九十百千万]+[章节回]).*",
-                "^(第[\\d零一二三四五六七八九十百千万]+[章节回])\\s*(第[\\d零一二三四五六七八九十百千万]+[节]).*",
-                "^(第[\\d零一二三四五六七八九十百千万]+[卷集册部篇]).*",
-                "^(第[\\d零一二三四五六七八九十百千万]+[章节回]).*",
-                "^(序言|前言|楔子|引子|尾声|后记|番外|附录).*",
-                "^(\\d+[\\.、\\s]+).*",
+                // 卷+章（如「第一卷 第一章」）
+                "^(第[\\d零一二三四五六七八九十百千万]+[卷集册])\\s*(第[\\d零一二三四五六七八九十百千万]+[章节节]).*",
+                // 章+节（如「第一章 第一节」）
+                "^(第[\\d零一二三四五六七八九十百千万]+[章节节])\\s*(第[\\d零一二三四五六七八九十百千万]+[节]).*",
+                "^(第[\\d零一二三四五六七八九十百千万]+[卷集册]).*",
+                "^(第[\\d零一二三四五六七八九十百千万]+[章节节]).*",
+                // 回（古典章回体），但排除「回合」这类非章节标题
+                "^(第[\\d零一二三四五六七八九十百千万]+回(?!合)).*",
+                // 序言/前言等前置章节，但仅当其后不是紧跟汉字（避免把「前言不搭后语…」这类正文误判为章节）
+                "^(序言|前言|楔子|引子|尾声|后记|番外|附录)(?![\\u4e00-\\u9fa5]).*",
+                // 纯数字编号章节（「1. 标题」），排除「1.0版本…」这类小数，且不再把「30、耐力…」这类列表误判
+                "^(\\d+[\\.．\\s]+[^\\d]).*",
         };
         Pattern chapterPattern = Pattern.compile(String.join("|", patterns));
+        // 纯数字编号行的「候选」判定；命中后还会用 containsSentencePunct/长度二次过滤，剔除大纲列表等正文行。
+        Pattern digitChapterPattern = Pattern.compile("^(\\d+[\\.．、\\s]+)[^\\d]");
 
         try {
             InputStream is = context.getContentResolver().openInputStream(uri);
@@ -350,7 +358,11 @@ public class LocalBookParser {
             is.close();
             String charset = detectCharset(rawData);
             String text = new String(rawData, charset);
-            if (text.contains("\uFFFD")) {
+            // 只有当 UTF-8 解码后「替换字符（U+FFFD）占比很高」才判定原始字节流不是 UTF-8
+            // （多半是 GBK），此时改用 GBK 重新解码。文本里偶尔自带几个 U+FFFD（编辑器把坏字符
+            // 替换后留下的占位）不能据此整本改用 GBK 重解——否则正常 UTF-8 中文书会被解成乱码，
+            // 导致「第X章」全部匹配失败、章节识别为 0，导入后只剩兜底的单章「第一章」。
+            if (charset.equals("UTF-8") && !isUtf8DecodeLikelyValid(text)) {
                 try { text = new String(rawData, "GBK"); } catch (Exception ignored) {}
             }
             String[] lines = text.split("\n");
@@ -365,6 +377,16 @@ public class LocalBookParser {
                 return cleaned.replaceAll("\\p{Punct}", "").replaceAll("\\s+", "").toLowerCase();
             };
 
+            // 章节序号 → 该序号「上一次被保留的章节标题」与行号。
+            // 强去重逻辑：同一序号（第N章/卷/回）再次出现时：
+            //  - 水印/作者注垃圾词、或正文行误命中（「第N章」后无空格直接续写长句）→ 直接丢弃；
+            //  - 否则若两处相隔很远、或中间存在「（第X卷完）」卷标记 → 判定为「新一卷重新编号」，
+            //    保留并更新记录（多卷本会每卷重置编号，如第二卷的「第一章 外乡人」）；
+            //  - 否则若标题相等/近似（「本章未完」复述、标点变体、被追加垃圾后缀）→ 丢弃；
+            //  - 否则标题明显不同且非近似 → 视为独立真章节，保留。
+            java.util.Map<String, String> lastTitleByKey = new java.util.HashMap<>();
+            java.util.Map<String, Integer> lastKeptLineByKey = new java.util.HashMap<>();
+
             for (int i = 0; i < lines.length; i++) {
                 String line = lines[i];
                 String trimmed = line.trim();
@@ -373,24 +395,71 @@ public class LocalBookParser {
 
                 Matcher matcher = chapterPattern.matcher(trimmed);
                 if (matcher.find()) {
+                    // 纯数字编号行若带有句末/句中标点（如大纲列表「1.观察…」「2.初次…」），多半是正文而非章节，跳过。
+                    if (digitChapterPattern.matcher(trimmed).find()
+                            && (containsSentencePunct(trimmed) || trimmed.length() > 40)) {
+                        continue;
+                    }
+
                     // 提取原始标题
                     String rawTitle = trimmed;
                     // 如果原始标题以 # 开头，则去除 # 和空格
                     String title = rawTitle.replaceFirst("^#+\\s*", "").trim();
 
-                    // 检查是否与上一个章节标题重复（规范化后比较）
+                    // 强规则：同一章节序号（第N章/卷/回）的去重。
                     boolean isDuplicate = false;
-                    if (!chapterTitles.isEmpty()) {
-                        String lastTitle = chapterTitles.get(chapterTitles.size() - 1);
-                        String lastNorm = normalize.apply(lastTitle);
-                        String currentNorm = normalize.apply(title);
-                        if (lastNorm.equals(currentNorm)) {
-                            isDuplicate = true;
-                        } else {
-                            // 如果编辑距离很小，也视为重复
-                            int distance = levenshteinDistance(lastNorm, currentNorm);
-                            if (distance <= 2) {
+                    String currentNumKey = chapterNumberKey(title);
+                    if (currentNumKey != null) {
+                        String lastKeptTitle = lastTitleByKey.get(currentNumKey);
+                        Integer lastKeptLine = lastKeptLineByKey.get(currentNumKey);
+                        if (lastKeptTitle != null && lastKeptLine != null) {
+                            // 1) 水印/作者注垃圾词 → 丢弃
+                            if (containsWatermarkJunk(title)) {
                                 isDuplicate = true;
+                            }
+                            // 2) 正文行误命中（「第N章」后无空格直接续写长句）→ 丢弃
+                            else if (isBodyLineFalsePositive(title)) {
+                                isDuplicate = true;
+                            } else {
+                                // 3) 同序号再次出现：是否「新一卷重新编号」（卷标记在中间，或相隔很远）。
+                                // 注意短路顺序：先判行距（O(1)），只有行距不大时才去扫描两行之间的小窗口找卷标记。
+                                // 反过来先扫描的话，换卷场景两处相隔几万行，每个重复序号都要正则逐行扫几万行，
+                                // 一本多卷本累计可达数千万次逐行正则，手机上会卡在「正在导入」数分钟。
+                                boolean isVolumeRestart = (i - lastKeptLine) > VOLUME_GAP_THRESHOLD
+                                        || hasVolumeMarkerBetween(lines, lastKeptLine, i);
+                                if (isVolumeRestart) {
+                                    // 真正的不同卷的同序号章节，保留并更新记录。
+                                    lastTitleByKey.put(currentNumKey, title);
+                                    lastKeptLineByKey.put(currentNumKey, i);
+                                } else if (isChapterTitleNearDuplicate(title, lastKeptTitle)) {
+                                    // 同卷、标题相等/近似（「本章未完」复述、标点变体、被追加垃圾后缀） → 丢弃
+                                    isDuplicate = true;
+                                } else {
+                                    // 同卷、标题明显不同且非近似 → 视作独立真章节，保留并更新记录。
+                                    lastTitleByKey.put(currentNumKey, title);
+                                    lastKeptLineByKey.put(currentNumKey, i);
+                                }
+                            }
+                        } else {
+                            lastTitleByKey.put(currentNumKey, title);
+                            lastKeptLineByKey.put(currentNumKey, i);
+                        }
+                    }
+                    // 弱规则：只对「无章节序号」的标题（序言/前言等）做相似度去重，
+                    // 避免把序号不同但标题近似的连续正文章节（如「…渡劫x2」「…渡劫x4」）错误地合并，导致缺章。
+                    if (!isDuplicate && !chapterTitles.isEmpty()) {
+                        String lastTitle = chapterTitles.get(chapterTitles.size() - 1);
+                        if (currentNumKey == null && chapterNumberKey(lastTitle) == null) {
+                            String lastNorm = normalize.apply(lastTitle);
+                            String currentNorm = normalize.apply(title);
+                            if (lastNorm.equals(currentNorm)) {
+                                isDuplicate = true;
+                            } else {
+                                // 如果编辑距离很小，也视为重复
+                                int distance = levenshteinDistance(lastNorm, currentNorm);
+                                if (distance <= 2) {
+                                    isDuplicate = true;
+                                }
                             }
                         }
                     }
@@ -406,6 +475,19 @@ public class LocalBookParser {
                 return info;
             }
 
+            // === TXT 分卷识别 ===
+            // 两个来源：① 独立的「第X卷 …」卷标题章；② 章末的「（第X卷完）」结束标记。
+            // 结果写回每章的 volumeIndex/volumeTitle，并记录 info.volumes（卷标题顺序）。
+            // 无分卷信息的普通 TXT 保持原样（volumeIndex 默认 1、volumeTitle 空），目录仍是平铺列表。
+            int[] chapterVolumeIndex = new int[chapterStarts.size()];
+            List<String> txtVolumeTitles = new ArrayList<>();
+            try {
+                detectTxtVolumes(lines, chapterStarts, chapterTitles, chapterVolumeIndex, txtVolumeTitles);
+            } catch (Throwable t) {
+                android.util.Log.e("LocalBookParser", "TXT 分卷识别失败，按不分卷处理", t);
+            }
+            if (!txtVolumeTitles.isEmpty()) info.volumes = txtVolumeTitles;
+
             for (int i = 0; i < chapterStarts.size(); i++) {
                 int start = chapterStarts.get(i) + 1;
                 int end = (i + 1 < chapterStarts.size()) ? chapterStarts.get(i + 1) : lines.length;
@@ -418,7 +500,13 @@ public class LocalBookParser {
                     // 简单做法：保留所有行，不过滤
                     sb.append(lines[j]).append("\n");
                 }
-                info.chapters.add(new Chapter(i, chapterTitles.get(i), sb.toString()));
+                Chapter ch = new Chapter(i, chapterTitles.get(i), sb.toString());
+                int vi = chapterVolumeIndex[i];
+                if (vi > 0 && vi <= txtVolumeTitles.size()) {
+                    ch.volumeIndex = vi;
+                    ch.volumeTitle = txtVolumeTitles.get(vi - 1);
+                }
+                info.chapters.add(ch);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -445,6 +533,343 @@ public class LocalBookParser {
             }
         }
         return dp[m][n];
+    }
+
+    // ==================== TXT 分卷识别 ====================
+    //
+    // 站点 TXT 的分卷通常只有两种痕迹（很多书没有独立的「第X卷 卷名」行）：
+    //   ① 独立的卷标题章：「第一卷 梦魇」这种整行；
+    //   ② 章末的卷结束标记：「（第一卷完）」（多数网文只有这一种）。
+    // 这里把两者统一成「每章归属哪一卷」，再由 buildVolumeInfos 汇总出卷区间，
+    // 供导入持久化与阅读器目录的分卷折叠显示使用。
+
+    /** 「第X卷/册」卷标题章；后接非汉字，避免命中「第三卷子」这类正文词 */
+    private static final Pattern TXT_VOLUME_HEADING_PATTERN = Pattern.compile(
+            "^第([\\d零一二三四五六七八九十百千万〇两]+)\\s*[卷册](?![\\u4e00-\\u9fa5])");
+
+    /** 章末卷结束标记：（第X卷完）/（第X卷 终）/【第X卷完】/(第X卷完) 等 */
+    private static final Pattern TXT_VOLUME_END_PATTERN = Pattern.compile(
+            "[（(【]\\s*第?([\\d零一二三四五六七八九十百千万〇两]+)\\s*卷\\s*[完终结]?\\s*[）)】]");
+
+    /** 卷结束标记只认「章末尾部」，避免正文里提到某卷被误判为分卷点 */
+    private static final int TXT_VOLUME_END_TAIL_CHARS = 200;
+
+    private static final char[] CN_DIGITS = {'零', '一', '二', '三', '四', '五', '六', '七', '八', '九'};
+
+    /** 中文数字转 int（支持零〇两，及十/百/千/万；也接受纯阿拉伯数字）；无法解析返回 0 */
+    private static int chineseNumberToInt(String s) {
+        if (s == null || s.isEmpty()) return 0;
+        String t = s.trim();
+        if (t.matches("[0-9]+")) {
+            try { return Integer.parseInt(t); } catch (Exception e) { return 0; }
+        }
+        int total = 0, section = 0, cur = 0;
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            int d = chineseDigit(c);
+            if (d >= 0) { cur = d; continue; }
+            switch (c) {
+                case '十': section += (cur == 0 ? 1 : cur) * 10; cur = 0; break;
+                case '百': section += (cur == 0 ? 1 : cur) * 100; cur = 0; break;
+                case '千': section += (cur == 0 ? 1 : cur) * 1000; cur = 0; break;
+                case '万': section = (section + cur) * 10000; total += section; section = 0; cur = 0; break;
+                default: break;
+            }
+        }
+        return total + section + cur;
+    }
+
+    private static int chineseDigit(char c) {
+        switch (c) {
+            case '零': case '〇': case '○': return 0;
+            case '一': return 1;
+            case '二': case '两': return 2;
+            case '三': return 3;
+            case '四': return 4;
+            case '五': return 5;
+            case '六': return 6;
+            case '七': return 7;
+            case '八': return 8;
+            case '九': return 9;
+            default: return -1;
+        }
+    }
+
+    /** int 转中文数字（1~999 用中文，超出则退回阿拉伯数字）；用于「第X卷」自动编号 */
+    private static String intToChineseNumber(int num) {
+        if (num <= 0) return String.valueOf(num);
+        if (num < 10) return String.valueOf(CN_DIGITS[num]);
+        if (num < 20) return "十" + (num % 10 == 0 ? "" : String.valueOf(CN_DIGITS[num % 10]));
+        if (num < 100) {
+            return "" + CN_DIGITS[num / 10] + "十" + (num % 10 == 0 ? "" : String.valueOf(CN_DIGITS[num % 10]));
+        }
+        if (num < 1000) {
+            String s = "" + CN_DIGITS[num / 100] + "百";
+            int rem = num % 100;
+            if (rem == 0) return s;
+            if (rem < 10) return s + "零" + CN_DIGITS[rem];
+            return s + intToChineseNumber(rem);
+        }
+        return String.valueOf(num);
+    }
+
+    /** 标题是否为卷标题章；是则返回其中的卷号数字文本（「第一卷」→「一」），否则 null */
+    private static String txtVolumeHeadingText(String title) {
+        if (title == null) return null;
+        Matcher m = TXT_VOLUME_HEADING_PATTERN.matcher(title.trim());
+        return m.find() ? m.group(1) : null;
+    }
+
+    /** 标题是否像卷标题（含 EPUB 目录里的「卷三」「Part 2」「Volume 1」形式） */
+    private static boolean isVolumeHeadingTitle(String title) {
+        if (title == null || title.isEmpty()) return false;
+        String t = title.trim();
+        return TXT_VOLUME_HEADING_PATTERN.matcher(t).find() || RE_VOLUME_LABEL.matcher(t).find();
+    }
+
+    /**
+     * 本章末尾是否出现「（第X卷完）」标记；有则返回标记里的卷号数字文本，否则 null。
+     * 只在章末 {@link #TXT_VOLUME_END_TAIL_CHARS} 个字符内找，避免正文引用被误判。
+     */
+    private static String txtVolumeEndText(String[] lines, int fromLine, int toLine) {
+        if (lines == null || toLine <= fromLine) return null;
+        StringBuilder tail = new StringBuilder();
+        for (int i = toLine - 1; i >= fromLine && tail.length() < TXT_VOLUME_END_TAIL_CHARS; i--) {
+            String s = lines[i].trim();
+            if (s.isEmpty()) continue;
+            tail.insert(0, s);
+        }
+        if (tail.length() == 0) return null;
+        Matcher m = TXT_VOLUME_END_PATTERN.matcher(tail);
+        String found = null;
+        while (m.find()) found = m.group(1);   // 取最后一个标记
+        return found;
+    }
+
+    /**
+     * TXT 分卷识别：把每章归属到某一卷，输出 volumeIndexOfChapter（1 起，0 = 未归属）与卷标题顺序。
+     * 无任何分卷痕迹时不做任何写入（目录保持平铺）。
+     */
+    private static void detectTxtVolumes(String[] lines, List<Integer> starts, List<String> titles,
+                                         int[] volumeIndexOfChapter, List<String> volumeTitles) {
+        int n = titles.size();
+        if (n == 0) return;
+
+        List<int[]> ranges = new ArrayList<>();      // {起始章, 结束章, 是否由卷标题章开启}
+        List<String> rangeTitles = new ArrayList<>();
+        int openStart = -1;          // 正在累积的卷起始章
+        String openTitle = null;     // 该卷标题（来自卷标题章）
+        boolean openFromHeading = false;
+        int nextNumber = 0;          // 下一个「无卷名卷」的卷号（由结束标记推断）
+
+        for (int j = 0; j < n; j++) {
+            String headingText = txtVolumeHeadingText(titles.get(j));
+            if (headingText != null) {
+                // 卷标题章：闭合上一卷，开启新卷
+                if (openStart >= 0 && j - 1 >= openStart) {
+                    ranges.add(new int[]{openStart, j - 1, openFromHeading ? 1 : 0});
+                    rangeTitles.add(openTitle);
+                }
+                openStart = j;
+                openTitle = titles.get(j);
+                openFromHeading = true;
+                nextNumber = chineseNumberToInt(headingText) + 1;
+                continue;
+            }
+            int toLine = (j + 1 < n) ? starts.get(j + 1) : lines.length;
+            String endText = txtVolumeEndText(lines, starts.get(j) + 1, toLine);
+            if (endText != null) {
+                if (openStart >= 0) {
+                    ranges.add(new int[]{openStart, j, openFromHeading ? 1 : 0});
+                    rangeTitles.add(openTitle);
+                } else {
+                    // 尚未开卷：本标记之前的这些章节就属于「以本标记结尾」的这一卷
+                    // （只给「（第X卷完）」没有卷标题行的 TXT 就是这种情况）
+                    int st = ranges.isEmpty() ? 0 : ranges.get(ranges.size() - 1)[1] + 1;
+                    if (st <= j) {
+                        ranges.add(new int[]{st, j, 0});
+                        rangeTitles.add("第" + endText + "卷");
+                    }
+                }
+                nextNumber = chineseNumberToInt(endText) + 1;
+                openStart = -1;
+                openTitle = null;
+                openFromHeading = false;
+            }
+        }
+        // 收尾：末尾没有结束标记时，最后一段自成末卷
+        if (openStart >= 0) {
+            ranges.add(new int[]{openStart, n - 1, openFromHeading ? 1 : 0});
+            rangeTitles.add(openTitle);
+        } else if (!ranges.isEmpty()) {
+            int st = ranges.get(ranges.size() - 1)[1] + 1;
+            if (st <= n - 1) {
+                ranges.add(new int[]{st, n - 1, 0});
+                rangeTitles.add("第" + intToChineseNumber(nextNumber > 0 ? nextNumber : ranges.size() + 1) + "卷");
+            }
+        }
+
+        if (ranges.isEmpty()) return;
+
+        for (int v = 0; v < ranges.size(); v++) {
+            int[] r = ranges.get(v);
+            int from = Math.max(0, r[0]);
+            int to = Math.min(n - 1, r[1]);
+            if (from > to) continue;
+            String title = rangeTitles.get(v);
+            if (title == null || title.isEmpty()) title = "第" + intToChineseNumber(v + 1) + "卷";
+            volumeTitles.add(title);
+            for (int c = from; c <= to; c++) volumeIndexOfChapter[c] = volumeTitles.size();
+        }
+    }
+
+    /** 一卷的区间信息：供导入持久化与阅读器目录分组共用 */
+    public static class VolumeInfo {
+        /** 卷号，从 1 开始 */
+        public int index;
+        /** 卷标题（如「第一卷」「第一卷 梦魇」） */
+        public String title = "";
+        /** 卷起始章（含） */
+        public int start;
+        /** 目录子项起始章（含）：卷标题章本身无正文时不作为子项，此时为 start+1 */
+        public int childStart;
+        /** 卷结束章（含） */
+        public int end;
+    }
+
+    /**
+     * 汇总分卷结构（TXT 由 detectTxtVolumes 写入，EPUB 由 NCX 目录写入 volumeIndex/volumeTitle）。
+     * 单卷/无卷的书返回空列表（目录保持平铺，不做无意义的分组）。
+     */
+    public static List<VolumeInfo> buildVolumeInfos(BookInfo info) {
+        List<VolumeInfo> result = new ArrayList<>();
+        if (info == null || info.chapters == null || info.chapters.isEmpty()) return result;
+        List<Chapter> chs = info.chapters;
+        int maxIdx = 0;
+        for (Chapter c : chs) if (c.volumeIndex > maxIdx) maxIdx = c.volumeIndex;
+        if (maxIdx < 2) return result;   // 只有一卷等于没分卷
+
+        for (int v = 1; v <= maxIdx; v++) {
+            int start = -1, end = -1;
+            String title = "";
+            for (int i = 0; i < chs.size(); i++) {
+                Chapter c = chs.get(i);
+                if (c.volumeIndex != v) continue;
+                if (start < 0) {
+                    start = i;
+                    title = (c.volumeTitle == null) ? "" : c.volumeTitle;
+                }
+                end = i;
+            }
+            if (start < 0 || end < start) continue;
+            VolumeInfo vi = new VolumeInfo();
+            vi.index = v;
+            vi.start = start;
+            vi.end = end;
+            if (title.isEmpty() && info.volumes != null && v - 1 < info.volumes.size()) {
+                String t = info.volumes.get(v - 1);
+                title = (t == null) ? "" : t;
+            }
+            if (title.isEmpty()) title = "第" + intToChineseNumber(v) + "卷";
+            vi.title = title;
+
+            // 卷标题章（如「第一卷 梦魇」）本身通常没有正文，只是卷名页：
+            // 这种情况不把它作为目录子项，避免展开后与卷行重复显示同一标题。
+            Chapter first = chs.get(start);
+            String content = first.content;
+            boolean blank = (content == null) || content.trim().length() < 20;
+            boolean headingChapter = isVolumeHeadingTitle(first.title);
+            vi.childStart = (headingChapter && blank && start + 1 <= end) ? start + 1 : start;
+            result.add(vi);
+        }
+        return result;
+    }
+
+    /**
+     * 提取标题行开头的章节序号键（如「第一章」「第五百八十六章」「第二回」），
+     * 用于 TXT 解析的强去重。非序号标题（序言/前言/普通正文行等）返回 null。
+     * 注意：回章节排除「回合」这类非章节标题。
+     */
+    // 章节序号键正则（预编译）：每个候选标题行都会调用一次 chapterNumberKey，逐次编译开销不可接受。
+    private static final Pattern CHAPTER_NUMBER_KEY_PATTERN = Pattern.compile(
+            "^第[\\d零一二三四五六七八九十百千万]+[卷集册篇章回节]");
+
+    private static String chapterNumberKey(String title) {
+        if (title == null) return null;
+        // 兼容阿拉伯数字与中文数字：第[0-9/中文数字]+[卷集册篇章回节]
+        // 注意：不含「部/篇」，避免把正文里的「第三部分」「第一篇」误判成卷首序号键。
+        java.util.regex.Matcher m = CHAPTER_NUMBER_KEY_PATTERN.matcher(title);
+        return m.find() ? m.group() : null;
+    }
+
+    // 站点水印/作者注常见垃圾词：命中其一即视为同源重复章节行（如「…免费阅读」「…在审核」）。
+    private static final String[] WATERMARK_KEYWORDS = {
+            "免费阅读", "在审核", "最快更新", "为您提供", "书签", "浏览器", "进行查看", "题外话",
+            "本章未完", "防盗", "笔趣", "小说网", "最新章节", "手机阅读", "求订阅", "求月票",
+            "感言", "上架", "公告", "捉虫", "请假", "推书", "完本", "首发", "未完待续",
+            "更新最快", "为您", "下次还能", "保存好"
+    };
+
+    private static boolean containsWatermarkJunk(String title) {
+        if (title == null) return false;
+        for (String k : WATERMARK_KEYWORDS) {
+            if (title.contains(k)) return true;
+        }
+        return false;
+    }
+
+    // 是否含中文句末/句中标点（用于过滤「1.观察…」这类大纲列表行）。
+    private static boolean containsSentencePunct(String s) {
+        if (s == null) return false;
+        for (int i = 0; i < s.length(); i++) {
+            if ("。；：，、！？…—".indexOf(s.charAt(i)) >= 0) return true;
+        }
+        return false;
+    }
+
+    // 两个标题是否「同源重复」：完全相等，或其一为另一者前缀（追加了「免费阅读」等垃圾后缀），且差异较短。
+    private static boolean isChapterTitleNearDuplicate(String a, String b) {
+        if (a == null || b == null) return false;
+        String na = normalizeTitle(a), nb = normalizeTitle(b);
+        if (na.equals(nb)) return true;
+        String longer = na.length() >= nb.length() ? na : nb;
+        String shorter = na.length() >= nb.length() ? nb : na;
+        return longer.startsWith(shorter) && (longer.length() - shorter.length()) <= 15;
+    }
+
+    // 同卷内两处「第N章」相隔多大行数，才足以判定为「新一卷重新编号」（而非同卷复述/水印）。
+    private static final int VOLUME_GAP_THRESHOLD = 1500;
+
+    // 标题是否为正文行误命中：如「第五百七十六章天下除我再无魔时机不合适…」——「章」后无空格直接
+    // 续写 ≥8 个非空白字符的长句，显然是正文而不是章节标题。
+    private static final Pattern BODY_LINE_FALSE_POSITIVE_PATTERN = Pattern.compile(
+            "^第[\\d零一二三四五六七八九十百千万]+[卷集册章节节回][^\\s].{7,}");
+
+    private static boolean isBodyLineFalsePositive(String title) {
+        if (title == null) return false;
+        return BODY_LINE_FALSE_POSITIVE_PATTERN.matcher(title).matches();
+    }
+
+    // 「第X卷」卷结束标记（预编译：导入热路径上使用；命名避开类顶部既有的
+    // VOLUME_MARKER_PATTERN——那是「卷N」开头格式的另一用途）。
+    private static final Pattern VOLUME_END_MARKER_PATTERN = Pattern.compile(
+            "第?[零一二三四五六七八九十百千万0-9]+卷");
+
+    // 两行之间（不含端点）是否存在「（第X卷完）」之类的卷结束标记，用于判定是否跨卷重新编号。
+    // 调用方必须保证 toLine - fromLine 较小（先做过行距短路判断），否则不要调用本方法。
+    private static boolean hasVolumeMarkerBetween(String[] lines, int fromLine, int toLine) {
+        if (lines == null || toLine <= fromLine + 1) return false;
+        for (int i = fromLine + 1; i < toLine; i++) {
+            String s = lines[i].trim();
+            if (s.length() <= 30 && VOLUME_END_MARKER_PATTERN.matcher(s).find()) return true;
+        }
+        return false;
+    }
+
+    // 规范化标题（去除 Markdown 符号、标点、空格，转小写），供去重比较使用。
+    private static String normalizeTitle(String raw) {
+        String cleaned = raw.replaceFirst("^#+\\s*", "").replaceFirst("^[*\\-]+\\s*", "").trim();
+        return cleaned.replaceAll("\\p{Punct}", "").replaceAll("\\s+", "").toLowerCase();
     }
 
     // EPUB 解析
@@ -1916,6 +2341,22 @@ public class LocalBookParser {
         if (data.length >= 2 && data[0] == (byte) 0xFF && data[1] == (byte) 0xFE) return "UTF-16LE";
         if (data.length >= 3 && data[0] == (byte) 0xEF && data[1] == (byte) 0xBB && data[2] == (byte) 0xBF) return "UTF-8";
         return "UTF-8";
+    }
+
+    /**
+     * 判断「按 UTF-8 解码后的文本」是否看起来是真实的 UTF-8。
+     * 若替换字符（U+FFFD）占总字符比例过高，说明原始字节流其实不是 UTF-8（多半是 GBK 字节被当成
+     * UTF-8 解码，每个中文都变 U+FFFD），应改用 GBK 重新解码；反之，正常 UTF-8 文件即便混有个别
+     * 坏字符（文本自带少量 U+FFFD 占位），比例也极低，应当保留 UTF-8 解码结果。
+     * 阈值 5%：真实 GBK 字节按 UTF-8 解，中文几乎全部成 U+FFFD，比例远高于此。
+     */
+    private static boolean isUtf8DecodeLikelyValid(String text) {
+        if (text == null || text.isEmpty()) return true;
+        int fffd = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\uFFFD') fffd++;
+        }
+        return (fffd * 100L / text.length()) < 5;
     }
 
     private static String getFileExtension(String href, String mediaType) {

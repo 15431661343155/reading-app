@@ -1,11 +1,70 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--章节目录弹窗布局-->
+<!--章节目录弹窗布局（顶部书籍信息头 + 目录/书签 ViewPager + 底部 Tab 栏）-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="280dp"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/ios_bg">
+
+    <!-- 书籍信息头：封面 / 书名 / 作者（目录与书签两个页签共用，位于列表上方） -->
+    <LinearLayout
+        android:id="@+id/layout_popup_book_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="14dp"
+        android:background="@color/ios_bg_grouped">
+
+        <ImageView
+            android:id="@+id/iv_popup_book_cover"
+            android:layout_width="52dp"
+            android:layout_height="70dp"
+            android:scaleType="centerCrop"
+            android:src="@drawable/default_book_cover"
+            android:background="@drawable/bg_cover_rounded"
+            android:clipToOutline="true"
+            android:contentDescription="书籍封面" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tv_popup_book_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="书名"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/ios_text_primary"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tv_popup_book_author"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="作者"
+                android:textSize="13sp"
+                android:textColor="@color/ios_text_secondary"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:background="@color/ios_separator" />
 
     <!-- ViewPager2 - 内容区域 -->
     <androidx.viewpager2.widget.ViewPager2

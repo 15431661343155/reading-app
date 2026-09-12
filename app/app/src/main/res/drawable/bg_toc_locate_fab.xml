@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--目录浮窗「定位当前章节」悬浮按钮底图：半透明圆盘。
+    真实颜色由 ReadActivity 在主题染色时按当前配色生成（浮窗主底向主文字色微调 + 半透明），
+    这里只给出默认值，保证首帧 / 预览不出现黑块。-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#33FFFFFF" />
+</shape>

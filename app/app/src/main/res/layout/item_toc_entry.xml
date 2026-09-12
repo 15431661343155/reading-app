@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--阅读器目录：分卷折叠树的一行。卷行显示 ▸/▾ 箭头，章行为缩进子项（箭头留空占位保持对齐）-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:id="@+id/row_toc_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:minHeight="48dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <TextView
+            android:id="@+id/tv_toc_arrow"
+            android:layout_width="20dp"
+            android:layout_height="wrap_content"
+            android:text="▸"
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_secondary"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/tv_toc_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:paddingTop="13dp"
+            android:paddingBottom="13dp"
+            android:text="第一章"
+            android:textSize="16sp"
+            android:textColor="@color/ios_text_primary"
+            android:lineSpacingExtra="2dp" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginStart="16dp"
+        android:background="@color/ios_separator" />
+
+</LinearLayout>

@@ -1,39 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--目录 popup 布局（iOS 分组列表风）-->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--目录 popup 布局（iOS 分组列表风）。
+    右下角覆盖一个「定位当前章节」悬浮按钮：滑动目录后点它可回滚到当前章。-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/ios_bg_grouped">
+    android:background="@color/ios_bg">
 
-    <!-- 章节计数 header（iOS 分组标题：灰底小字） -->
-    <TextView
-        android:id="@+id/tv_chapter_count"
-        android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:text="共 0 章"
-        android:textSize="13sp"
-        android:textStyle="bold"
-        android:textColor="@color/ios_text_secondary"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:background="@color/ios_bg_grouped" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="0.5dp"
-        android:background="@color/ios_separator" />
-
-    <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
-        xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns:app="http://schemas.android.com/apk/res-auto"
-        android:id="@+id/rv_fastscroll"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:fastScrollAutoHide="true"
-        app:fastScrollAutoHideDelay="2000"
-        app:fastScrollThumbColor="@color/ios_blue"
-        app:fastScrollTrackColor="@android:color/transparent" />
-</LinearLayout>
+        android:orientation="vertical">
+
+        <!-- 章节计数 + 正序/倒序切换（点右侧按钮切换顺序，标签同步变成当前顺序） -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@color/ios_bg_grouped">
+
+            <TextView
+                android:id="@+id/tv_chapter_count"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="共 0 章"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/ios_text_secondary"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="8dp" />
+
+            <TextView
+                android:id="@+id/btn_toc_sort"
+                style="@style/TocSortButton"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:text="正序" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0.5dp"
+            android:background="@color/ios_separator" />
+
+        <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
+            android:id="@+id/rv_fastscroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:fastScrollAutoHide="true"
+            app:fastScrollAutoHideDelay="2000"
+            app:fastScrollThumbColor="@color/ios_blue"
+            app:fastScrollTrackColor="@android:color/transparent" />
+    </LinearLayout>
+
+    <!-- 定位当前章节：半透明圆盘 + 主文字色图标（颜色在 ReadActivity 主题染色里统一设置） -->
+    <ImageView
+        android:id="@+id/btn_toc_locate"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:padding="10dp"
+        android:background="@drawable/bg_toc_locate_fab"
+        android:src="@drawable/ic_toc_locate"
+        android:contentDescription="定位当前章节"
+        android:clickable="true"
+        android:focusable="true" />
+</FrameLayout>

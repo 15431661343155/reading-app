@@ -1,6 +1,7 @@
 package com.example.myapplication.fragment;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -22,7 +23,7 @@ import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.ChapterDto;
-import com.example.myapplication.utils.ThemeManager;
+import com.example.myapplication.utils.TocOrder;
 
 import com.bumptech.glide.Glide;
 
@@ -45,8 +46,9 @@ public class ChapterListFragment extends Fragment {
 
     private ImageView ivCover;
     private TextView tvBookName, tvAuthor, tvChapterTotal;
-    private ImageView ivSortOrder;
-    private boolean isAscending = true;
+    private TextView btnTocSort;
+    private final TocOrder order = new TocOrder();
+    private boolean isLocalBook = false;
     private RecyclerView rvChapters;
     private ChapterAdapter adapter;
 
@@ -66,6 +68,8 @@ public class ChapterListFragment extends Fragment {
             currentBook = (Book) getArguments().getSerializable(ARG_BOOK);
             currentChapterIndex = getArguments().getInt(ARG_CURRENT_CHAPTER, 0);
         }
+        // 本地导入的书：chapter 信息只存在于本地 SP，服务器无记录，必须本地加载
+        isLocalBook = detectLocalBook();
     }
 
     @Nullable
@@ -77,7 +81,11 @@ public class ChapterListFragment extends Fragment {
         initView(view);
         displayBookInfo();
         setupRecyclerView();
-        loadChaptersFromServer();
+        if (isLocalBook) {
+            loadLocalChapters();
+        } else {
+            loadChaptersFromServer();
+        }
 
         return view;
     }
@@ -89,34 +97,23 @@ public class ChapterListFragment extends Fragment {
         tvChapterTotal = view.findViewById(R.id.tv_chapter_total);
         rvChapters = view.findViewById(R.id.rv_chapters);
 
-        // 排序切换按钮
-        ivSortOrder = view.findViewById(R.id.iv_sort_order);
-        // 根据主题设置图标颜色
-        int currentTheme = ThemeManager.getCurrentTheme(requireContext());
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            ivSortOrder.setImageResource(R.drawable.ic_sort_asc);
-        } else {
-            ivSortOrder.setImageResource(R.drawable.ic_sort_asc_white);
-        }
-        ivSortOrder.setOnClickListener(v -> toggleSortOrder());
+        // 排序切换按钮（与阅读器目录一致：文字按钮，标签随顺序变化）
+        btnTocSort = view.findViewById(R.id.btn_toc_sort);
+        btnTocSort.setText(TocOrder.label(order.isDescending()));
+        btnTocSort.setOnClickListener(v -> toggleSortOrder());
     }
 
     private void toggleSortOrder() {
-        isAscending = !isAscending;
+        order.toggle();
+        // 反转列表展示顺序；章节对象携带真实 index，点击仍回传真实 chapterIndex，不受影响
         Collections.reverse(chapterList);
         adapter.notifyDataSetChanged();
 
-        // 更新图标
-        int currentTheme = ThemeManager.getCurrentTheme(requireContext());
-        boolean isLightTheme = (currentTheme == ThemeManager.THEME_SEASIDE);
-        if (isAscending) {
-            ivSortOrder.setImageResource(isLightTheme ? R.drawable.ic_sort_asc : R.drawable.ic_sort_asc_white);
-        } else {
-            ivSortOrder.setImageResource(isLightTheme ? R.drawable.ic_sort_desc : R.drawable.ic_sort_desc_white);
-        }
+        // 更新按钮文案（正序/倒序）
+        btnTocSort.setText(TocOrder.label(order.isDescending()));
 
-        // 切换到新排序后滚动到列表顶部
-        rvChapters.scrollToPosition(0);
+        // 切换到新排序后焦点回到第一行（正序=第一章，倒序=最后一章）
+        TocOrder.scrollToFirstRow(rvChapters);
     }
 
     private void displayBookInfo() {
@@ -137,6 +134,48 @@ public class ChapterListFragment extends Fragment {
                 ivCover.setImageResource(R.drawable.default_book_cover);
             }
         }
+    }
+
+    /**
+     * 判断当前书是否为「本地导入」书：其 id 在 local_books SP 中有对应记录，
+     * 且不是外站书（外站书 id 为 null，不会命中）。命中则章节须从本地 SP 取，不能查服务器。
+     */
+    private boolean detectLocalBook() {
+        if (currentBook == null || currentBook.getId() == null || currentBook.getId() <= 0) return false;
+        // 外站书（sourceType/sourceUrl 非空）即使 id 异常也不能误判为本地书
+        if (currentBook.getSourceType() != null || currentBook.getSourceUrl() != null) return false;
+        long id = currentBook.getId();
+        SharedPreferences sp = requireContext().getSharedPreferences("local_books", android.content.Context.MODE_PRIVATE);
+        int count = sp.getInt("count", 0);
+        for (int i = 0; i < count; i++) {
+            if (sp.getLong("book_id_" + i, 0) == id) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 本地导入书：从 local_books SP 读取章节标题（键 chapter_title_<localIndex>_<chapterIndex>）。
+     * 与 ReadActivity.loadLocalBookChapters 用同一套存储，保证详情页目录与阅读器目录一致。
+     */
+    private void loadLocalChapters() {
+        long id = currentBook.getId();
+        SharedPreferences sp = requireContext().getSharedPreferences("local_books", android.content.Context.MODE_PRIVATE);
+        int count = sp.getInt("count", 0);
+        chapterList.clear();
+        for (int i = 0; i < count; i++) {
+            if (sp.getLong("book_id_" + i, 0) == id) {
+                int chCount = sp.getInt("chapter_count_" + i, 0);
+                for (int j = 0; j < chCount; j++) {
+                    ReadActivity.Chapter chapter = new ReadActivity.Chapter();
+                    chapter.setIndex(j);
+                    chapter.setTitle(sp.getString("chapter_title_" + i + "_" + j, "第" + (j + 1) + "章"));
+                    chapterList.add(chapter);
+                }
+                break;
+            }
+        }
+        tvChapterTotal.setText("共 " + chapterList.size() + " 章");
+        adapter.notifyDataSetChanged();
     }
 
     private void loadChaptersFromServer() {
