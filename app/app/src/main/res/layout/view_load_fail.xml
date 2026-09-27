@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  加载失败内容块（被 widget/LoadFailView 包裹，全站复用：阅读器 / 书城 / 分类）。
+  排版与「加载失败」效果图一致：插画 + 灰字文案 + 蓝色胶囊「再试一次」，整体略高于几何中心。
+  底色透明 → 透出宿主页面的背景，日夜与各种底色都不用额外适配。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:paddingBottom="150dp">
+
+    <ImageView
+        android:id="@+id/img_fail_illust"
+        android:layout_width="250dp"
+        android:layout_height="wrap_content"
+        android:adjustViewBounds="true"
+        android:src="@drawable/img_load_fail"
+        android:contentDescription="加载失败插画" />
+
+    <TextView
+        android:id="@+id/tv_fail_msg"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="加载出错，请稍后再试"
+        android:textSize="14sp"
+        android:textColor="@color/ios_text_secondary" />
+
+    <TextView
+        android:id="@+id/btn_fail_retry"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:paddingHorizontal="30dp"
+        android:paddingVertical="10dp"
+        android:text="再试一次"
+        android:textSize="15sp"
+        android:textColor="@color/white"
+        android:background="@drawable/bg_load_fail_retry" />
+</LinearLayout>

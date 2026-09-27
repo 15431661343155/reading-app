@@ -41,6 +41,6 @@ public interface BookService {
     // 批量更新状态
     void batchUpdateStatus(List<Long> ids, Integer status);
 
-    // 批量更新分类
-    void batchUpdateCategory(List<Long> ids, String category);
+    // 批量更新分类（category=主分类，可空表示保留原主分类；subCategories=子分类多选）
+    void batchUpdateCategory(List<Long> ids, String category, String subCategories);
 }

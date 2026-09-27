@@ -27,8 +27,20 @@ public class Book {
     @Column(columnDefinition = "TEXT")
     private String intro;
 
+    /**
+     * 主分类名（男生 / 女生 / 后台自定义的主分类）。空串表示未指定主分类
+     * （改造前导入的老书迁移后会落成空串，管理员在后台指认主分类即可）。
+     */
     @Column(length = 50)
     private String category;
+
+    /**
+     * 子分类（多选），JSON 数组字符串，如 {@code ["玄幻","都市"]}。
+     * 编解码唯一实现见 {@link com.example.readingapp.util.BookCategories}；
+     * 新写入一律是 "[]" 而不是 null —— null 专留给「本列上线前的历史数据」，供启动迁移识别。
+     */
+    @Column(name = "sub_categories", length = 500)
+    private String subCategories;
 
     @Column(length = 500)
     private String tags; // JSON数组字符串

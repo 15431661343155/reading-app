@@ -6,7 +6,7 @@ import java.util.List;
 
 public interface ApkPushService {
 
-    ApkPush pushApk(String fileName, String version);
+    ApkPush pushApk(String fileName, String version, String updateNotes);
 
     ApkPush getCurrentPushedApk();
 

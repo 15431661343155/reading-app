@@ -39,8 +39,9 @@ public class AppUpdateController {
             return ResponseEntity.ok(ApiResponse.success("暂无更新", null));
         }
 
-        // 设置下载链接
-        String downloadUrl = "/api/admin/apk/download/" +
+        // 设置下载链接：必须用「公开下载接口」（permitAll，App 端 DownloadManager 匿名下载）。
+        // ⚠️ 勿改回 /api/admin/apk/download/——该接口需管理员登录，匿名 401，App 内直接「下载失败」。
+        String downloadUrl = "/api/app/apk/download/" +
                 URLEncoder.encode(apkPush.getFileName(), StandardCharsets.UTF_8);
         apkPush.setFilePath(downloadUrl);
 

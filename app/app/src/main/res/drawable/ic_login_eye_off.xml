@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 密码隐藏（闭眼 + 斜线） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M12,5.2c-4.4,0 -8.1,3.3 -9.4,6.8 1.3,3.5 5,6.8 9.4,6.8s8.1,-3.3 9.4,-6.8c-1.3,-3.5 -5,-6.8 -9.4,-6.8z"
+        android:strokeColor="#FF3A3A3F"
+        android:strokeWidth="1.6" />
+    <path
+        android:pathData="M4.5,4.5L19.5,19.5"
+        android:strokeColor="#FF3A3A3F"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+</vector>

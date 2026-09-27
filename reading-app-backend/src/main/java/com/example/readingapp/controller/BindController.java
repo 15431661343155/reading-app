@@ -29,6 +29,11 @@ public class BindController {
         if ("unbind".equalsIgnoreCase(operation)) {
             return "unbind_" + channel;
         }
+        // 修改密码走邮箱验证：验证码用途为 change_password，不能被默认映射成 bind_*，
+        // 否则 changePasswordByEmail() 校验的 change_password 类型验证码永远取不到码。
+        if ("change_password".equalsIgnoreCase(operation)) {
+            return "change_password";
+        }
         return "bind_" + channel;
     }
 
@@ -175,7 +180,6 @@ public class BindController {
             String type = buildCodeType(operation, "phone");
 
             User user = bindService.bindPhone(userId, request.getPhone(), request.getCode(), type);
-            user.setPassword(null);
             return ApiResponse.success("手机绑定成功", user);
         } catch (Exception e) {
             return ApiResponse.error(e.getMessage());
@@ -201,7 +205,6 @@ public class BindController {
             String type = buildCodeType(operation, "email");
 
             User user = bindService.bindEmail(userId, request.getEmail(), request.getCode(), type);
-            user.setPassword(null);
             return ApiResponse.success("邮箱绑定成功", user);
         } catch (Exception e) {
             return ApiResponse.error(e.getMessage());
@@ -221,7 +224,6 @@ public class BindController {
             }
 
             User user = bindService.unbindPhone(userId, request.getCode());
-            user.setPassword(null);
             return ApiResponse.success("手机解绑成功", user);
         } catch (Exception e) {
             return ApiResponse.error(e.getMessage());
@@ -241,7 +243,6 @@ public class BindController {
             }
 
             User user = bindService.unbindEmail(userId, request.getCode());
-            user.setPassword(null);
             return ApiResponse.success("邮箱解绑成功", user);
         } catch (Exception e) {
             return ApiResponse.error(e.getMessage());

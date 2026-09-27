@@ -9,6 +9,8 @@ public class LoginResponse {
     private String avatar;
     private String email;
     private String phone;
+    /** 本次登录是否伴随新账号创建（验证码自动注册 / 邮箱注册）。 */
+    private Boolean newUser;
 
     public String getToken() { return token; }
     public void setToken(String token) { this.token = token; }
@@ -33,4 +35,7 @@ public class LoginResponse {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+
+    public Boolean getNewUser() { return newUser; }
+    public void setNewUser(Boolean newUser) { this.newUser = newUser; }
 }

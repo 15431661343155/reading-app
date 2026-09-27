@@ -44,4 +44,10 @@ public interface ReadingProgressRepository extends JpaRepository<ReadingProgress
     @Modifying
     @Query("DELETE FROM ReadingProgress r WHERE r.userId = :userId AND r.bookId = :bookId")
     void deleteByUserIdAndBookId(@Param("userId") Long userId, @Param("bookId") Long bookId);
+
+    /** 删除某用户的全部阅读进度（删除用户时级联清理）。 */
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM ReadingProgress r WHERE r.userId = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

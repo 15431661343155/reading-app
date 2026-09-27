@@ -3,19 +3,14 @@ package com.example.myapplication.widget;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
-import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
-import android.graphics.Shader;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import androidx.annotation.NonNull;
@@ -24,34 +19,37 @@ import androidx.annotation.Nullable;
 import com.example.myapplication.R;
 import com.google.android.material.card.MaterialCardView;
 
-import java.util.Arrays;
 import java.util.Random;
 
 /**
- * 磨砂玻璃卡片（iOS frosted glass）。
+ * 实时磨砂玻璃容器：采样背后指定内容（frostBackdrop）做模糊，叠加 tint / sheen / 颗粒，
+ * 形成 iOS 风格的毛玻璃底栏。磨砂层每帧在 OnPreDraw 时重采样背后内容（节流 33ms）。
  *
- * <p>原理：在每一帧绘制前，把「背景采样源」（如内容容器）位于本控件下方的区域
- * 绘制到一张降采样位图上，做快速高斯近似模糊，再把模糊结果放大绘制到自身圆角区域内，
- * 最后叠加半透明色 + 磨砂颗粒 + 顶部高光，形成真正的半透毛玻璃质感。
- *
- * <p>为了不产生无谓开销：只有在采样结果与上一帧不同（内容真的变了）时才 invalidate，
- * 界面静止时不会持续触发重绘。
+ * <p>切换 tab 的淡入淡出 + 横移动画期间，背后内容剧烈变化会导致模糊亮度局部起伏，
+ * 表现为一条近白长条闪过。{@link #setCaptureFrozen(boolean)} 可在动画期间冻结采样、
+ * 动画结束后解冻，消除该闪条。
  *
  * <pre>
- * app:frostBackdrop="@id/fragment_container"  采样源
- * app:frostTint="@color/nav_frost_tint"       叠加色（alpha 决定通透度）
- * app:frostBlurRadius="16dp"                  模糊半径
+ * app:frostBackdrop      背景采样源：采集该 View 位于本控件下方的区域做模糊
+ * app:frostTint          磨砂叠加色（决定通透度，alpha 越小越透）
+ * app:frostBaseColor     采样区底色：背后内容透明时的兜底填充
+ * app:frostSheen         顶部玻璃高光色
+ * app:frostBlurRadius    模糊半径（dp）
+ * app:frostDownscale     降采样倍率，越大越快、越糊
+ * app:frostNoiseAlpha    磨砂颗粒强度 0~255
+ * app:frostCornerRadius  圆角（缺省时跟随 cardCornerRadius）
+ * app:frostEnabled       关闭实时模糊时退化为纯半透明色块
+ * 描边 / 投影沿用 MaterialCardView 的 strokeColor / strokeWidth / cardElevation
  * </pre>
  */
 public class FrostedNavCardView extends MaterialCardView {
 
-    /** 两次采样之间的最小间隔，限制为 ~30fps，避免高频滚动时过度采样 */
     private static final long MIN_CAPTURE_INTERVAL_MS = 33L;
     private static final int NOISE_SIZE = 128;
 
     private final Path mClipPath = new Path();
     private final RectF mDstRect = new RectF();
-    private final Paint mBackdropPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final Paint mBackdropPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mTintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mSheenPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mNoisePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -69,19 +67,20 @@ public class FrostedNavCardView extends MaterialCardView {
     private int[] mCurrPixels;
     private Bitmap mNoiseBitmap;
 
-    private int mBackdropId = View.NO_ID;
-    private int mTintColor = Color.parseColor("#99FFFFFF");
-    private int mBaseColor = Color.parseColor("#FFF2F2F7");
-    private int mSheenColor = Color.parseColor("#5CFFFFFF");
-    private int mDownscale = 4;
-    private float mBlurRadiusPx = 12f;
+    private int mBackdropId;
+    private int mTintColor = 0x40FFFFFF;
+    private int mBaseColor = 0x80F2F2F7;
+    private int mSheenColor = 0x1AFFFFFF;
+    private int mDownscale = 3;
+    private float mBlurRadiusPx = 16f;
     private int mNoiseAlpha = 55;
     private float mCornerRadiusPx = -1f;
     private boolean mFrostEnabled = true;
 
-    private long mLastCaptureAt;
+    private long mLastCaptureAt = 0;
     private ViewTreeObserver.OnPreDrawListener mPreDrawListener;
-    private boolean mDebugLogged;
+    private boolean mDebugLogged = false;
+    private boolean mCaptureFrozen = false;
 
     public FrostedNavCardView(@NonNull Context context) {
         this(context, null);
@@ -98,57 +97,51 @@ public class FrostedNavCardView extends MaterialCardView {
 
     private void init(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.FrostedNavCardView, defStyleAttr, 0);
-        mBackdropId = a.getResourceId(R.styleable.FrostedNavCardView_frostBackdrop, View.NO_ID);
+        mBackdropId = a.getResourceId(R.styleable.FrostedNavCardView_frostBackdrop, 0);
         mTintColor = a.getColor(R.styleable.FrostedNavCardView_frostTint, mTintColor);
         mBaseColor = a.getColor(R.styleable.FrostedNavCardView_frostBaseColor, mBaseColor);
         mSheenColor = a.getColor(R.styleable.FrostedNavCardView_frostSheen, mSheenColor);
+        mBlurRadiusPx = a.getDimension(R.styleable.FrostedNavCardView_frostBlurRadius, mBlurRadiusPx);
         mDownscale = a.getInt(R.styleable.FrostedNavCardView_frostDownscale, mDownscale);
-        if (mDownscale < 1) {
-            mDownscale = 1;
-        }
-        float blurDp = a.getDimension(R.styleable.FrostedNavCardView_frostBlurRadius, 16f);
-        mBlurRadiusPx = Math.max(1f, blurDp / mDownscale);
         mNoiseAlpha = a.getInt(R.styleable.FrostedNavCardView_frostNoiseAlpha, mNoiseAlpha);
         mCornerRadiusPx = a.getDimension(R.styleable.FrostedNavCardView_frostCornerRadius, -1f);
-        mFrostEnabled = a.getBoolean(R.styleable.FrostedNavCardView_frostEnabled, true);
+        mFrostEnabled = a.getBoolean(R.styleable.FrostedNavCardView_frostEnabled, mFrostEnabled);
         a.recycle();
 
-        // 卡片自身背景必须透明，磨砂层由本控件绘制
+        // 卡片自身背景透明，磨砂内容由本控件绘制；保留 MaterialCardView 的圆角投影
         setCardBackgroundColor(Color.TRANSPARENT);
         setWillNotDraw(false);
 
-        mTintPaint.setColor(mTintColor);
+        mBackdropPaint.setFilterBitmap(true);
         mBasePaint.setColor(mBaseColor);
-        if (mNoiseAlpha > 0 && mFrostEnabled) {
+        mTintPaint.setColor(mTintColor);
+        mSheenPaint.setColor(mSheenColor);
+
+        if (mNoiseAlpha > 0) {
             mNoiseBitmap = createNoiseBitmap(NOISE_SIZE);
-            mNoisePaint.setShader(new BitmapShader(mNoiseBitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT));
+            mNoisePaint.setShader(new android.graphics.BitmapShader(
+                    mNoiseBitmap, android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT));
             mNoisePaint.setAlpha(mNoiseAlpha);
         }
-    }
 
-    // ------------------------------------------------------------------ 生命周期
+        mPreDrawListener = () -> onBeforeDraw();
+    }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        ViewTreeObserver vto = getViewTreeObserver();
-        if (vto.isAlive()) {
-            if (mPreDrawListener == null) {
-                mPreDrawListener = this::onBeforeDraw;
-            }
-            vto.removeOnPreDrawListener(mPreDrawListener);
-            vto.addOnPreDrawListener(mPreDrawListener);
+        if (mPreDrawListener != null) {
+            getViewTreeObserver().addOnPreDrawListener(mPreDrawListener);
         }
     }
 
     @Override
     protected void onDetachedFromWindow() {
-        ViewTreeObserver vto = getViewTreeObserver();
-        if (vto.isAlive() && mPreDrawListener != null) {
-            vto.removeOnPreDrawListener(mPreDrawListener);
+        super.onDetachedFromWindow();
+        if (mPreDrawListener != null) {
+            getViewTreeObserver().removeOnPreDrawListener(mPreDrawListener);
         }
         releaseBitmaps();
-        super.onDetachedFromWindow();
     }
 
     @Override
@@ -156,152 +149,111 @@ public class FrostedNavCardView extends MaterialCardView {
         super.onSizeChanged(w, h, oldw, oldh);
         releaseBitmaps();
         if (w > 0 && h > 0) {
-            mSheenPaint.setShader(new LinearGradient(
-                    0f, 0f, 0f, h * 0.85f,
-                    mSheenColor, Color.TRANSPARENT, Shader.TileMode.CLAMP));
-        } else {
-            mSheenPaint.setShader(null);
+            int down = Math.max(1, mDownscale);
+            int sw = Math.max(1, w / down);
+            int sh = Math.max(1, h / down);
+            mSrcBitmap = Bitmap.createBitmap(sw, sh, Bitmap.Config.ARGB_8888);
+            mBlurBitmap = Bitmap.createBitmap(sw, sh, Bitmap.Config.ARGB_8888);
+            mSrcCanvas = new Canvas(mSrcBitmap);
+            int n = sw * sh;
+            mBlurA = new int[n];
+            mBlurB = new int[n];
+            mPrevPixels = new int[n];
+            mCurrPixels = new int[n];
         }
-        mLastCaptureAt = 0L;
     }
 
-    // ------------------------------------------------------------------ 采样 & 绘制
-
-    /** 每一帧绘制前：采样一次背景，内容有变化才请求重绘 */
     private boolean onBeforeDraw() {
-        if (!mFrostEnabled || !isShown() || getWidth() <= 0 || getHeight() <= 0) {
+        if (mCaptureFrozen) {
             return true;
         }
-        long now = SystemClock.uptimeMillis();
+        if (!mFrostEnabled) {
+            return true;
+        }
+        long now = SystemClock.elapsedRealtime();
         if (now - mLastCaptureAt < MIN_CAPTURE_INTERVAL_MS) {
             return true;
         }
         mLastCaptureAt = now;
-        if (captureBackdrop()) {
-            invalidate();
-        }
+        captureBackdrop();
         return true;
     }
 
-    /**
-     * 采集背景采样源位于本控件下方的区域并模糊。
-     *
-     * @return 本次结果与上一次不同（说明背后内容变了）
-     */
     private boolean captureBackdrop() {
         View src = resolveBackdrop();
-        int w = getWidth();
-        int h = getHeight();
-        if (src == null || w <= 0 || h <= 0 || src.getWidth() <= 0 || src.getHeight() <= 0) {
+        if (src == null || mSrcBitmap == null || mBlurBitmap == null || mSrcCanvas == null) {
             return false;
         }
-
-        int sw = Math.max(1, w / mDownscale);
-        int sh = Math.max(1, h / mDownscale);
-        if (mSrcBitmap == null || mSrcBitmap.getWidth() != sw || mSrcBitmap.getHeight() != sh) {
-            releaseBitmaps();
-            mSrcBitmap = Bitmap.createBitmap(sw, sh, Bitmap.Config.ARGB_8888);
-            mBlurBitmap = Bitmap.createBitmap(sw, sh, Bitmap.Config.ARGB_8888);
-            mSrcCanvas = new Canvas(mSrcBitmap);
-            int len = sw * sh;
-            mBlurA = new int[len];
-            mBlurB = new int[len];
-            mPrevPixels = new int[len];
-            mCurrPixels = new int[len];
-            Arrays.fill(mPrevPixels, 0);
+        int w = getWidth();
+        int h = getHeight();
+        if (w <= 0 || h <= 0) {
+            return false;
         }
-
         src.getLocationOnScreen(mLocSrc);
         getLocationOnScreen(mLocSelf);
         int left = mLocSelf[0] - mLocSrc[0];
         int top = mLocSelf[1] - mLocSrc[1];
 
-        mSrcBitmap.eraseColor(mBaseColor);
+        int sw = mSrcBitmap.getWidth();
+        int sh = mSrcBitmap.getHeight();
+        float scale = 1f / Math.max(1, mDownscale);
+
         mSrcCanvas.save();
-        mSrcCanvas.scale(1f / mDownscale, 1f / mDownscale);
+        // 先缩放再平移（负偏移）：设备坐标 = (q - offset) * scale，
+        // 恰好把「本控件正后方」的那块 src 区域采进降采样位图
+        mSrcCanvas.scale(scale, scale);
         mSrcCanvas.translate(-left, -top);
-        try {
-            src.draw(mSrcCanvas);
-        } catch (Throwable ignored) {
-            // 个别硬件层 View 无法绘制到软件画布，忽略即可（保留兜底底色）
-        }
+        src.draw(mSrcCanvas);
         mSrcCanvas.restore();
 
-        fastBlur(mSrcBitmap, mBlurBitmap, mBlurA, mBlurB, Math.round(mBlurRadiusPx));
-
-        mBlurBitmap.getPixels(mCurrPixels, 0, sw, 0, 0, sw, sh);
-        if (Arrays.equals(mCurrPixels, mPrevPixels)) {
-            return false;
-        }
-        System.arraycopy(mCurrPixels, 0, mPrevPixels, 0, mCurrPixels.length);
+        int radius = Math.max(1, (int) (mBlurRadiusPx * scale));
+        fastBlur(mSrcBitmap, mBlurBitmap, mBlurA, mBlurB, radius);
+        invalidate();
         return true;
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (!mDebugLogged) {
-            mDebugLogged = true;
-            android.util.Log.d("FrostDebug", "tint=" + Integer.toHexString(mTintColor)
-                    + " base=" + Integer.toHexString(mBaseColor)
-                    + " sheen=" + Integer.toHexString(mSheenColor)
-                    + " noise=" + mNoiseAlpha + " enabled=" + mFrostEnabled
-                    + " radius=" + getCornerRadiusPx()
-                    + " size=" + getWidth() + "x" + getHeight()
-                    + " blur=" + (mBlurBitmap != null));
-        }
         int w = getWidth();
         int h = getHeight();
         if (w > 0 && h > 0) {
             float r = getCornerRadiusPx();
             mClipPath.rewind();
             mClipPath.addRoundRect(0f, 0f, w, h, r, r, Path.Direction.CW);
-
             canvas.save();
             canvas.clipPath(mClipPath);
 
-            if (mBlurBitmap != null && !mBlurBitmap.isRecycled()) {
+            if (mFrostEnabled && mBlurBitmap != null) {
                 mDstRect.set(0f, 0f, w, h);
                 canvas.drawBitmap(mBlurBitmap, null, mDstRect, mBackdropPaint);
             } else {
-                // 模糊位图尚未生成或捕获失败时，使用半透明磨砂兜底底色
-                canvas.drawPath(mClipPath, mBasePaint);
+                canvas.drawRect(0f, 0f, w, h, mBasePaint);
             }
-            // 叠加色：决定整体明暗与通透度
-            canvas.drawPath(mClipPath, mTintPaint);
-            // 顶部高光：玻璃边缘反光
-            if (mSheenPaint.getShader() != null) {
+            if (mTintColor != 0) {
+                canvas.drawRect(0f, 0f, w, h, mTintPaint);
+            }
+            if (mSheenColor != 0) {
                 canvas.drawRect(0f, 0f, w, h, mSheenPaint);
             }
-            // 磨砂颗粒
-            if (mNoiseBitmap != null && !mNoiseBitmap.isRecycled()) {
+            if (mNoiseBitmap != null && mNoiseAlpha > 0) {
                 canvas.drawRect(0f, 0f, w, h, mNoisePaint);
             }
             canvas.restore();
         }
+        // 让 MaterialCardView 继续处理：圆形描边 rim + 桌面浮起的柔和投影
         super.onDraw(canvas);
     }
 
     @Nullable
     private View resolveBackdrop() {
-        if (mBackdropId != View.NO_ID) {
-            View root = getRootView();
-            View v = root != null ? root.findViewById(mBackdropId) : null;
-            if (v != null && v != this) {
-                return v;
-            }
+        if (mBackdropId == 0) {
+            return null;
         }
-        // 兜底：取父布局中第一个不是自己的子 View（通常是内容容器）
-        ViewParent parent = getParent();
-        if (parent instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) parent;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                View child = group.getChildAt(i);
-                if (child != this) {
-                    return child;
-                }
-            }
+        View root = getRootView();
+        if (root == null) {
+            return null;
         }
-        return null;
+        return root.findViewById(mBackdropId);
     }
 
     private float getCornerRadiusPx() {
@@ -314,8 +266,6 @@ public class FrostedNavCardView extends MaterialCardView {
         }
         return 14f * getResources().getDisplayMetrics().density;
     }
-
-    // ------------------------------------------------------------------ 工具
 
     private void releaseBitmaps() {
         if (mSrcBitmap != null && !mSrcBitmap.isRecycled()) {
@@ -333,10 +283,6 @@ public class FrostedNavCardView extends MaterialCardView {
         mCurrPixels = null;
     }
 
-    /**
-     * 噪点图：黑白点各半且透明度随机，叠加后均值接近中性，
-     * 不会整体压暗或提亮，只留下一层磨砂颗粒感。
-     */
     private static Bitmap createNoiseBitmap(int size) {
         Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         int[] px = new int[size * size];
@@ -350,75 +296,80 @@ public class FrostedNavCardView extends MaterialCardView {
         return bm;
     }
 
-    /** 分离式方框模糊 ×2，近似高斯，纯 Java 实现，全版本可用 */
-    private static void fastBlur(Bitmap src, Bitmap dst, int[] bufA, int[] bufB, int radius) {
+    /** 可分离盒式模糊：先水平后垂直各一趟，结果写回 dst。 */
+    private static void fastBlur(Bitmap src, Bitmap dst, int[] a, int[] b, int radius) {
         int w = src.getWidth();
         int h = src.getHeight();
-        src.getPixels(bufA, 0, w, 0, 0, w, h);
-        if (radius < 1) {
-            dst.setPixels(bufA, 0, w, 0, 0, w, h);
-            return;
-        }
-        boxPass(bufA, bufB, w, h, radius, true);
-        boxPass(bufB, bufA, w, h, radius, false);
-        boxPass(bufA, bufB, w, h, radius, true);
-        boxPass(bufB, bufA, w, h, radius, false);
-        dst.setPixels(bufA, 0, w, 0, 0, w, h);
+        src.getPixels(a, 0, w, 0, 0, w, h);
+        boxPass(a, b, w, h, radius, true);
+        boxPass(b, a, w, h, radius, false);
+        dst.setPixels(a, 0, w, 0, 0, w, h);
     }
 
-    private static void boxPass(int[] in, int[] out, int w, int h, int r, boolean horizontal) {
-        int n = horizontal ? w : h;          // 模糊轴长度
-        int m = horizontal ? h : w;          // 线条数量
-        float scale = 1f / (2 * r + 1);
-        int winStart = -r;
-        int winEnd = r;
-
-        for (int line = 0; line < m; line++) {
-            int base = horizontal ? line * w : line;
-            int step = horizontal ? 1 : w;
-
-            int sa = 0, sr = 0, sg = 0, sb = 0;
-            for (int k = winStart; k <= winEnd; k++) {
-                int c = in[base + clampIdx(k, n) * step];
-                sa += (c >>> 24);
-                sr += (c >> 16) & 0xFF;
-                sg += (c >> 8) & 0xFF;
-                sb += c & 0xFF;
+    private static void boxPass(int[] src, int[] dst, int w, int h, int r, boolean horizontal) {
+        int radius = r < 1 ? 1 : r;
+        int window = radius * 2 + 1;
+        if (horizontal) {
+            for (int y = 0; y < h; y++) {
+                int rowStart = y * w;
+                long aSum = 0, rSum = 0, gSum = 0, bSum = 0;
+                for (int k = -radius; k <= radius; k++) {
+                    int p = src[rowStart + clampIdx(k, w - 1)];
+                    aSum += (p >> 24) & 0xff;
+                    rSum += (p >> 16) & 0xff;
+                    gSum += (p >> 8) & 0xff;
+                    bSum += p & 0xff;
+                }
+                for (int x = 0; x < w; x++) {
+                    int ai = (int) (aSum / window) & 0xff;
+                    int ri = (int) (rSum / window) & 0xff;
+                    int gi = (int) (gSum / window) & 0xff;
+                    int bi = (int) (bSum / window) & 0xff;
+                    dst[rowStart + x] = (ai << 24) | (ri << 16) | (gi << 8) | bi;
+                    int pL = src[rowStart + clampIdx(x - radius, w - 1)];
+                    int pR = src[rowStart + clampIdx(x + radius + 1, w - 1)];
+                    aSum += ((pR >> 24) & 0xff) - ((pL >> 24) & 0xff);
+                    rSum += ((pR >> 16) & 0xff) - ((pL >> 16) & 0xff);
+                    gSum += ((pR >> 8) & 0xff) - ((pL >> 8) & 0xff);
+                    bSum += (pR & 0xff) - (pL & 0xff);
+                }
             }
-            for (int i = 0; i < n; i++) {
-                out[base + i * step] = ((int) (sa * scale) << 24)
-                        | ((int) (sr * scale) << 16)
-                        | ((int) (sg * scale) << 8)
-                        | (int) (sb * scale);
-
-                int cOut = in[base + clampIdx(i - r, n) * step];
-                int cIn = in[base + clampIdx(i + r + 1, n) * step];
-                sa += (cIn >>> 24) - (cOut >>> 24);
-                sr += ((cIn >> 16) & 0xFF) - ((cOut >> 16) & 0xFF);
-                sg += ((cIn >> 8) & 0xFF) - ((cOut >> 8) & 0xFF);
-                sb += (cIn & 0xFF) - (cOut & 0xFF);
+        } else {
+            for (int x = 0; x < w; x++) {
+                long aSum = 0, rSum = 0, gSum = 0, bSum = 0;
+                for (int k = -radius; k <= radius; k++) {
+                    int p = src[clampIdx(k, h - 1) * w + x];
+                    aSum += (p >> 24) & 0xff;
+                    rSum += (p >> 16) & 0xff;
+                    gSum += (p >> 8) & 0xff;
+                    bSum += p & 0xff;
+                }
+                for (int y = 0; y < h; y++) {
+                    int ai = (int) (aSum / window) & 0xff;
+                    int ri = (int) (rSum / window) & 0xff;
+                    int gi = (int) (gSum / window) & 0xff;
+                    int bi = (int) (bSum / window) & 0xff;
+                    dst[y * w + x] = (ai << 24) | (ri << 16) | (gi << 8) | bi;
+                    int pT = src[clampIdx(y - radius, h - 1) * w + x];
+                    int pB = src[clampIdx(y + radius + 1, h - 1) * w + x];
+                    aSum += ((pB >> 24) & 0xff) - ((pT >> 24) & 0xff);
+                    rSum += ((pB >> 16) & 0xff) - ((pT >> 16) & 0xff);
+                    gSum += ((pB >> 8) & 0xff) - ((pT >> 8) & 0xff);
+                    bSum += (pB & 0xff) - (pT & 0xff);
+                }
             }
         }
     }
 
-    private static int clampIdx(int k, int n) {
-        if (k < 0) {
-            return 0;
-        }
-        return k >= n ? n - 1 : k;
+    private static int clampIdx(int i, int max) {
+        if (i < 0) return 0;
+        if (i > max) return max;
+        return i;
     }
 
-    // ------------------------------------------------------------------ 对外开放
-
-    /** 运行时开关实时磨砂（关闭后退化为纯半透明色块） */
     public void setFrostEnabled(boolean enabled) {
-        if (mFrostEnabled == enabled) {
-            return;
-        }
         mFrostEnabled = enabled;
-        if (!enabled) {
-            releaseBitmaps();
-        }
+        mLastCaptureAt = 0;
         invalidate();
     }
 
@@ -428,10 +379,16 @@ public class FrostedNavCardView extends MaterialCardView {
         invalidate();
     }
 
-    /** 内容变化后强制刷新一次（如 Fragment 切换） */
     public void refreshFrost() {
-        mLastCaptureAt = 0L;
-        if (captureBackdrop()) {
+        mLastCaptureAt = 0;
+        invalidate();
+    }
+
+    public void setCaptureFrozen(boolean frozen) {
+        mCaptureFrozen = frozen;
+        if (!frozen) {
+            // 解冻后立即允许重采样（绕过节流），动画结束瞬间刷新一帧真实模糊
+            mLastCaptureAt = 0;
             invalidate();
         }
     }

@@ -1,63 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="?attr/android:windowBackground">
 
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/toolbar_back"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:background="@color/ios_bg"
-        app:navigationIcon="@drawable/ic_back_black"
-        app:title="书源管理"
-        app:titleTextColor="@color/black"/>
-
+    <!-- 内容区：原 LinearLayout 整体内嵌，保持原有垂直布局不变 -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="12dp">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <Button
-            android:id="@+id/btnImportUrl"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_weight="1"
-            android:text="🌐 网络导入"
-            android:textSize="14sp"
-            android:backgroundTint="#4CAF50"
-            android:textColor="@color/white"
-            android:layout_marginEnd="6dp"/>
-
-        <Button
-            android:id="@+id/btnAdd"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_weight="1"
-            android:text="手动添加"
-            android:textSize="14sp"
-            android:backgroundTint="@color/ios_bg"
-            android:textColor="@color/ios_blue"
-            android:layout_marginStart="6dp"/>
-    </LinearLayout>
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#e0e0e0"/>
-
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar_back"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@color/ios_bg"
+            app:navigationIcon="@drawable/ic_back_black"
+            app:title="书源管理"
+            app:titleCentered="true"
+            app:titleTextColor="@color/black" />
 
         <LinearLayout
-            android:id="@+id/sourceListLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"/>
-    </ScrollView>
-</LinearLayout>
+            android:orientation="horizontal"
+            android:padding="12dp">
+
+            <Button
+                android:id="@+id/btnImportUrl"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:text="🌐 网络导入"
+                android:textSize="14sp"
+                android:backgroundTint="#4CAF50"
+                android:textColor="@color/white"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnAdd"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:text="手动添加"
+                android:textSize="14sp"
+                android:backgroundTint="@color/ios_bg"
+                android:textColor="@color/ios_blue"
+                android:layout_marginStart="6dp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#e0e0e0" />
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/sourceListLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- 加载动画：首次拉取在线书源期间显示（列表空白期），与全站 LoadingView 风格统一 -->
+    <com.example.myapplication.widget.LoadingView
+        android:id="@+id/loading_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        app:lvGifSize="140dp" />
+
+</FrameLayout>

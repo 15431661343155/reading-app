@@ -38,6 +38,16 @@ apk.backup-dir=/www/apk/backup
 jwt.secret=<CHANGE_ME>
 jwt.expiration=86400000
 
+# ============ 管理后台登录 ============
+# 启动时若该用户名不存在，会自动创建一个 role=ADMIN 的管理员账号（密码 BCrypt 落库）；
+# 若该用户名已存在但不是管理员，会被提升为 ADMIN（不改动其密码）。
+# 仅 role=ADMIN 的账号可登录管理后台 /admin；App 端普通用户登录接口 /api/auth/login 不受影响。
+# 留空或不配置则使用代码默认值 admin / admin123 —— 上线前务必改掉。
+admin.username=<CHANGE_ME>
+admin.password=<CHANGE_ME>
+# 置为 false 可关闭启动时的管理员账号自动初始化
+admin.auto-init=true
+
 # ============ 邮件（建议填应用专用密码，不要填邮箱登录密码） ============
 spring.mail.host=smtp.qq.com
 spring.mail.port=587

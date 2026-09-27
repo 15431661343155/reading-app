@@ -3,12 +3,20 @@ package com.example.readingapp.controller;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.ExternalReadingRecord;
 import com.example.readingapp.repository.ExternalReadingRecordRepository;
+import com.example.readingapp.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+/**
+ * 外站书阅读记录（用户隔离）。
+ *
+ * 安全：userId 一律从 JWT（SecurityContext）派生，忽略请求里传来的 userId。
+ */
 @RestController
 @RequestMapping("/api/external-reading")
 @RequiredArgsConstructor
@@ -20,12 +28,14 @@ public class ExternalReadingController {
     // 保存或更新外站书籍阅读记录
     @PostMapping("/save")
     public ApiResponse<ExternalReadingRecord> saveRecord(@RequestBody SaveRequest req) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) return ApiResponse.error(401, "未登录");
         try {
             ExternalReadingRecord record = externalReadingRecordRepository
-                    .findByUserIdAndSourceTypeAndSourceBookId(req.userId, req.sourceType, req.sourceBookId)
+                    .findByUserIdAndSourceTypeAndSourceBookId(userId, req.sourceType, req.sourceBookId)
                     .orElseGet(ExternalReadingRecord::new);
 
-            record.setUserId(req.userId);
+            record.setUserId(userId);
             record.setSourceType(req.sourceType);
             record.setSourceBookId(req.sourceBookId);
             record.setChapterIndex(req.chapterIndex);
@@ -46,14 +56,46 @@ public class ExternalReadingController {
     // 获取外站书籍阅读记录
     @GetMapping("/get")
     public ApiResponse<Map<String, Object>> getRecord(
-            @RequestParam Long userId,
             @RequestParam String sourceType,
             @RequestParam String sourceBookId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) return ApiResponse.error(401, "未登录");
         return externalReadingRecordRepository
                 .findByUserIdAndSourceTypeAndSourceBookId(userId, sourceType, sourceBookId)
                 .map(this::toMap)
                 .map(ApiResponse::success)
                 .orElse(ApiResponse.success(null));
+    }
+
+    // 删除外站书籍阅读记录（用户在阅读记录里删除时调用，避免下次登录被重新拉回）
+    @PostMapping("/delete")
+    public ApiResponse<Void> deleteRecord(@RequestBody DeleteRequest req) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) return ApiResponse.error(401, "未登录");
+        try {
+            externalReadingRecordRepository.deleteByUserIdAndSourceTypeAndSourceBookId(
+                    userId, req.sourceType, req.sourceBookId);
+            return ApiResponse.success("记录已删除", null);
+        } catch (Exception e) {
+            return ApiResponse.error(e.getMessage());
+        }
+    }
+
+    // 获取当前用户全部外站阅读记录（登录时全量拉取用）
+    @GetMapping("/list")
+    public ApiResponse<List<Map<String, Object>>> list() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) return ApiResponse.error(401, "未登录");
+        try {
+            List<Map<String, Object>> result = externalReadingRecordRepository
+                    .findAllByUserId(userId)
+                    .stream()
+                    .map(this::toMap)
+                    .collect(Collectors.toList());
+            return ApiResponse.success(result);
+        } catch (Exception e) {
+            return ApiResponse.error(e.getMessage());
+        }
     }
 
     private Map<String, Object> toMap(ExternalReadingRecord record) {
@@ -74,7 +116,6 @@ public class ExternalReadingController {
 
     @lombok.Data
     public static class SaveRequest {
-        private Long userId;
         private String sourceType;
         private String sourceBookId;
         private int chapterIndex;
@@ -83,5 +124,11 @@ public class ExternalReadingController {
         private String bookAuthor;
         private String coverUrl;
         private int page;
+    }
+
+    @lombok.Data
+    public static class DeleteRequest {
+        private String sourceType;
+        private String sourceBookId;
     }
 }

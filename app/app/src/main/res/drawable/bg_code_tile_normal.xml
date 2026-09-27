@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 验证码格 · 常态：浅灰底 + 10dp 圆角 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/login_tile_bg" />
+    <corners android:radius="10dp" />
+</shape>

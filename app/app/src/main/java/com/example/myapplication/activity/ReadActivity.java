@@ -2,6 +2,10 @@ package com.example.myapplication.activity;
 
 import android.annotation.SuppressLint;
 import com.example.myapplication.utils.LocalBookParser;
+import com.example.myapplication.utils.LoginHelper;
+import com.example.myapplication.utils.ExternalPrefs;
+import com.example.myapplication.utils.ExternalSyncManager;
+import com.example.myapplication.utils.VolumeDeriver;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
@@ -33,7 +37,7 @@ import android.widget.SeekBar;
 import android.widget.ScrollView;
 import android.widget.AbsListView;
 import android.widget.TextView;
-import android.widget.Toast;
+
 import android.widget.LinearLayout;
 import android.app.AlertDialog;
 import android.view.GestureDetector;
@@ -62,6 +66,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.myapplication.R;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.Bookmark;
+import com.example.myapplication.bean.MajorChapter;
 import com.example.myapplication.bean.ReadingProgress;
 import com.example.myapplication.fragment.PopupBookmarkFragment;
 import com.example.myapplication.fragment.PopupChapterFragment;
@@ -72,6 +77,7 @@ import com.bumptech.glide.Glide;
 import com.example.myapplication.bean.ChapterDto;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.ReadTimeRequest;
+import com.example.myapplication.utils.Hint;
 import android.webkit.WebViewClient;
 
 import org.json.JSONObject;
@@ -173,14 +179,23 @@ public class ReadActivity extends BaseActivity {
     private java.util.Set<String> downloadingFonts = new java.util.HashSet<>(); // 正在下载的字体cssName
     private Book currentBook;
     private int currentChapterIndex = 0;
+    /** 显式跳章标记：从详情页目录等入口点击具体章节时为 true，
+     *  此时无论有无阅读记录都直接进入点击的章节；仅默认入口（继续阅读）才恢复进度 */
+    private boolean explicitChapterJump = false;
     // ========== 在途跨章跳转 ==========
     // 翻到章节边界、而目标章节正文还没加载完时，旧实现会先把 currentChapterIndex 推进到目标章，
     // 期间用户再翻一次就会基于「已推进的索引」再 +1，加载完成后直接跳到 N+2（跳两章）。
     // 改为：不推进 currentChapterIndex，只记录 pendingChapterIndex，等正文到位后再统一渲染。
     private int pendingChapterIndex = -1;          // -1 表示没有在途跳转
     private boolean pendingGoLastPage = false;     // true=跳过去后定位到该章最后一页（向前翻章）
+    private int pendingChapterPage = -1;           // >0=跳过去后定位到该页（服务端进度同步用）；-1=不指定
     private long pendingChapterTs = 0L;            // 发起时间，超时后允许重新发起（避免异常时永久卡死）
     private static final long PENDING_CHAPTER_TIMEOUT = 10000L;
+    private long lastChapterJumpTs = 0L;            // ⚠️ 防御：一次手势只会触发一次 onChapterEnd/onChapterStart；
+                                                    //    仿真翻页下 document 级滑动与 turn.js boundary 曾各自触发一次导致连跳两章，
+                                                    //    这里按时间窗去重（见 onChapterEnd/onChapterStart）
+    /** 服务端进度比本地新时，允许越过 positionRestored 守卫重渲染一次（同一本书只保留最新那条记录） */
+    private boolean forceRestorePosition = false;
     private float currentFontSize = 28f;   // px
     private float headerFooterFontSize = 12f; // 初始字号改为12
     private boolean showHeaderFooter = true;
@@ -193,8 +208,11 @@ public class ReadActivity extends BaseActivity {
     private String[][] externalChapters;          // 外站章节列表 [[title, url], ...]
     private final android.util.LruCache<String, String> externalContentCache =
             new android.util.LruCache<>(5);        // 缓存最近5章正文
-    private android.widget.LinearLayout layoutExternalRetry;  // 外站章节加载失败重试层
-    private TextView tvExternalRetryMsg;
+    /** 阅读器内「章节加载中」动画（与全站共用 {@link com.example.myapplication.widget.LoadingView}） */
+    private View loadingChapter;
+    /** 本站章节加载失败覆盖层（插画 + 文案 + 「再试一次」按钮，透明底适配各种阅读底色） */
+    private android.widget.LinearLayout layoutLoadFail;
+    private TextView tvLoadFailMsg;
 
     // ========== 电量时间 ==========
     private final Handler timeUpdateHandler = new Handler(Looper.getMainLooper());
@@ -211,8 +229,15 @@ public class ReadActivity extends BaseActivity {
     /**
      * 本地书的分卷结构（来自导入时持久化的紧凑卷表）；空列表表示该书无分卷信息，
      * 目录浮窗按平铺章节列表显示。仅在 {@link #loadLocalBookChapters} 中填充。
+     * 注意：服务器书（含后台导入 EPUB）的分卷不存这里，而是在打开目录时按最新
+     * chapterList 实时推导（见 {@link #currentVolumes()}），以保证卷区间与下标严格一致。
      */
     private final List<LocalBookParser.VolumeInfo> localVolumes = new ArrayList<>();
+    /**
+     * 服务器书的分卷表（后台导入 EPUB 时写入 major_chapter）。仅在服务器书加载链路拉取；
+     * 供 {@link #currentVolumes()} 结合章节 sortKey 推导分卷。为空则目录保持平铺。
+     */
+    private final List<MajorChapter> serverMajorChapters = new ArrayList<>();
 
     // 本地书元信息（目录浮窗顶部信息头的兜底来源）：仅在 loadLocalBookChapters 里填充。
     // 从阅读记录/详情页进来时 currentBook 可能缺书名/作者/封面，这里用 local_books 记录补齐。
@@ -256,6 +281,8 @@ public class ReadActivity extends BaseActivity {
     // ========== 导航栏自动隐藏 ==========
     private final Runnable hideNavRunnable = this::hideNavigation;
     private int statusBarHeight = 0;  // 状态栏高度
+    private int bottomNavHeight = 0;  // 底部导航栏高度缓存（避免每次滑动都重新 measure）
+    private static final long NAV_ANIM_MS = 250L;  // 上下导航栏滑入/滑出时长
 
     // ========== 手势检测（滑动翻页 + 点击翻页） ==========
     private GestureDetector gestureDetector;
@@ -278,19 +305,34 @@ public class ReadActivity extends BaseActivity {
 
     // ========== 阅读时间 ==========
     private long readStartTime;
-    private SharedPreferences readTimePref;
 
     // ========== JS 回调更新的当前进度 ==========
     private int currentPageInChapter = 1;
     private int totalPagesInChapter = 1;
 
-    // ========== 分页缓存 ==========
-    private SharedPreferences pageCachePref;
+    // ✅ 复用池修复：恢复阅读位置时记住「目标页码」，正文异步到达后重渲染时沿用，
+    //    避免 fetchChapterContent.onResponse 用默认 page=1 重渲染把恢复位置冲掉（导致「恢复总落第 1 页」）。
+    private int restoreTargetPage = 1;
+
+    // ✅ 排版缓存：把「章节分页结果」按 layout signature 落盘，下次进入本书同章同排版直接复用，避免每次重排
+    private java.io.File layoutCacheDir;
+    private java.util.concurrent.ExecutorService layoutExecutor;
+    private static final int LAYOUT_CACHE_MAX_FILES = 300;
 
     private boolean positionRestored = false;
     private boolean isWebViewReady  = false;
+    // ✅ 复用池：标记「WebView 就绪后的统一处理」是否已执行，避免首次加载与复用命中两条路径重复触发
+    private boolean readerReadyHandled = false;
+    // ✅ 复用池：等 WebView 布局就绪（拿到正确宽度）再恢复位置的监听。
+    //    池化 WebView 跨 Activity 复用，该监听必须随 Activity 生命周期清理，否则 observer 随 detach 失效后崩溃。
+    private android.view.ViewTreeObserver.OnGlobalLayoutListener layoutReadyListener;
     private boolean hasRestoredFromLocal = false;
     private boolean chapterRestoredFromCache = false;  // ✅ 新增：标记是否从缓存恢复了章节
+    // ✅ 渲染代次：每次外部调用 renderChapterContent 都生成一个新代次。
+    //    WebView 未就绪时会以 50ms 重试渲染，若期间已有更新的渲染请求（如服务器正文到达后渲染目标章），
+    //    较早的延迟重试通过比对代次被判定为「过期」并直接丢弃，避免用旧 index（如占位章的 0）
+    //    覆盖 currentChapterIndex，导致用户被拉回第一章。
+    private int renderGeneration = 0;
 
     // ==================== Long/Book 安全工具（彻底消灭 Long->long 自动拆箱 NPE） ====================
     /** currentBook.getId() 统一安全入口：外站书为 null → 返回 0，绝不会自动拆箱 */
@@ -355,8 +397,7 @@ public class ReadActivity extends BaseActivity {
                         } catch (Throwable showErr) {
                             // 弹都弹不出来时退化成 Toast
                             try {
-                                Toast.makeText(ReadActivity.this,
-                                        "阅读器异常已暂停，请返回重试", Toast.LENGTH_LONG).show();
+                                Hint.showLong(ReadActivity.this, "阅读器异常已暂停，请返回重试");
                             } catch (Throwable ignored) {}
                         }
                     });
@@ -394,14 +435,18 @@ public class ReadActivity extends BaseActivity {
 
         setContentView(R.layout.activity_read);
 
+        // 记一次「今天读过」，推进「我的」页的连续阅读天数（账号级，幂等，失败不影响阅读）
+        reportReadingCheckIn();
+
         currentBook = (Book) getIntent().getSerializableExtra("book");
         if (currentBook == null) {
-            Toast.makeText(this, "书籍信息缺失，请重新进入", Toast.LENGTH_LONG).show();
+            Hint.showLong(this, "书籍信息缺失，请重新进入");
             finish();
             return;
         }
 
         currentChapterIndex = getIntent().getIntExtra("chapterIndex", 0);
+        explicitChapterJump = getIntent().getBooleanExtra("chapterExplicit", false);
         currentFontSize = getIntent().getFloatExtra("fontSize", 28f);
         isNightMode = getIntent().getBooleanExtra("nightMode", false);
         isLocalBook = getIntent().getBooleanExtra("isLocal", false);
@@ -426,6 +471,10 @@ public class ReadActivity extends BaseActivity {
         getStatusBarHeight();
 
         initView();
+        // ✅ 进门即展示「章节加载中」遮罩：覆盖 WebView 就绪 + 仿真翻页首屏渲染（同步 toDataURL 多张大图）的空窗，
+        //    避免进入阅读器时（尤其仿真模式）出现白屏而非加载动画。内容真正渲染到位后由
+        //    renderChapterContentInternal 的回调撤下；占位/异常分支也各自有收口。
+        setChapterLoading(true);
         loadReadingPreferencesNoApply();
         // 当前若选中在线字体，后台预拉取字体列表，确保「切换字体」按钮在未打开弹窗时也显示中文名
         preloadBackendFontsIfNeeded();
@@ -520,7 +569,16 @@ public class ReadActivity extends BaseActivity {
     }
 
     private void initView() {
-        webView = findViewById(R.id.webview_reader);
+        // ✅ 复用 WebView 池：把池化实例动态插入内容容器，避免每次开书都 inflate / 重建 WebView + 重载 reader.html。
+        //    容器（webview_container）在布局里是空的；池化 WebView 若已挂在其他父容器则先摘离再重新挂接。
+        ViewGroup webContainer = findViewById(R.id.webview_container);
+        webView = ReaderWebViewPool.obtain(getApplicationContext());
+        if (webView.getParent() != null) {
+            ((ViewGroup) webView.getParent()).removeView(webView);
+        }
+        // 插到容器最底层（index 0），让布局里的左右点击区 / 加载层 / 重试层等仍处于其上方
+        webContainer.addView(webView, 0, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         layoutTopNav = findViewById(R.id.layout_top_nav);
         layoutBottomNav = findViewById(R.id.layout_bottom_nav);
         tvToolbarTitle = findViewById(R.id.tv_toolbar_title);
@@ -535,15 +593,23 @@ public class ReadActivity extends BaseActivity {
         tvProgressText = findViewById(R.id.tv_progress_text);
         tvToolbarTitle.setText(currentBook.getBookName());
 
-        readTimePref = getSharedPreferences("read_time", MODE_PRIVATE);
-        pageCachePref = getSharedPreferences("page_cache", MODE_PRIVATE);
+        // ✅ 排版缓存目录 + 单线程写入池；启动时清理上次残留的 .tmp 半文件
+        layoutCacheDir = new java.io.File(getCacheDir(), "reader_layout");
+        if (!layoutCacheDir.exists()) layoutCacheDir.mkdirs();
+        if (layoutCacheDir.exists()) {
+            java.io.File[] tmpFiles = layoutCacheDir.listFiles((d, n) -> n.endsWith(".tmp"));
+            if (tmpFiles != null) for (java.io.File t : tmpFiles) t.delete();
+        }
+        layoutExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
 
-        // 外站章节加载失败重试层
-        layoutExternalRetry = findViewById(R.id.layout_external_retry);
-        tvExternalRetryMsg = findViewById(R.id.tv_external_retry_msg);
-        findViewById(R.id.btn_external_retry).setOnClickListener(v -> {
-            if (layoutExternalRetry != null) layoutExternalRetry.setVisibility(View.GONE);
-            loadExternalChapterContent(currentChapterIndex);
+        // 章节加载中动画 + 本站/外站统一的加载失败层
+        loadingChapter = findViewById(R.id.loading_chapter);
+        layoutLoadFail = findViewById(R.id.layout_load_fail);
+        tvLoadFailMsg = findViewById(R.id.tv_load_fail_msg);
+        findViewById(R.id.btn_load_fail_retry).setOnClickListener(v -> {
+            if (layoutLoadFail != null) layoutLoadFail.setVisibility(View.GONE);
+            if (isExternalBook) loadExternalChapterContent(currentChapterIndex);
+            else fetchChapterContent(currentChapterIndex);
         });
     }
 
@@ -557,69 +623,145 @@ public class ReadActivity extends BaseActivity {
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         webView.setWebChromeClient(new WebChromeClient());
-        webView.addJavascriptInterface(new JsBridge(), "Android");
+        // ✅ 每次 attach 都重新绑定到当前 Activity：上一个 Activity 的 WebViewClient / JsBridge
+        //    随替换而失效，避免复用池 WebView 时回调串台到已销毁的 Activity。
+        // ✅ 复用池 WebView：必须使用同一个 JsBridge 实例注入 JS。
+        //    若每次 new JsBridge()，reader.html 的 JS 上下文仍持有第一次注入的旧 bridge 代理，
+        //    后续 Activity 的页面变化/章节边界等回调会串台到已销毁的旧 Activity，导致翻页进度无法保存。
+        webView.addJavascriptInterface(JsBridge.getInstance(this), "Android");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 isWebViewReady = true;
-
-                // ✅ 关键修复：WebView 一就绪就无条件补发一次页眉页脚 / 电量时间设置。
-                // 退出阅读器重进时 onResume 先于 onPageFinished 执行，那时 updateBatteryAndTime()
-                // 会因 isWebViewReady=false 被跳过；而下面恢复位置的分支只在「首次恢复」时应用设置，
-                // 走本地缓存恢复（chapterRestoredFromCache=true）时完全不会走到，
-                // 结果就是页脚只有页码、没有电量时间，要等 60 秒的定时刷新才出现。
-                applyHeaderFooterSettings();
-
-                // ✅ WebView 加载完成后，如果章节列表已加载但尚未恢复位置，则恢复
-                mainHandler.post(() -> {
-                    if (!positionRestored && !chapterRestoredFromCache && !chapterList.isEmpty()) {
-                        android.util.Log.d("ReadActivity", "WebView ready, restoring position from server...");
-                        // 先应用所有设置（字体、背景等），再恢复位置，避免默认设置闪烁
-                        webView.evaluateJavascript("beginSettingsBatch()", null);
-                        applySettingsToWebView_inner();
-                        webView.evaluateJavascript("finishSettingsBatch()", null);
-                        webView.evaluateJavascript("setPageTurnMode('" + pageTurnMode + "')", null);
-                        restoreReadingPosition(currentChapterIndex);
-                        updateChapterButtons();
-                        // ✅ 若此前开启过自动翻页，阅读器就绪后自动恢复
-                        if (autoPageEnabled) {
-                            autoPageSuspended = false;
-                            startAutoPage();
-                        }
-                    }
-                });
+                ReaderWebViewPool.markLoaded();
+                onReaderWebViewReady();
             }
         });
 
-        // 读取 HTML 并注入初始设置，确保第一次渲染就使用正确的值
-        try {
-            java.io.InputStream is = getAssets().open("reader.html");
-            byte[] buffer = new byte[is.available()];
-            is.read(buffer);
-            is.close();
-            String html = new String(buffer, "UTF-8");
-            String initScript = buildSettingsInitScript();
-            html = html.replace("</body>", "<script>" + initScript + "</script>\n</body>");
-            webView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
-        } catch (Exception e) {
-            android.util.Log.e("ReadActivity", "Failed to inject settings, loading directly", e);
-            webView.loadUrl("file:///android_asset/reader.html");
+        // ✅ 复用池 WebView：reader.html 已加载则立即就绪（首开由上面的 onPageFinished 触发）。
+        //    不再每次开书 loadDataWithBaseURL 重载 reader.html —— 这是冷启动优化的核心。
+        if (ReaderWebViewPool.isLoaded()) {
+            isWebViewReady = true;
+            // 等 WebView 完成布局、拿到正确宽度后再恢复，否则 0 宽会导致分页 / 缓存 key 出错。
+            // ✅ 复用的 WebView 跨 Activity：必须先把可能残留的旧监听清掉（避免叠加），
+            //    并在移除时做 isAlive() 保护，否则 observer 随 detach 失效后会抛 IllegalStateException 崩溃。
+            if (webView.getWidth() > 0) {
+                onReaderWebViewReady();
+            } else {
+                // 清理上次（上一个 Activity）可能残留、未触发的监听，杜绝跨 Activity 叠加
+                if (layoutReadyListener != null) {
+                    android.view.ViewTreeObserver prev = webView.getViewTreeObserver();
+                    if (prev.isAlive()) prev.removeOnGlobalLayoutListener(layoutReadyListener);
+                    layoutReadyListener = null;
+                }
+                layoutReadyListener = new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        if (webView.getWidth() > 0) {
+                            // ✅ 用「当前」observer 并在 alive 时移除，避免捕获的旧 observer 失效抛异常
+                            android.view.ViewTreeObserver obs = webView.getViewTreeObserver();
+                            if (obs.isAlive()) obs.removeOnGlobalLayoutListener(layoutReadyListener);
+                            layoutReadyListener = null;
+                            onReaderWebViewReady();
+                        }
+                    }
+                };
+                webView.getViewTreeObserver().addOnGlobalLayoutListener(layoutReadyListener);
+            }
         }
     }
 
-    public class JsBridge {
+    /**
+     * WebView 就绪后的统一处理：补发页眉页脚 / 电量时间设置，并在「章节列表已加载且尚未恢复位置」时
+     * 应用设置 + 恢复阅读进度。首次加载由 onPageFinished 触发，复用池命中时由 setupWebView 直接触发。
+     */
+    private void onReaderWebViewReady() {
+        if (readerReadyHandled) return;
+        readerReadyHandled = true;
+
+        // ✅ 把原本注入到 reader.html 的初始化脚本改为 evaluate 执行（复用池后不再重载 HTML），
+        //    保证字号 / 字体 / 背景 / 页眉页脚 / 纹理 / 仿真占位等全局变量与首帧样式正确。
+        webView.evaluateJavascript(buildSettingsInitScript(), null);
+
+        // ✅ 关键修复：WebView 一就绪就无条件补发一次页眉页脚 / 电量时间设置。
+        // 退出阅读器重进时 onResume 先于 onPageFinished 执行，那时 updateBatteryAndTime()
+        // 会因 isWebViewReady=false 被跳过；而下面恢复位置的分支只在「首次恢复」时应用设置，
+        // 走本地缓存恢复（chapterRestoredFromCache=true）时完全不会走到，
+        // 结果就是页脚只有页码、没有电量时间，要等 60 秒的定时刷新才出现。
+        applyHeaderFooterSettings();
+
+        // ✅ WebView 加载完成后，如果章节列表已加载但尚未恢复位置，则恢复
+        mainHandler.post(() -> {
+            if (!positionRestored && !chapterRestoredFromCache && !chapterList.isEmpty()) {
+                android.util.Log.d("ReadActivity", "WebView ready, restoring position from server...");
+                // 先应用所有设置（字体、背景等），再恢复位置，避免默认设置闪烁
+                webView.evaluateJavascript("beginSettingsBatch()", null);
+                applySettingsToWebView_inner();
+                webView.evaluateJavascript("finishSettingsBatch()", null);
+                webView.evaluateJavascript("setPageTurnMode('" + pageTurnMode + "')", null);
+                restoreReadingPosition(currentChapterIndex);
+                updateChapterButtons();
+                // ✅ 若此前开启过自动翻页，阅读器就绪后自动恢复
+                if (autoPageEnabled) {
+                    autoPageSuspended = false;
+                    startAutoPage();
+                }
+            }
+        });
+    }
+
+    public static class JsBridge {
+        private static JsBridge sInstance;
+        private java.lang.ref.WeakReference<ReadActivity> activityRef;
+
+        public static synchronized JsBridge getInstance() {
+            if (sInstance == null) {
+                sInstance = new JsBridge();
+            }
+            return sInstance;
+        }
+
+        public static synchronized JsBridge getInstance(ReadActivity activity) {
+            if (sInstance == null) {
+                sInstance = new JsBridge();
+            }
+            if (activity != null) {
+                sInstance.attach(activity);
+            }
+            return sInstance;
+        }
+
+        /** 若当前 bridge 仍指向该 Activity，则主动断开，避免已销毁 Activity 继续接收回调 */
+        public static void detach(ReadActivity activity) {
+            if (sInstance != null && sInstance.activityRef != null) {
+                ReadActivity a = sInstance.activityRef.get();
+                if (a == activity) sInstance.activityRef.clear();
+            }
+        }
+
+        private void attach(ReadActivity activity) {
+            this.activityRef = new java.lang.ref.WeakReference<>(activity);
+        }
+
+        private ReadActivity getActivity() {
+            ReadActivity a = activityRef != null ? activityRef.get() : null;
+            return (a != null && !a.isDestroyed()) ? a : null;
+        }
+
         /**
          * 前端点击屏幕中间 1/3 时切换导航栏显隐（仿真模式下 Android 手势层不处理点击）
          */
         @JavascriptInterface
         @SuppressWarnings("unused")
         public void toggleNavigation() {
-            runOnUiThread(() -> {
+            ReadActivity activity = getActivity();
+            if (activity == null) return;
+            activity.runOnUiThread(() -> {
                 try {
-                    resetAutoHideTimer();
-                    ReadActivity.this.toggleNavigation();
+                    activity.resetAutoHideTimer();
+                    activity.toggleNavigation();
                 } catch (Throwable t) {
                     android.util.Log.w("ReadActivity", "JsBridge.toggleNavigation 异常", t);
                 }
@@ -629,11 +771,17 @@ public class ReadActivity extends BaseActivity {
         @JavascriptInterface
         @SuppressWarnings("unused")
         public void onPageChanged(int page, int totalPages) {
-            runOnUiThread(() -> {
+            ReadActivity activity = getActivity();
+            if (activity == null) {
+                android.util.Log.w("ReadActivity", "onPageChanged 丢弃：当前无可存活的 Activity（疑似串台到已销毁实例）");
+                return;
+            }
+            android.util.Log.d("ReadActivity", "onPageChanged 收到：page=" + page + "/" + totalPages);
+            activity.runOnUiThread(() -> {
                 try {
-                    currentPageInChapter = page;
-                    totalPagesInChapter = totalPages;
-                    updateProgressDisplay();
+                    activity.currentPageInChapter = page;
+                    activity.totalPagesInChapter = totalPages;
+                    activity.updateProgressDisplay();
                 } catch (Throwable t) {
                     android.util.Log.w("ReadActivity", "onPageChanged 异常", t);
                 }
@@ -643,69 +791,76 @@ public class ReadActivity extends BaseActivity {
         @JavascriptInterface
         @SuppressWarnings("unused")
         public void onChapterEnd() {
-            runOnUiThread(() -> {
+            ReadActivity activity = getActivity();
+            if (activity == null) return;
+            long now = System.currentTimeMillis();
+            // ⚠️ 连击去重：同一手势的重复回调（仿真翻页下 document 级滑动分支与 turn.js boundary
+            // 各可能触发一次）在 700ms 内直接丢弃，避免一次滑动连跳两章。
+            if (now - activity.lastChapterJumpTs < 700) return;
+            activity.lastChapterJumpTs = now;
+            activity.runOnUiThread(() -> {
                 try {
-                int nextIndex = currentChapterIndex + 1;
+                int nextIndex = activity.currentChapterIndex + 1;
 
                 // ✅ 简化：直接检查是否还有下一章
-                if (nextIndex >= chapterList.size()) {
-                    Toast.makeText(ReadActivity.this, "已经是最后一章，自动翻页已关闭", Toast.LENGTH_SHORT).show();
+                if (nextIndex >= activity.chapterList.size()) {
+                    Hint.show(activity, "已经是最后一章，自动翻页已关闭");
                     // ✅ 到达书末：停止自动翻页并同步开关状态
-                    stopAutoPage();
-                    autoPageEnabled = false;
-                    autoPageSuspended = false;
-                    syncAutoPageSwitchUI();
-                    saveReadingPreferences();
+                    activity.stopAutoPage();
+                    activity.autoPageEnabled = false;
+                    activity.autoPageSuspended = false;
+                    activity.syncAutoPageSwitchUI();
+                    activity.saveReadingPreferences();
                     return;
                 }
 
                 // ✅ 已有指向同一章的在途跳转 → 直接忽略，避免连跳多章
-                if (shouldIgnoreChapterJump(nextIndex)) {
+                if (activity.shouldIgnoreChapterJump(nextIndex)) {
                     return;
                 }
 
                 // ✅ 防御：chapterContents 越界
-                if (nextIndex >= chapterContents.size()) {
-                    while (chapterContents.size() < chapterList.size()) chapterContents.add("【正在加载...】");
+                if (nextIndex >= activity.chapterContents.size()) {
+                    while (activity.chapterContents.size() < activity.chapterList.size()) activity.chapterContents.add("【正在加载...】");
                 }
                 // 检查下一章的状态
-                String content = chapterContents.get(nextIndex);
+                String content = activity.chapterContents.get(nextIndex);
 
-                if (isChapterContentPending(content)) {
+                if (activity.isChapterContentPending(content)) {
                     // 下一章正在加载或尚未加载，触发加载。
                     // ✅ 关键：这里【不要】推进 currentChapterIndex —— 推进了的话，
                     // 用户在此期间再翻一次页就会基于新索引再 +1，加载完成后会直接跳两章。
-                    setPendingChapterJump(nextIndex, false);
-                    fetchChapterContent(nextIndex);
+                    activity.setPendingChapterJump(nextIndex, false);
+                    activity.fetchChapterContent(nextIndex);
                     return;
                 }
 
                 // 检查内容是否有效（"有效" = 不是占位/空串，见 isChapterContentPending）
-                boolean hasValidContent = !isChapterContentPending(content);
+                boolean hasValidContent = !activity.isChapterContentPending(content);
 
                 if (hasValidContent) {
                     // 有有效内容，直接跳转
-                    loadChapterContent(nextIndex);
+                    activity.loadChapterContent(nextIndex);
                 } else {
                     // 内容无效（占位或空章），尝试找下一个有效章节
                     int searchIndex = nextIndex;
-                    while (searchIndex < chapterList.size()) {
-                        if (searchIndex >= chapterContents.size()) break;
-                        String searchContent = chapterContents.get(searchIndex);
-                        boolean isValid = !isChapterContentPending(searchContent);
+                    while (searchIndex < activity.chapterList.size()) {
+                        if (searchIndex >= activity.chapterContents.size()) break;
+                        String searchContent = activity.chapterContents.get(searchIndex);
+                        boolean isValid = !activity.isChapterContentPending(searchContent);
                         if (isValid) {
-                            loadChapterContent(searchIndex);
+                            activity.loadChapterContent(searchIndex);
                             return;
                         }
                         searchIndex++;
                     }
                     // 没有找到有效章节，尝试加载下一个
-                    setPendingChapterJump(nextIndex, false);
-                    fetchChapterContent(nextIndex);
+                    activity.setPendingChapterJump(nextIndex, false);
+                    activity.fetchChapterContent(nextIndex);
                 }
                 } catch (Throwable t) {
                     android.util.Log.e("ReadActivity", "JsBridge.onChapterEnd 崩溃", t);
-                    Toast.makeText(ReadActivity.this, "翻到下一章失败", Toast.LENGTH_SHORT).show();
+                    Hint.show(activity, "翻到下一章失败");
                 }
             });
         }
@@ -713,92 +868,169 @@ public class ReadActivity extends BaseActivity {
         @JavascriptInterface
         @SuppressWarnings("unused")
         public void onChapterStart() {
-            runOnUiThread(() -> {
+            ReadActivity activity = getActivity();
+            if (activity == null) return;
+            long now = System.currentTimeMillis();
+            // ⚠️ 连击去重：同上 onChapterEnd，避免一次手势重复触发导致连跳两章。
+            if (now - activity.lastChapterJumpTs < 700) return;
+            activity.lastChapterJumpTs = now;
+            activity.runOnUiThread(() -> {
                 try {
-                int prevIndex = currentChapterIndex - 1;
+                int prevIndex = activity.currentChapterIndex - 1;
 
                 // 检查是否还有上一章
                 if (prevIndex < 0) {
                     // 确实是第一章
-                    Toast.makeText(ReadActivity.this, "已经是第一章", Toast.LENGTH_SHORT).show();
+                    Hint.show(activity, "已经是第一章");
                     return;
                 }
 
                 // ✅ 已有指向同一章的在途跳转 → 直接忽略，避免连跳多章
-                if (shouldIgnoreChapterJump(prevIndex)) return;
+                if (activity.shouldIgnoreChapterJump(prevIndex)) return;
 
                 // ✅ 防御：chapterContents 越界
-                if (prevIndex >= chapterContents.size()) {
-                    setPendingChapterJump(prevIndex, true);
-                    fetchChapterContent(prevIndex);
+                if (prevIndex >= activity.chapterContents.size()) {
+                    activity.setPendingChapterJump(prevIndex, true);
+                    activity.fetchChapterContent(prevIndex);
                     return;
                 }
                 // 检查上一章的状态
-                String content = chapterContents.get(prevIndex);
+                String content = activity.chapterContents.get(prevIndex);
 
-                if (isChapterContentPending(content)) {
+                if (activity.isChapterContentPending(content)) {
                     // 上一章正在加载或尚未加载，触发加载（同样不推进 currentChapterIndex）
-                    setPendingChapterJump(prevIndex, true);
-                    fetchChapterContent(prevIndex);
+                    activity.setPendingChapterJump(prevIndex, true);
+                    activity.fetchChapterContent(prevIndex);
                     return;
                 }
 
                 // 检查内容是否有效（"有效" = 不是占位/空串，见 isChapterContentPending）
-                boolean hasValidContent = !isChapterContentPending(content);
+                boolean hasValidContent = !activity.isChapterContentPending(content);
 
                 if (hasValidContent) {
                     // 有有效内容，直接跳转到最后一页
-                    loadChapterContentToLastPage(prevIndex);
+                    activity.loadChapterContentToLastPage(prevIndex);
                 } else {
                     // 内容无效（占位或空章），尝试加载或跳过
                     if (content.trim().isEmpty() || content.equals("【本章节内容暂缺】")) {
                         // 如果是明确标记为缺失的内容，尝试重新加载
-                        setPendingChapterJump(prevIndex, true);
-                        fetchChapterContent(prevIndex);
+                        activity.setPendingChapterJump(prevIndex, true);
+                        activity.fetchChapterContent(prevIndex);
                     } else {
                         // 仍无法确定有效内容，尝试找上一个有效章节
                         int searchIndex = prevIndex - 1;
-                        while (searchIndex >= 0 && searchIndex < chapterContents.size()) {
-                            String searchContent = chapterContents.get(searchIndex);
-                            boolean isValid = !isChapterContentPending(searchContent);
+                        while (searchIndex >= 0 && searchIndex < activity.chapterContents.size()) {
+                            String searchContent = activity.chapterContents.get(searchIndex);
+                            boolean isValid = !activity.isChapterContentPending(searchContent);
                             if (isValid) {
-                                loadChapterContentToLastPage(searchIndex);
+                                activity.loadChapterContentToLastPage(searchIndex);
                                 return;
                             }
                             searchIndex--;
                         }
                         // 没有找到有效章节，尝试加载上一个
-                        setPendingChapterJump(prevIndex, true);
-                        fetchChapterContent(prevIndex);
+                        activity.setPendingChapterJump(prevIndex, true);
+                        activity.fetchChapterContent(prevIndex);
                     }
                 }
                 } catch (Throwable t) {
                     android.util.Log.e("ReadActivity", "JsBridge.onChapterStart 崩溃", t);
-                    Toast.makeText(ReadActivity.this, "翻到上一章失败", Toast.LENGTH_SHORT).show();
+                    Hint.show(activity, "翻到上一章失败");
                 }
             });
         }
 
         @JavascriptInterface
         @SuppressWarnings("unused")
-        public void onPaginationComplete(String summaryJson) {
+        public void cacheChapterLayout(String key, String json) {
+            ReadActivity activity = getActivity();
+            if (activity == null) return;
+            if (key == null || json == null || json.length() < 2) return;
+            activity.writeLayoutCache(key, json);
+        }
+    }
+
+    // ========== 排版缓存：把「章节分页结果」按 layout signature 落盘，下次进入同章同排版直接复用 ==========
+    // layout signature 由「书籍 + 章节 + 字号 + 视口宽高 + 页眉页脚开关 + 字体 + 内容哈希」组成，
+    // 任一变动（改字号 / 换字体 / 旋转 / 改内容）都会自然错开缓存 → 自动失效并重排。
+    private String computeLayoutKey(int chIndex, String content) {
+        long bid = safeBookId();
+        String bookPart;
+        if (bid > 0) {
+            bookPart = "L" + bid;
+        } else {
+            String st = currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "";
+            String su = currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "";
+            bookPart = "E" + Integer.toHexString((st + "|" + su).hashCode());
+        }
+        int w = (webView != null) ? webView.getWidth() : 0;
+        int h = (webView != null) ? webView.getHeight() : 0;
+        int fh = (currentFontFamily != null) ? currentFontFamily.hashCode() : 0;
+        int chc = (content != null) ? content.hashCode() : 0;
+        return bookPart + "_" + chIndex + "_" + ((int) currentFontSize) + "_" + w + "_" + h
+                + "_" + (showHeaderFooter ? 1 : 0) + "_" + fh + "_" + chc;
+    }
+
+    private String readLayoutCache(String key) {
+        try {
+            java.io.File f = new java.io.File(layoutCacheDir, sha256hex(key) + ".json");
+            if (!f.exists() || f.length() > 1536 * 1024) return null; // 超大文件不读，避免主线程卡顿
+            java.io.BufferedReader br = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(new java.io.FileInputStream(f), "UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line);
+            br.close();
+            return sb.length() > 0 ? sb.toString() : null;
+        } catch (Exception e) {
+            android.util.Log.w("ReadActivity", "readLayoutCache 失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private void writeLayoutCache(String key, String json) {
+        if (layoutExecutor == null) return;
+        layoutExecutor.execute(() -> {
             try {
-                JSONObject json = new JSONObject(summaryJson);
-            int chIndex = json.getInt("chapterIndex");
-            // ✅ 外站书 safeBookId()=0 时退化为"0+sourceType"复合 key，避免 currentBook.getId()=null 自动拆箱 NPE
-            long bid = safeBookId();
-            String key;
-            if (bid > 0) {
-                key = "page_info_" + bid + "_" + chIndex + "_" + currentFontSize + "_" + webView.getWidth();
-            } else {
-                String st = currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "";
-                String su = currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "";
-                key = "page_info_ext_" + st + "_" + su + "_" + chIndex + "_" + currentFontSize + "_" + webView.getWidth();
-            }
-            pageCachePref.edit().putString(key, summaryJson).apply();
+                String name = sha256hex(key) + ".json";
+                java.io.File tmp = new java.io.File(layoutCacheDir, name + ".tmp");
+                java.io.File dst = new java.io.File(layoutCacheDir, name);
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(tmp);
+                fos.write(json.getBytes("UTF-8"));
+                fos.close();
+                if (dst.exists()) dst.delete();
+                if (!tmp.renameTo(dst)) { // 极少数 rename 失败：直接原地写兜底
+                    java.io.FileOutputStream fos2 = new java.io.FileOutputStream(dst);
+                    fos2.write(json.getBytes("UTF-8"));
+                    fos2.close();
+                    tmp.delete();
+                }
+                trimLayoutCache();
             } catch (Exception e) {
-                android.util.Log.w("ReadActivity", "Failed to parse pagination summary", e);
+                android.util.Log.w("ReadActivity", "writeLayoutCache 失败: " + e.getMessage());
             }
+        });
+    }
+
+    private void trimLayoutCache() {
+        try {
+            java.io.File[] files = layoutCacheDir.listFiles((d, n) -> n.endsWith(".json"));
+            if (files == null || files.length <= LAYOUT_CACHE_MAX_FILES) return;
+            java.util.Arrays.sort(files, (a, b) -> java.lang.Long.compare(a.lastModified(), b.lastModified()));
+            int remove = files.length - LAYOUT_CACHE_MAX_FILES;
+            for (int i = 0; i < remove; i++) files[i].delete();
+        } catch (Exception e) { /* ignore */ }
+    }
+
+    private static String sha256hex(String s) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] b = md.digest(s.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder(b.length * 2);
+            for (byte x : b) sb.append(String.format("%02x", x & 0xff));
+            return sb.toString();
+        } catch (Exception e) {
+            return "k" + Integer.toHexString(s.hashCode());
         }
     }
 
@@ -825,11 +1057,14 @@ public class ReadActivity extends BaseActivity {
         // 从本地记录恢复阅读进度
         String recordKey = "ext_" + (currentBook.getSourceType() != null ? currentBook.getSourceType() : "")
                 + "|" + (currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "");
-        SharedPreferences pref = getSharedPreferences("external_reading_records", MODE_PRIVATE);
-        int savedIdx = pref.getInt(recordKey + "_chapterIndex", currentChapterIndex);
+        SharedPreferences pref = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
+        // ✅ 目录点击（显式跳章）优先于本地记录：点哪章进哪章
+        int savedIdx = explicitChapterJump
+                ? currentChapterIndex
+                : pref.getInt(recordKey + "_chapterIndex", currentChapterIndex);
         currentChapterIndex = Math.min(savedIdx, chapterList.size() - 1);
-        // ✅ 读取保存的页码，用于恢复到具体页
-        int savedPage = pref.getInt(recordKey + "_page", 1);
+        // ✅ 读取保存的页码，用于恢复到具体页（显式跳章从第 1 页开始，不沿用其他章节的页码）
+        int savedPage = explicitChapterJump ? 1 : pref.getInt(recordKey + "_page", 1);
 
         tvToolbarTitle.setText(currentBook.getTitle());
         updateChapterButtons();
@@ -837,9 +1072,8 @@ public class ReadActivity extends BaseActivity {
         String[] currentPair = externalChapters[currentChapterIndex];
         String currentUrl = (currentPair != null && currentPair.length > 1) ? currentPair[1] : "";
         if (currentUrl == null || currentUrl.isEmpty()) {
-            renderChapterContent(currentChapterIndex, chapterList.get(currentChapterIndex).getTitle(),
-                    "【章节链接缺失，请返回目录选择其他章节】");
-            showExternalRetry("章节链接缺失，无法加载");
+            chapterContents.set(currentChapterIndex, "【章节链接缺失，请返回目录选择其他章节】");
+            showLoadFail("章节链接缺失，无法加载");
         } else {
             // ✅ 标记已恢复位置，阻止 onPageFinished → restoreReadingPosition 重复渲染（会导致闪回第1页）
             positionRestored = true;
@@ -885,10 +1119,16 @@ public class ReadActivity extends BaseActivity {
             Chapter tempChapter = new Chapter();
             tempChapter.setIndex(0);
             tempChapter.setId(-1);
-            tempChapter.setTitle("加载中...");
+            // ⚠️ 标题不要塞「加载中...」：它会被当成真正的章节标题，**同时画在页眉和正文的大标题上**
+            //    （用户看到的「正文里还显示加载中…」就是它）。标题未知时留空，
+            //    「正在加载」统一由整页加载动画表达，不要再往正文里塞字。
+            //    这个临时章节 id=-1，真实章节列表一到就会整体重建，所以留空不会残留。
+            tempChapter.setTitle("");
             chapterList.add(tempChapter);
             chapterContents.add("【正在加载章节列表...】");
-            renderChapterContent(0, tempChapter.getTitle(), "【正在加载章节列表...】");
+            // ✅ 修复：占位渲染必须用真实目标章 currentChapterIndex，不能用硬编码 0，
+            //    否则 WebView 就绪前的延迟重试会把 currentChapterIndex 覆盖回 0，用户停在第一章
+            renderChapterContent(currentChapterIndex, tempChapter.getTitle(), "【正在加载章节列表...】");
             tvToolbarTitle.setText(currentBook.getTitle());
             final String st = currentBook.getSourceType();
             final String sb = currentBook.getSourceUrl();
@@ -938,7 +1178,7 @@ public class ReadActivity extends BaseActivity {
         if (isExternalBook) {
             String recordKey = "ext_" + (currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "")
                     + "|" + (currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "");
-            SharedPreferences extPref = getSharedPreferences("external_reading_records", MODE_PRIVATE);
+            SharedPreferences extPref = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
             localCh = extPref.getInt(recordKey + "_chapterIndex", -1);
         } else if (localBookId > 0) {
             for (int i = 0; i < cnt; i++) {
@@ -948,7 +1188,8 @@ public class ReadActivity extends BaseActivity {
                 }
             }
         }
-        final int targetChapter = localCh >= 0 ? localCh : currentChapterIndex;
+        // ✅ 目录点击（显式跳章）优先于阅读记录：点哪章进哪章，不再被"上次阅读位置"覆盖
+        final int targetChapter = (!explicitChapterJump && localCh >= 0) ? localCh : currentChapterIndex;
 
         // ✅ 性能优化：调用并行加载策略
         initChapterListAndRestoreProgress(targetChapter);
@@ -1024,6 +1265,11 @@ public class ReadActivity extends BaseActivity {
                 positionRestored = true;
             } else {
                 // 没有内容缓存，显示占位符并触发加载
+                // ✅ 关键修复（复用池回归）：无本地内容缓存时也要记住「恢复目标页码」，
+                //    否则 fetchChapterContent.onResponse 默认 page=1 会把恢复位置冲掉，
+                //    导致「重新打开总落第 1 页」。与 loadChapterContentWithPage 保持一致。
+                restoreTargetPage = savedPage;
+                positionRestored = true;
                 currentChapterIndex = targetChapter;
                 renderChapterContent(targetChapter, chapterList.get(targetChapter).getTitle(), "【正在加载章节内容...】");
                 fetchChapterContent(targetChapter);
@@ -1038,13 +1284,21 @@ public class ReadActivity extends BaseActivity {
             Chapter tempChapter = new Chapter();
             tempChapter.setIndex(targetChapter);
             tempChapter.setId(-1);
-            tempChapter.setTitle("加载中...");
+            // ⚠️ 标题不要塞「加载中...」：它会被当成真正的章节标题，**同时画在页眉和正文的大标题上**
+            //    （用户看到的「正文里还显示加载中…」就是它）。标题未知时留空，
+            //    「正在加载」统一由整页加载动画表达，不要再往正文里塞字。
+            //    这个临时章节 id=-1，真实章节列表一到就会整体重建，所以留空不会残留。
+            tempChapter.setTitle("");
             chapterList.add(tempChapter);
             chapterContents.add("【正在加载章节列表...】");
-            renderChapterContent(0, tempChapter.getTitle(), "【正在加载章节列表...】");
+            // ✅ 修复：占位渲染用真实目标章 targetChapter（而非硬编码 0），
+            //    避免 WebView 就绪前的延迟重试覆盖 currentChapterIndex 导致首次进入落回第一章
+            renderChapterContent(targetChapter, tempChapter.getTitle(), "【正在加载章节列表...】");
         }
         
         // ✅ 步骤2：异步请求服务器章节列表（后台更新）
+        // 同时拉取分卷表（供阅读器目录浮窗分卷展示）；失败/无分卷时目录保持平铺
+        loadServerMajorChapters(bookId);
         RetrofitClient.getApiService().getChapters(bookId).enqueue(new Callback<ApiResponse<List<ChapterDto>>>() {
             @Override
             public void onResponse(@NonNull Call<ApiResponse<List<ChapterDto>>> call, @NonNull Response<ApiResponse<List<ChapterDto>>> response) {
@@ -1091,8 +1345,10 @@ public class ReadActivity extends BaseActivity {
                         android.util.Log.d("ReadActivity", "Total loading time: " + totalLoadTime + "ms");
                     });
                     
-                    // 获取服务器进度（仅在首次打开时）
-                    if (targetChapter == 0 && !hasLocalRecord(bookId)) {
+                    // 取服务器阅读进度。web 与 App 共用同一条进度记录，
+                    // 谁的最后阅读时间更新就用谁的；已有本地记录也要拉，否则
+                    // 在 web 端读到的新位置在 App 上永远看不到。
+                    if (!explicitChapterJump && userId > 0 && bookId > 0) {
                         fetchServerProgress(userId, bookId);
                     }
                 } else {
@@ -1107,7 +1363,7 @@ public class ReadActivity extends BaseActivity {
                 
                 mainHandler.post(() -> {
                     if (!hasRestoredFromLocal) {
-                        Toast.makeText(ReadActivity.this, "网络请求失败，使用本地缓存", Toast.LENGTH_SHORT).show();
+                        Hint.show(ReadActivity.this, "网络请求失败，使用本地缓存");
                         loadChapterContent(targetChapter);
                     }
                     applySettingsToWebView();
@@ -1142,6 +1398,7 @@ public class ReadActivity extends BaseActivity {
                 ch.setIndex(i);
                 ch.setId(chapterId > 0 ? chapterId : -1);
                 ch.setTitle(title);
+                ch.setSortKey(getChapterSortKeyCache(bookId, i));
                 chapterList.add(ch);
                 
                 String content = getChapterContentCache(bookId, i);
@@ -1149,39 +1406,141 @@ public class ReadActivity extends BaseActivity {
             }
         }
         
+        // 同步还原分卷表（与上面章节来自同一份缓存快照，sortKey 与下标一致）；
+        // 缓存里没有卷表时清空，退回平铺
+        restoreMajorChaptersFromCache(bookId);
+        
         return !chapterList.isEmpty();
     }
     
     /**
-     * ✅ 新增：从服务器获取阅读进度
+     * 从服务器获取阅读进度。
+     *
+     * <p>web 与 App 共用同一条进度记录，同一本书只保留「最后阅读退出」的那一条，
+     * 判定依据是最后阅读时间：服务端 updatedAt 比本地记录时间新才采纳，否则保留本地
+     * （本地可能是在离线时读的，比服务端还新）。
+     *
+     * <p>粒度：web 端不分页，它写入的页数据固定为「该章首页」（1）；App 端写入的是
+     * 章节内精确页码。这里无需区分来源 —— 原样取服务端页码即可：
+     * web 记录落在该章首页（只对应到章节），App 记录精确到页。
      */
     private void fetchServerProgress(long userId, long bookId) {
         RetrofitClient.getApiService().getProgress(userId, bookId).enqueue(new Callback<ApiResponse<ReadingProgress>>() {
             @Override
             public void onResponse(@NonNull Call<ApiResponse<ReadingProgress>> call, @NonNull Response<ApiResponse<ReadingProgress>> response) {
-                if (response.isSuccessful() && response.body() != null && response.body().isSuccess() && response.body().getData() != null) {
-                    int savedChapter = response.body().getData().getChapterIndex();
-                    int savedPage = response.body().getData().getScrollPosition();
-                    if (savedChapter >= 0 && savedChapter < chapterList.size()) {
-                        loadChapterContentWithPage(savedChapter, savedPage);
-                        positionRestored = true;
-                    }
+                if (!response.isSuccessful() || response.body() == null
+                        || !response.body().isSuccess() || response.body().getData() == null) {
+                    return;
                 }
+                ReadingProgress server = response.body().getData();
+                int savedChapter = server.getChapterIndex();
+                if (savedChapter < 0 || savedChapter >= chapterList.size()) return;
+
+                // 按最后阅读时间取舍：服务端不比本地新就保持当前阅读位置，不打断用户
+                long localTime = getLocalRecordTime(bookId);
+                long serverTime = parseServerTime(server);
+                // ✅ 复用池修复：同设备续读时以本地记录为上。服务端进度历史上一度长期存成第 1 页，
+                //    即便本地 readTime 尚未被本次打开刷新、服务端时间戳更新，也应优先保留本地已恢复的位置，
+                //    否则「打开书 → 本地恢复到第 N 页 → 服务端拉回第 1 页」会把用户弹回首页。
+                //    仅当本地无任何阅读记录（换设备 / 首次打开）时才采纳服务端进度。
+                if (localTime > 0) {
+                    android.util.Log.d("ReadActivity", "Local reading record exists, keep local position, skip server adopt");
+                    return;
+                }
+                if (serverTime > 0 && serverTime <= localTime) {
+                    android.util.Log.d("ReadActivity", "Server progress is not newer, keep local position");
+                    return;
+                }
+                // 页码缺失/非法时交给阅读器回落到该章第一页
+                int page = server.getScrollPosition() > 0 ? server.getScrollPosition() : 1;
+                android.util.Log.d("ReadActivity", "Adopt server progress: chapter=" + savedChapter
+                        + ", page=" + page + ", serverTime=" + serverTime + ", localTime=" + localTime);
+                adoptServerPosition(savedChapter, page);
             }
-            @Override 
+
+            @Override
             public void onFailure(@NonNull Call<ApiResponse<ReadingProgress>> call, @NonNull Throwable t) {
                 android.util.Log.d("ReadActivity", "Failed to fetch server progress", t);
             }
         });
     }
 
-    private boolean hasLocalRecord(long bookId) {
+    /** 采纳服务端位置：正文已在手上就直接重渲染，否则走「在途跳转」等正文到位后按页码渲染。 */
+    private void adoptServerPosition(final int chapterIndex, final int page) {
+        runOnUiThread(() -> {
+            try {
+                if (chapterIndex < 0 || chapterIndex >= chapterList.size()) return;
+                String content = (chapterIndex < chapterContents.size()) ? chapterContents.get(chapterIndex) : null;
+                if (!isChapterContentPending(content)) {
+                    currentChapterIndex = chapterIndex;
+                    forceRestorePosition = true;
+                    loadChapterContentWithPage(chapterIndex, page);
+                    positionRestored = true;
+                    updateChapterButtons();
+                } else {
+                    // 正文还没到（换了章 / 还没拉过）：交给既有的在途跳转通道，
+                    // 正文到位后按指定页码渲染
+                    setPendingChapterJump(chapterIndex, false, page);
+                    fetchChapterContent(chapterIndex);
+                }
+            } catch (Throwable t) {
+                android.util.Log.e("ReadActivity", "adoptServerPosition 异常", t);
+            }
+        });
+    }
+
+    /** 本地阅读记录的「最后阅读时间」（毫秒）；没有记录返回 0。 */
+    private long getLocalRecordTime(long bookId) {
+        if (bookId <= 0) return 0;
         SharedPreferences pref = getSharedPreferences("reading_records", MODE_PRIVATE);
         int cnt = pref.getInt("record_count", 0);
         for (int i = 0; i < cnt; i++) {
-            if (pref.getLong("record_bookId_" + i, 0) == bookId) return true;
+            if (pref.getLong("record_bookId_" + i, 0) == bookId) {
+                return pref.getLong("record_readTime_" + i, 0);
+            }
         }
-        return false;
+        return 0;
+    }
+
+    /**
+     * 取服务端记录的「最后阅读时间」（毫秒）。
+     *
+     * <p>优先用后端下发的 updatedAtEpoch：它是绝对时间戳，与设备时区无关。
+     * 只有老版本后端没有该字段时，才回退到按本机时区解析 updatedAt 字符串
+     * （设备时区 ≠ 服务器时区时会有偏差，模拟器为 GMT 时最明显）。
+     */
+    private long parseServerTime(ReadingProgress p) {
+        if (p == null) return 0;
+        Long epoch = p.getUpdatedAtEpoch();
+        if (epoch != null && epoch > 0) return epoch;
+        return parseServerUpdatedAt(p.getUpdatedAt());
+    }
+
+    /**
+     * 解析服务端 updatedAt（形如 2026-09-16T20:53:37.182799，服务器本地时间、无时区）。
+     * 按本机时区解释后与本地记录时间戳比较；解析不出来返回 0（视为「时间未知」，
+     * 由调用方决定不据此否决服务端记录）。
+     *
+     * <p>已被 {@link #parseServerTime(ReadingProgress)} 取代，仅在服务端未下发
+     * updatedAtEpoch（老版本后端）时作为回退使用。
+     */
+    private long parseServerUpdatedAt(String iso) {
+        if (iso == null || iso.trim().isEmpty()) return 0;
+        try {
+            String s = iso.trim().replace('T', ' ');
+            int dot = s.indexOf('.');
+            if (dot > 0) {
+                // 截到毫秒：SimpleDateFormat 处理不了 6 位微秒
+                s = s.substring(0, Math.min(s.length(), dot + 4));
+            }
+            java.text.SimpleDateFormat fmt =
+                    new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US);
+            java.util.Date d = fmt.parse(s);
+            return d == null ? 0 : d.getTime();
+        } catch (Exception e) {
+            android.util.Log.w("ReadActivity", "解析服务端 updatedAt 失败: " + iso, e);
+            return 0;
+        }
     }
 
     private void restoreReadingPosition(int chapterIndex) {
@@ -1198,7 +1557,7 @@ public class ReadActivity extends BaseActivity {
         if (isExternalBook) {
             String recordKey = "ext_" + (currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "")
                     + "|" + (currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "");
-            SharedPreferences pref = getSharedPreferences("external_reading_records", MODE_PRIVATE);
+            SharedPreferences pref = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
             int savedPage = pref.getInt(recordKey + "_page", 1);
             android.util.Log.d("ReadActivity", "外站书从本地记录恢复: page=" + savedPage);
             loadChapterContentWithPage(chapterIndex, savedPage);
@@ -1233,6 +1592,8 @@ public class ReadActivity extends BaseActivity {
 
     private void loadChapterContent(int chapterIndex) {
         android.util.Log.d("ReadActivity", "loadChapterContent: chapterIndex=" + chapterIndex + ", chapterList.size()=" + chapterList.size());
+        // ✅ 非恢复渲染（跳章/翻章等）：目标页码回到首页，避免沿用上次恢复的目标页
+        restoreTargetPage = 1;
         // 主动跳章（目录/进度条等）时取消在途的边界跨章跳转
         clearPendingChapterJump();
 
@@ -1264,12 +1625,13 @@ public class ReadActivity extends BaseActivity {
             currentChapterIndex = chapterIndex;
             updateChapterButtons();
 
-            // 显示加载提示（如果reader.html有showLoading函数）
-            if (isWebViewReady) {
-                try {
-                    webView.evaluateJavascript("typeof showLoading === 'function' ? showLoading() : ''", null);
-                } catch (Throwable ignored) {}
-            }
+            // 显示「章节加载中」动画（原生遮罩，不依赖 WebView 是否就绪，三种翻页模式都可见）。
+            // 原实现调的是 reader.html 里的 showLoading() —— 那个函数根本不存在，一直是空操作，
+            // 于是加载期间正文只把占位哨兵串「【章节加载中...】」当正文画了出来。
+            setChapterLoading(true);
+            // ✅ 同时把占位页渲染进 WebView：加载动画/失败层都是透明底，
+            //    不清掉旧页的话，离线切章时「上一章正文」会一直衬在加载动画/失败层底下。
+            renderChapterContent(chapterIndex, title, "【正在加载...】");
             fetchChapterContent(chapterIndex);
         } else {
             android.util.Log.d("ReadActivity", "Content valid, rendering directly");
@@ -1390,12 +1752,12 @@ public class ReadActivity extends BaseActivity {
             android.util.Log.w("ReadActivity", "loadExternalChapterContent: externalChapters missing for index=" + chapterIndex
                     + ", chapters.len=" + (externalChapters == null ? "null" : externalChapters.length)
                     + ", list.size=" + chapterList.size());
-            runOnUiThread(() -> Toast.makeText(this, "章节信息缺失，请稍候重试", Toast.LENGTH_SHORT).show());
+            runOnUiThread(() -> Hint.show(this, "章节信息缺失，请稍候重试"));
             return;
         }
         String[] pair = externalChapters[chapterIndex];
         if (pair == null) {
-            runOnUiThread(() -> Toast.makeText(this, "章节信息无效", Toast.LENGTH_SHORT).show());
+            runOnUiThread(() -> Hint.show(this, "章节信息无效"));
             return;
         }
         String chapterUrl = pair.length > 1 ? pair[1] : "";
@@ -1405,14 +1767,9 @@ public class ReadActivity extends BaseActivity {
         if (chapterUrl == null || chapterUrl.isEmpty()) {
             android.util.Log.w("ReadActivity", "loadExternalChapterContent: empty chapterUrl for index=" + chapterIndex);
             String noUrlContent = "【章节链接缺失，请返回目录选择其他章节】";
-            chapterContents.set(chapterIndex, noUrlContent);
+            chapterContents.set(chapterIndex, noUrlContent);   // 失败标记：重试与缓存守卫仍依赖它
             if (currentChapterIndex == chapterIndex) {
-                final int finalPage = targetPage;
-                runOnUiThread(() -> {
-                    hideExternalRetry();
-                    renderChapterContent(chapterIndex, title, noUrlContent, finalPage);
-                    showExternalRetry("章节链接缺失，无法加载");
-                });
+                runOnUiThread(() -> showLoadFail("章节链接缺失，无法加载"));
             }
             return;
         }
@@ -1435,21 +1792,18 @@ public class ReadActivity extends BaseActivity {
             final String finalTitle = title;
             if (currentChapterIndex == chapterIndex) {
                 final int finalPage = targetPage;
-                runOnUiThread(() -> {
-                    hideExternalRetry();
-                    renderChapterContent(finalChapterIndex, finalTitle, finalCached, finalPage);
-                });
+                runOnUiThread(() -> renderChapterContent(finalChapterIndex, finalTitle, finalCached, finalPage));
             }
             // 预加载下一章
             preloadNextExternalChapter(chapterIndex);
             return;
         }
 
-        // 3. 显示加载占位
+        // 3. 显示加载占位（正文不再画哨兵串，页面由「章节加载中」动画接管）
         if (currentChapterIndex == chapterIndex) {
             final int finalPage = targetPage;
             runOnUiThread(() -> {
-                hideExternalRetry();
+                setChapterLoading(true);
                 renderChapterContent(chapterIndex, title, "【正在加载...】", finalPage);
             });
             // 启动加载超时保护：15秒后若仍未收到内容，显示超时
@@ -1461,9 +1815,8 @@ public class ReadActivity extends BaseActivity {
                         runOnUiThread(() -> {
                             android.util.Log.w("ReadActivity", "章节加载超时: index=" + timeoutChapterIndex);
                             String timeoutContent = "【加载超时，请检查网络后重试】";
-                            chapterContents.set(timeoutChapterIndex, timeoutContent);
-                            showExternalRetry(timeoutContent);
-                            renderChapterContent(timeoutChapterIndex, title, timeoutContent, finalPage);
+                            chapterContents.set(timeoutChapterIndex, timeoutContent);   // 失败标记：重试与缓存守卫仍依赖它
+                            showLoadFail("加载超时，请稍后再试");
                         });
                     }
                 }
@@ -1495,27 +1848,22 @@ public class ReadActivity extends BaseActivity {
                             final int finalPage = targetPage;
                             runOnUiThread(() -> {
                                 if (ok) {
-                                    hideExternalRetry();
                                     preloadNextExternalChapter(chapterIndex);  // 预加载下一章
+                                    renderChapterContent(chapterIndex, title, finalContent, finalPage);
                                 } else {
-                                    showExternalRetry(finalContent);
+                                    // 失败不再把「【章节加载失败】…」画进正文，统一走失败层
+                                    showLoadFail("加载出错，请稍后再试");
                                 }
-                                renderChapterContent(chapterIndex, title, finalContent, finalPage);
                             });
                         }
                     }
 
                     @Override
                     public void onFailure(@NonNull Call<ApiResponse<String>> call, @NonNull Throwable t) {
-                        String content = "【网络错误】" + t.getMessage();
-                        chapterContents.set(chapterIndex, content);
-                        final String finalContent = content;
+                        // 失败标记仍写入 chapterContents（缓存守卫依赖），但不再把「【网络错误】…」画进正文
+                        chapterContents.set(chapterIndex, "【网络错误】" + t.getMessage());
                         if (currentChapterIndex == chapterIndex) {
-                            final int finalPage = targetPage;
-                            runOnUiThread(() -> {
-                                showExternalRetry(finalContent);
-                                renderChapterContent(chapterIndex, title, finalContent, finalPage);
-                            });
+                            runOnUiThread(() -> showLoadFail("网络异常，请检查网络后重试"));
                         }
                     }
                 });
@@ -1616,20 +1964,54 @@ public class ReadActivity extends BaseActivity {
                 && (content.startsWith("【章节加载失败】") || content.startsWith("【网络错误】"));
     }
 
-    private void showExternalRetry(String msg) {
-        if (layoutExternalRetry == null) return;
-        if (tvExternalRetryMsg != null) {
-            tvExternalRetryMsg.setText(msg != null && !msg.isEmpty() ? msg : "章节加载失败");
-        }
-        layoutExternalRetry.setVisibility(View.VISIBLE);
+    /**
+     * 阅读器内「章节加载中」动画的显隐。
+     *
+     * <p>与全站共用 {@code LoadingView}：可见性一变，三个点的动画与 GIF 自动启停，不用手动 start/stop。
+     * 动画是盖在 WebView 之上的原生视图，所以三种翻页模式（滚动 / 仿真 / 普通）都同样可见。
+     */
+    private void setChapterLoading(boolean loading) {
+        if (loadingChapter == null) return;
+        Runnable r = () -> {
+            int want = loading ? View.VISIBLE : View.GONE;
+            if (loadingChapter.getVisibility() != want) loadingChapter.setVisibility(want);
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) r.run();
+        else mainHandler.post(r);
+        // 开始新一轮加载 → 上一轮的失败态自动退场（换章/重试都走这里，统一兜住）
+        if (loading) hideLoadFail();
     }
 
-    private void hideExternalRetry() {
-        if (layoutExternalRetry != null) {
-            layoutExternalRetry.setVisibility(View.GONE);
-        }
+    /**
+     * 阅读器内「章节加载失败」覆盖层（本站书）的显隐。
+     *
+     * <p>排版与「加载失败」效果图一致：插画 + 文案 + 胶囊「再试一次」按钮，整体略高于几何中心。
+     * 透明底显示阅读页自己的背景/纹理，日间/夜间只切换文案颜色（夜间用阅读正文色 {@code #AAAAAA}）。
+     */
+    private void showLoadFail(CharSequence msg) {
+        if (layoutLoadFail == null) return;
+        Runnable r = () -> {
+            // 失败态要压在正文上，此时绝不能让「加载中」动画继续转
+            if (loadingChapter != null) loadingChapter.setVisibility(View.GONE);
+            if (tvLoadFailMsg != null) {
+                tvLoadFailMsg.setText(msg != null && msg.length() > 0 ? msg : "加载出错，请稍后再试");
+                // 夜间底色（bgColor index 3）下用夜间正文色，其余底色用 iOS 次文字灰
+                tvLoadFailMsg.setTextColor(currentBgColor == 3 ? 0xFFAAAAAA : 0xFF8E8E93);
+            }
+            layoutLoadFail.setVisibility(View.VISIBLE);
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) r.run();
+        else mainHandler.post(r);
     }
 
+    private void hideLoadFail() {
+        if (layoutLoadFail == null) return;
+        Runnable r = () -> {
+            if (layoutLoadFail.getVisibility() != View.GONE) layoutLoadFail.setVisibility(View.GONE);
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) r.run();
+        else mainHandler.post(r);
+    }
 
     private void fetchChapterContent(int chapterIndex) {
         try {
@@ -1658,7 +2040,8 @@ public class ReadActivity extends BaseActivity {
                 renderChapterContent(chapterIndex, title, content == null ? "" : content);
                 if (!positionRestored) positionRestored = true;
             } else {
-                Toast.makeText(this, "章节内容缺失", Toast.LENGTH_SHORT).show();
+                setChapterLoading(false);   // 既无正文也无 HTML → 不会触发渲染回调，别让动画一直转
+                Hint.show(this, "章节内容缺失");
             }
             return;
         }
@@ -1667,7 +2050,8 @@ public class ReadActivity extends BaseActivity {
         if (chapterIndex < 0 || chapterIndex >= chapterList.size()) {
             android.util.Log.e("ReadActivity", "fetchChapterContent: chapterIndex out of range! index=" + chapterIndex + ", size=" + chapterList.size());
             if (pendingChapterIndex == chapterIndex) clearPendingChapterJump();
-            Toast.makeText(this, "章节加载中，请稍后...", Toast.LENGTH_SHORT).show();
+            setChapterLoading(false);   // 该分支不会触发渲染，别让动画一直转
+            Hint.show(this, "章节加载中，请稍后...");
             return;
         }
         
@@ -1701,25 +2085,30 @@ public class ReadActivity extends BaseActivity {
                         // ✅ 用户是在章节边界翻页触发的加载：正文到位后再切换过去（之前没推进过索引，
                         //    所以这里不会出现"加载完直接跳两章"）
                         boolean goLast = pendingGoLastPage;
+                        int pendingPage = pendingChapterPage;
                         clearPendingChapterJump();
-                        android.util.Log.d("ReadActivity", "Pending chapter jump done: chapterIndex=" + chapterIndex + ", goLastPage=" + goLast);
-                        runOnUiThread(() -> showPendingChapter(chapterIndex, realContent, goLast));
+                        android.util.Log.d("ReadActivity", "Pending chapter jump done: chapterIndex=" + chapterIndex + ", goLastPage=" + goLast + ", page=" + pendingPage);
+                        runOnUiThread(() -> showPendingChapter(chapterIndex, realContent, goLast, pendingPage));
                     } else if (currentChapterIndex == chapterIndex) {
-                        android.util.Log.d("ReadActivity", "Re-rendering chapter " + chapterIndex + " with fetched content");
-                        renderChapterContent(chapterIndex, chapterList.get(chapterIndex).getTitle(), realContent);
+                        // ✅ 复用池修复：正文异步到达时沿用「恢复目标页码」重渲染，
+                        //    否则默认 page=1 会把恢复位置冲掉，导致「重新打开总落第 1 页」。
+                        //    若 restoreTargetPage<=0（如未指定），则回退首页。
+                        int _restorePage = (restoreTargetPage > 0) ? restoreTargetPage : 1;
+                        android.util.Log.d("ReadActivity", "Re-rendering chapter " + chapterIndex + " with fetched content, restoreTargetPage=" + _restorePage);
+                        renderChapterContent(chapterIndex, chapterList.get(chapterIndex).getTitle(), realContent, _restorePage);
                     } else {
                         android.util.Log.d("ReadActivity", "Not current chapter, skip re-render");
                     }
                 } else {
                     if (pendingChapterIndex == chapterIndex) clearPendingChapterJump();
-                    runOnUiThread(() -> Toast.makeText(ReadActivity.this, "章节加载失败", Toast.LENGTH_SHORT).show());
+                    runOnUiThread(() -> showLoadFail("加载出错，请稍后再试"));
                 }
             }
 
             @Override
             public void onFailure(@NonNull Call<ApiResponse<com.example.myapplication.bean.Chapter>> call, @NonNull Throwable t) {
                 if (pendingChapterIndex == chapterIndex) clearPendingChapterJump();
-                runOnUiThread(() -> Toast.makeText(ReadActivity.this, "网络错误", Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> showLoadFail("加载出错，请稍后再试"));
             }
         });
         } catch (Throwable t) {
@@ -1730,7 +2119,7 @@ public class ReadActivity extends BaseActivity {
                 if (isExternalBook) {
                     showPopupErrorDialog("章节加载失败：" + msg);
                 } else {
-                    Toast.makeText(ReadActivity.this, "章节加载失败", Toast.LENGTH_SHORT).show();
+                    showLoadFail("加载出错，请稍后再试");
                 }
             });
         }
@@ -1745,25 +2134,73 @@ public class ReadActivity extends BaseActivity {
      * @param startPage 从1开始的页码；传 <=0 表示不指定(=第1页)
      */
     private void renderChapterContent(int chapterIndex, String title, String content, int startPage) {
+        // ✅ 每次外部渲染请求都生成新代次：使在途的旧延迟重试自动失效
+        final int myGen = ++renderGeneration;
+        renderChapterContentInternal(chapterIndex, title, content, startPage, myGen);
+    }
+
+    /**
+     * renderChapterContent 的内部实现：携带本次渲染代次 myGen。
+     * WebView 未就绪时的 50ms 延迟重试若发现代次已过期（期间有更新的渲染请求），
+     * 则直接丢弃——不渲染、不写 currentChapterIndex。
+     */
+    private void renderChapterContentInternal(int chapterIndex, String title, String content, int startPage, int myGen) {
         try {
-            if (!isWebViewReady) {
+            // ★ 占位/未加载：正文用零宽字符顶替 —— 页面由「章节加载中」动画接管，
+            //   不再把哨兵串「【章节加载中...】」当正文画出来。
+            //   chapterContents 里的哨兵**原样保留**，isChapterContentPending 的判定不受影响。
+            final boolean pendingContent = isChapterContentPending(content);
+            // 只要渲染的是占位内容，就把加载动画顶上来 —— 阅读器有多个入口会直接渲染占位
+            // （首屏恢复进度 / 章节列表还没到 / 外站翻章 / 本地书按需读取），在这里统一兜住，免得逐个入口漏加。
+            if (pendingContent) setChapterLoading(true);
+            else hideLoadFail();   // 渲染到真实正文 → 失败态自动退场（上次失败重试成功后也走这里）
+
+            // ✅ 关键修复（复用池回归）：渲染必须等 WebView 真正完成布局、拿到有效宽度后再分页。
+            //    复用的 WebView 在 onCreate 阶段 isWebViewReady 已被提前置 true（reader.html 预加载完成），
+            //    但此时 WebView 尚未 attach/测量，window.innerWidth == 0；若在此宽度分页会得到退化的 pages，
+            //    导致「恢复总落到第 1 页」且「翻页/换章失效」。故额外用 getWidth()>0 兜底，
+            //    复刻旧实现里「等布局后再分页」的语义（沿用已有的 50ms 代次感知重试）。
+            if (!isWebViewReady || webView.getWidth() <= 0) {
                 final int finalChapterIndex = chapterIndex;
                 final String finalTitle = title;
                 final String finalContent = content;
                 final int finalPage = startPage;
-                mainHandler.postDelayed(() -> renderChapterContent(finalChapterIndex, finalTitle, finalContent, finalPage), 50);
+                if (webView.getWidth() <= 0) {
+                    android.util.Log.d("ReadActivity", "renderChapterContentInternal: 宽度未就绪("
+                            + webView.getWidth() + ")，延迟分页等待布局, chapter=" + chapterIndex + ", page=" + startPage);
+                }
+                mainHandler.postDelayed(() -> {
+                    // ✅ 过期重试丢弃：已有更新的渲染请求发生（例如服务器正文已渲染目标章），本次作废
+                    if (myGen != renderGeneration) return;
+                    // 复用本次代次递归，避免自增导致前一次永远过期
+                    renderChapterContentInternal(finalChapterIndex, finalTitle, finalContent, finalPage, myGen);
+                }, 50);
                 return;
             }
 
             String safeTitle = (title == null ? "" : title);
             String safeContent = (content == null ? "" : content);
             String escapedTitle = escapeJavaScript(safeTitle);
-            String escapedContent = escapeJavaScript(safeContent);
+            // 用 U+200B（零宽字符）而不是空串：让 reader.html 仍按「有内容」走正常分页分支，
+            // 避免空串在分页/绘制分支上触发边角情况；视觉上则是一片空白页。
+            String escapedContent = escapeJavaScript(pendingContent ? "\u200B" : safeContent);
             int bookProgress = (!chapterList.isEmpty()) ?
                     (int)((currentChapterIndex + 1) * 100f / chapterList.size()) : 0;
             // ✅ -1 表示跳到最后一页（loadChapterContentToLastPage 使用），必须原样传给 JS
             //    否则会被转成 null，JS loadContent 命中 else 分支回到第一页
             String pageArg = (startPage == -1) ? "-1" : (startPage > 0 ? String.valueOf(startPage) : "null");
+
+            // ✅ 排版缓存：非占位内容时，按 layout signature 读取上次退出本章时的分页结果；
+            //    命中则随 loadContent 直接恢复，跳过整章重排（这是「进入书籍不再每次重排」的关键）。
+            //    占位内容不读也不写缓存（避免把零宽占位串的排版缓存成真章节的排版）。
+            String cachedJson = null;
+            String cacheKey = null;
+            if (!pendingContent) {
+                cacheKey = computeLayoutKey(chapterIndex, safeContent);
+                cachedJson = readLayoutCache(cacheKey);
+            }
+            String escapedCacheKey = (cacheKey != null) ? escapeJavaScript(cacheKey) : "null";
+            String escapedCachedJson = (cachedJson != null) ? escapeJavaScript(cachedJson) : "null";
 
             // ✅ 本地 EPUB 且存在保留样式的 HTML → 走 HTML 渲染模式（展示样式而非纯文本）
             //    必须「一次性赋值」以保证 effectively final —— 下方 evaluateJavascript 的 lambda 内会引用它
@@ -1789,7 +2226,7 @@ public class ReadActivity extends BaseActivity {
                 js = "(function(){" +
                         "try{" +
                         "var r=loadContent(" + chapterIndex + "," + escapedTitle + "," + escapedContent + "," +
-                        pageArg + "," + isLocalBook + "," + bookProgress + ");" +
+                        pageArg + "," + isLocalBook + "," + bookProgress + "," + escapedCachedJson + "," + escapedCacheKey + ");" +
                         "return 'ok';" +
                         "}catch(e){" +
                         "return 'error:'+e.message;" +
@@ -1797,6 +2234,12 @@ public class ReadActivity extends BaseActivity {
                         "})()";
             }
             webView.evaluateJavascript(js, value -> {
+                // 真实正文已渲染到位 → 收起「章节加载中」动画。
+                // 放在 JS 回调里收（而不是发指令前），确保版面确实换成了正文再撤掉遮罩。
+                // ⚠️ 本地书存在「纯文本是占位、但带保留样式的 HTML」（题图页等）：这种情况走 HTML 分支
+                //    照样渲染成功，纯文本却仍是占位 —— 只按纯文本判会让动画一直转下去，必须一并放行。
+                boolean htmlRendered = htmlForChapter != null && !htmlForChapter.isEmpty();
+                if (!pendingContent || htmlRendered) setChapterLoading(false);
                 if (value != null && value.startsWith("\"error:")) {
                     String errMsg = value.substring(8, value.length() - 1);
                     android.util.Log.e("ReadActivity", "JS render error: " + errMsg);
@@ -1805,15 +2248,18 @@ public class ReadActivity extends BaseActivity {
                         android.util.Log.w("ReadActivity", "HTML 渲染失败，回退纯文本: " + errMsg);
                         final String fbJs = "(function(){" +
                                 "try{var r=loadContent(" + chapterIndex + "," + escapedTitle + "," + escapedContent + "," +
-                                pageArg + "," + isLocalBook + "," + bookProgress + ");return 'ok';" +
+                                pageArg + "," + isLocalBook + "," + bookProgress + "," + escapedCachedJson + "," + escapedCacheKey + ");return 'ok';" +
                                 "}catch(e){return 'error:'+e.message;}})()";
                         webView.evaluateJavascript(fbJs, null);
                     } else {
                         runOnUiThread(() -> {
                             if (isExternalBook) {
-                                String fallback = "【章节渲染异常：" + errMsg + "】";
-                                chapterContents.set(chapterIndex, fallback);
-                                showExternalRetry(fallback);
+                                // 渲染异常也统一走失败层，不再把「【章节渲染异常：…】」画进正文
+                                chapterContents.set(chapterIndex, "【章节渲染异常：" + errMsg + "】");
+                                showLoadFail("章节渲染异常，请重试");
+                            } else {
+                                // 非外站书渲染异常：别让「加载中」一直转
+                                setChapterLoading(false);
                             }
                         });
                     }
@@ -1834,7 +2280,7 @@ public class ReadActivity extends BaseActivity {
                 if (isExternalBook) {
                     showPopupErrorDialog(msg);
                 } else {
-                    Toast.makeText(ReadActivity.this, msg, Toast.LENGTH_LONG).show();
+                    Hint.showLong(ReadActivity.this, msg);
                 }
             });
         }
@@ -1897,14 +2343,21 @@ public class ReadActivity extends BaseActivity {
     }
 
     private void setPendingChapterJump(int chapterIndex, boolean goLastPage) {
+        setPendingChapterJump(chapterIndex, goLastPage, -1);
+    }
+
+    /** @param page 目标页码（章节内，1 基）；&lt;=0 表示不指定（按 goLastPage / 第一页处理） */
+    private void setPendingChapterJump(int chapterIndex, boolean goLastPage, int page) {
         pendingChapterIndex = chapterIndex;
         pendingGoLastPage = goLastPage;
+        pendingChapterPage = page;
         pendingChapterTs = System.currentTimeMillis();
     }
 
     private void clearPendingChapterJump() {
         pendingChapterIndex = -1;
         pendingGoLastPage = false;
+        pendingChapterPage = -1;
         pendingChapterTs = 0L;
     }
 
@@ -1920,12 +2373,14 @@ public class ReadActivity extends BaseActivity {
         return pendingChapterIndex == targetIndex;
     }
 
-    /** 目标章节正文到位后的统一渲染（不经过 loadChapterContent，避免"内容暂缺"时再次发起请求死循环） */
-    private void showPendingChapter(int chapterIndex, String content, boolean goLastPage) {
+    /** 目标章节正文到位后的统一渲染（不经过 loadChapterContent，避免"内容暂缺"时再次发起请求死循环）
+     *  @param page 章节内目标页码（1 基）；&lt;=0 时按 goLastPage / 第一页处理 */
+    private void showPendingChapter(int chapterIndex, String content, boolean goLastPage, int page) {
         currentChapterIndex = chapterIndex;
         updateChapterButtons();
+        int targetPage = page > 0 ? page : (goLastPage ? -1 : 1);
         renderChapterContent(chapterIndex, chapterList.get(chapterIndex).getTitle(),
-                content, goLastPage ? -1 : 1);
+                content, targetPage);
         applyHeaderFooterSettings();
         applyFontSizeToWebView();
         applyFontFamilyToWebView();
@@ -1965,11 +2420,16 @@ public class ReadActivity extends BaseActivity {
 
     /** 加载章节并直接跳转到指定页（页码从1开始） */
     private void loadChapterContentWithPage(int chapterIndex, int page) {
+        // 服务端进度比本地新时允许越过「已恢复位置」守卫重渲染一次（见 adoptServerPosition）
+        boolean forced = forceRestorePosition;
+        forceRestorePosition = false;
+        // ✅ 复用池修复：记住本次恢复的目标页码，正文异步到达后重渲染沿用（见 fetchChapterContent.onResponse）
+        restoreTargetPage = (page > 0) ? page : 1;
         try {
         android.util.Log.d("ReadActivity", "loadChapterContentWithPage: chapterIndex=" + chapterIndex + ", page=" + page + ", chapterList.size()=" + chapterList.size());
 
         // ✅ 防止重复渲染：如果已经正确恢复了位置，跳过（避免 fetchServerProgress 等后续调用导致闪屏）
-        if (positionRestored) {
+        if (positionRestored && !forced) {
             android.util.Log.d("ReadActivity", "positionRestored already true, skip loadChapterContentWithPage");
             return;
         }
@@ -2003,7 +2463,7 @@ public class ReadActivity extends BaseActivity {
 
         // 如果仍然没有有效内容，显示提示
         if (content == null || content.isEmpty() || content.contains("加载中...")) {
-            Toast.makeText(this, "章节内容加载中...", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "章节内容加载中...");
             // 仍然尝试渲染，让 WebView 显示占位符
             content = content != null ? content : "【章节内容加载中，请稍后...】";
         }
@@ -2026,7 +2486,7 @@ public class ReadActivity extends BaseActivity {
             runOnUiThread(() -> {
                 String msg = "章节加载失败：" + (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage());
                 if (isExternalBook) showPopupErrorDialog(msg);
-                else Toast.makeText(ReadActivity.this, msg, Toast.LENGTH_LONG).show();
+                else showLoadFail("加载出错，请稍后再试");
             });
         }
     }
@@ -2054,7 +2514,7 @@ public class ReadActivity extends BaseActivity {
 
         // 如果仍然没有有效内容，显示提示
         if (content == null || content.isEmpty() || content.contains("加载中...")) {
-            Toast.makeText(this, "章节内容加载中...", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "章节内容加载中...");
             // 仍然尝试渲染，让 WebView 显示占位符
             content = content != null ? content : "【章节内容加载中，请稍后...】";
         }
@@ -2068,7 +2528,7 @@ public class ReadActivity extends BaseActivity {
         if (!isNightMode) applyBackgroundColorToWebView(currentBgColor);
         } catch (Throwable t) {
             android.util.Log.e("ReadActivity", "loadChapterContentToLastPage 崩溃", t);
-            runOnUiThread(() -> Toast.makeText(ReadActivity.this, "章节加载失败", Toast.LENGTH_SHORT).show());
+            runOnUiThread(() -> Hint.show(ReadActivity.this, "章节加载失败"));
         }
     }
 
@@ -2459,14 +2919,40 @@ public class ReadActivity extends BaseActivity {
 
         layoutTopNav.animate().cancel();
         layoutBottomNav.animate().cancel();
+        setNavLayer(layoutTopNav, false);
+        setNavLayer(layoutBottomNav, false);
         layoutTopNav.setTranslationY(0);
         layoutBottomNav.setTranslationY(0);
         layoutTopNav.setVisibility(View.GONE);
         layoutBottomNav.setVisibility(View.GONE);
     }
 
+    /**
+     * 滑动动画期间把导航栏固定到硬件层，使 translationY 只是平移一张纹理，
+     * 不每帧重新栅格化（含 elevation 阴影重算），从而消除滑动卡顿。
+     * 动画结束必须调回 NONE，避免长期占用 GPU 离屏缓冲。
+     */
+    private void setNavLayer(android.view.View v, boolean hardware) {
+        v.setLayerType(hardware ? android.view.View.LAYER_TYPE_HARDWARE
+                                : android.view.View.LAYER_TYPE_NONE, null);
+    }
+
+    /**
+     * 缓存底部导航栏高度，仅在首次滑入前测量一次。
+     * 用屏幕宽度（match_parent）做精确约束，避免每次滑动都 measure 造成起手掉帧。
+     */
+    private void ensureBottomNavHeight() {
+        if (bottomNavHeight <= 0) {
+            int w = getResources().getDisplayMetrics().widthPixels;
+            int widthSpec = android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY);
+            int heightSpec = android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED);
+            layoutBottomNav.measure(widthSpec, heightSpec);
+            bottomNavHeight = layoutBottomNav.getMeasuredHeight();
+        }
+    }
+
     private void showNavigation() {
-        showSystemStatusBar();
+        showSystemStatusBar();  // 与滑入同步显示，避免动画结束后状态栏再突现
 
         int navHeight = (int) (56 * getResources().getDisplayMetrics().density);
         android.view.ViewGroup.LayoutParams params = layoutTopNav.getLayoutParams();
@@ -2484,52 +2970,53 @@ public class ReadActivity extends BaseActivity {
         layoutTopNav.bringToFront();
         layoutBottomNav.bringToFront();
 
-        // 顶部栏：从屏幕顶部滑入（y: -自身高度 -> 0）
-        layoutTopNav.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        float topSlideDistance = layoutTopNav.getMeasuredHeight();
+        ensureBottomNavHeight();
+
+        // 顶部栏：从屏幕顶部整块滑入（y: -自身高度 -> 0）。滑距用已知高度推算，避免每次 measure 掉帧。
+        final float topSlideDistance = statusBarHeight + navHeight;
         layoutTopNav.setTranslationY(-topSlideDistance);
-        layoutTopNav.animate().translationY(0).setDuration(250).setListener(null).start();
+        setNavLayer(layoutTopNav, true);
+        layoutTopNav.animate().translationY(0).setDuration(NAV_ANIM_MS)
+                .withEndAction(() -> setNavLayer(layoutTopNav, false)).start();
 
         // 底部栏：从屏幕底部滑入（y: +自身高度 -> 0）
-        layoutBottomNav.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        float bottomSlideDistance = layoutBottomNav.getMeasuredHeight();
+        final float bottomSlideDistance = bottomNavHeight;
         layoutBottomNav.setTranslationY(bottomSlideDistance);
-        layoutBottomNav.animate().translationY(0).setDuration(250).setListener(null).start();
+        setNavLayer(layoutBottomNav, true);
+        layoutBottomNav.animate().translationY(0).setDuration(NAV_ANIM_MS)
+                .withEndAction(() -> setNavLayer(layoutBottomNav, false)).start();
 
         resetAutoHideTimer();
     }
 
     private void hideNavigation() {
-        hideSystemStatusBar();
-
-        android.view.ViewGroup.LayoutParams params = layoutTopNav.getLayoutParams();
-        params.height = (int) (56 * getResources().getDisplayMetrics().density);
-        layoutTopNav.setLayoutParams(params);
-
-        layoutTopNav.setPadding(layoutTopNav.getPaddingLeft(),
-                0,
-                layoutTopNav.getPaddingRight(),
-                layoutTopNav.getPaddingBottom());
+        hideSystemStatusBar();  // 与滑出同步隐藏，避免动画结束后状态栏再突隐
 
         mainHandler.removeCallbacks(hideNavRunnable);
         dismissPopups();
 
-        // 顶部栏：向上滑出屏幕
-        layoutTopNav.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        float topSlideDistance = layoutTopNav.getMeasuredHeight();
-        layoutTopNav.animate().translationY(-topSlideDistance).setDuration(250)
+        ensureBottomNavHeight();
+
+        // 顶部栏：连同「覆盖状态栏的整块区域」一起向上滑出屏幕（滑距 = 完整可见高度）。
+        // 不再中途改高度/内边距，避免起手先向上跳一下再滑的割裂感。
+        final float navHeight = (int) (56 * getResources().getDisplayMetrics().density);
+        final float topSlideDistance = statusBarHeight + navHeight;
+        setNavLayer(layoutTopNav, true);
+        layoutTopNav.animate().translationY(-topSlideDistance).setDuration(NAV_ANIM_MS)
                 .withEndAction(() -> {
                     layoutTopNav.setVisibility(View.GONE);
                     layoutTopNav.setTranslationY(0);
+                    setNavLayer(layoutTopNav, false);
                 }).start();
 
         // 底部栏：向下滑出屏幕
-        layoutBottomNav.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        float bottomSlideDistance = layoutBottomNav.getMeasuredHeight();
-        layoutBottomNav.animate().translationY(bottomSlideDistance).setDuration(250)
+        final float bottomSlideDistance = bottomNavHeight;
+        setNavLayer(layoutBottomNav, true);
+        layoutBottomNav.animate().translationY(bottomSlideDistance).setDuration(NAV_ANIM_MS)
                 .withEndAction(() -> {
                     layoutBottomNav.setVisibility(View.GONE);
                     layoutBottomNav.setTranslationY(0);
+                    setNavLayer(layoutBottomNav, false);
                 }).start();
     }
 
@@ -2609,7 +3096,7 @@ public class ReadActivity extends BaseActivity {
     private void showChapterPopup() {
         try {
             if (chapterList == null || chapterList.isEmpty()) {
-                Toast.makeText(this, "章节列表还在加载中，请稍候", Toast.LENGTH_SHORT).show();
+                Hint.show(this, "章节列表还在加载中，请稍候");
                 return;
             }
             View popupView = LayoutInflater.from(this).inflate(R.layout.popup_chapter_list, null);
@@ -2713,14 +3200,13 @@ public class ReadActivity extends BaseActivity {
         // 防御性拷贝：避免底层 chapterList 在加载完服务器新列表时被 replaceAll 清空导致 Popup 渲染崩溃/空白
         final List<Chapter> safeCopy = new ArrayList<>(chapterList);
         final int safeIndex = Math.max(0, Math.min(currentChapterIndex, safeCopy.size() - 1));
-        // 仅本地书带分卷结构；在线书的目录保持平铺（localVolumes 此时为空）
-        final List<LocalBookParser.VolumeInfo> safeVolumes =
-                isLocalBook ? new ArrayList<>(localVolumes) : new ArrayList<>();
+        // 分卷结构按「当前 chapterList」推得，保证与 safeCopy 下标严格一致
+        final List<LocalBookParser.VolumeInfo> safeVolumes = new ArrayList<>(currentVolumes());
         PopupChapterFragment chapterFragment = new PopupChapterFragment(safeCopy, safeIndex, safeVolumes);
         chapterFragment.setOnChapterSelectedListener(chapterIndex -> {
             if (chapterPopupWindow != null) chapterPopupWindow.dismiss();
             if (chapterIndex < 0 || chapterIndex >= chapterList.size()) {
-                Toast.makeText(ReadActivity.this, "章节索引无效，列表可能刚更新", Toast.LENGTH_SHORT).show();
+                Hint.show(ReadActivity.this, "章节索引无效，列表可能刚更新");
                 return;
             }
             try {
@@ -2735,6 +3221,23 @@ public class ReadActivity extends BaseActivity {
         fragments.add(chapterFragment);
         fragments.add(createBookmarkFragment());
         return new PopupPagerAdapter(this, fragments);
+    }
+
+    /**
+     * 当前书的分卷结构（阅读器目录浮窗用，每次打开目录浮窗都会重新推导）。
+     *
+     * <p>本地书：直接返回 {@link #localVolumes}（导入时持久化的卷表，其 start/end 即 chapterList 下标）。
+     * <p>服务器书：用 {@link #serverMajorChapters} 与「当前 {@link #chapterList} 的 sortKey」实时推导，
+     * 因此缓存恢复 / {@link #mergeServerData} / 切章之后，卷区间始终对齐最新 chapterList 的下标，
+     * 不会错位；数据缺失或卷数小于 2 时 {@link VolumeDeriver} 返回空，目录退回平铺。
+     * <p>外站书：无分卷结构，返回空（保持平铺）。
+     */
+    private List<LocalBookParser.VolumeInfo> currentVolumes() {
+        if (isLocalBook) return localVolumes;
+        if (isExternalBook) return new ArrayList<>();
+        List<String> sortKeys = new ArrayList<>(chapterList.size());
+        for (Chapter c : chapterList) sortKeys.add(c.getSortKey());
+        return VolumeDeriver.derive(sortKeys, serverMajorChapters);
     }
 
     /** 目录弹窗相关报错时统一弹对话框（替代白屏/崩回详情页） */
@@ -2759,6 +3262,10 @@ public class ReadActivity extends BaseActivity {
         long safeBookId = (rawId == null || rawId <= 0) ? 0L : rawId;
         bookmarkFragment.setBookId(safeBookId);
         bookmarkFragment.setIsLocalBook(isLocalBook);
+        if (currentBook != null) {
+            bookmarkFragment.setSourceType(currentBook.getSourceType());
+            bookmarkFragment.setSourceBookId(currentBook.getSourceUrl());
+        }
         bookmarkFragment.setOnBookmarkSelectedListener(bookmark -> {
             try {
                 if (bookmark == null) return;
@@ -2767,7 +3274,7 @@ public class ReadActivity extends BaseActivity {
                 int chIdx = chIdxObj == null ? 0 : chIdxObj;
                 int scrollPos = scrollObj == null ? 0 : scrollObj;
                 if (chIdx < 0 || chIdx >= chapterList.size()) {
-                    Toast.makeText(ReadActivity.this, "书签章节索引已失效", Toast.LENGTH_SHORT).show();
+                    Hint.show(ReadActivity.this, "书签章节索引已失效");
                     return;
                 }
                 if (chIdx != currentChapterIndex) {
@@ -2795,7 +3302,7 @@ public class ReadActivity extends BaseActivity {
         if (isExternalBook) {
             String recordKey = "ext_" + (currentBook.getSourceType() != null ? currentBook.getSourceType() : "")
                     + "|" + (currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "");
-            SharedPreferences sp = getSharedPreferences("external_reading_records", MODE_PRIVATE);
+            SharedPreferences sp = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
             SharedPreferences.Editor editor = sp.edit();
             // 书源标识字段（用于 ReadingRecordActivity 重建记录）
             editor.putString(recordKey + "_sourceType", currentBook.getSourceType());
@@ -2868,11 +3375,18 @@ public class ReadActivity extends BaseActivity {
         ReadingProgress p = new ReadingProgress();
         p.setUserId(uid);
         p.setBookId(bid);
+        // 带上章节 id：后端靠它记录「读到哪一章」，后台「用户阅读数据」页要显示章节名。
+        // 后端对 null 是跳过更新，所以能给就给，给不了也不影响位置同步。
+        if (currentChapterIndex >= 0 && currentChapterIndex < chapterList.size()) {
+            long cid = chapterList.get(currentChapterIndex).getId();
+            if (cid > 0) {
+                p.setChapterId(cid);
+            }
+        }
         p.setChapterIndex(currentChapterIndex);
         p.setScrollPosition(currentPageInChapter);
-        p.setFontSize(currentFontSize);
-        p.setNightMode(isNightMode ? 1 : 0);
-        p.setBgColor(currentBgColor);
+        // 阅读偏好（字号/夜间/背景色）刻意不上传：App 的偏好只存本地 read_settings，
+        // 后端进度记录是 web 与 App 共用的，上传这些字段会覆盖 web 端的偏好设置。
         RetrofitClient.getApiService().saveProgress(p).enqueue(new Callback<ApiResponse<ReadingProgress>>() {
             @Override public void onResponse(@NonNull Call<ApiResponse<ReadingProgress>> call, @NonNull Response<ApiResponse<ReadingProgress>> response) {}
             @Override public void onFailure(@NonNull Call<ApiResponse<ReadingProgress>> call, @NonNull Throwable t) {}
@@ -2903,7 +3417,7 @@ public class ReadActivity extends BaseActivity {
         String json = gson.toJson(body);
         okhttp3.RequestBody rb = okhttp3.RequestBody.create(
                 okhttp3.MediaType.parse("application/json"), json);
-        RetrofitClient.getApiService().saveExternalProgress(rb)
+        RetrofitClient.getApiService().saveExternalProgress("Bearer " + LoginHelper.getToken(this), rb)
                 .enqueue(new Callback<ApiResponse<Void>>() {
                     @Override public void onResponse(@NonNull Call<ApiResponse<Void>> call, Response<ApiResponse<Void>> r) {}
                     @Override public void onFailure(@NonNull Call<ApiResponse<Void>> call, @NonNull Throwable t) {}
@@ -3590,6 +4104,25 @@ public class ReadActivity extends BaseActivity {
         themeViewTree(popupView);
         panelHost.addView(popupView);
         settingsPanelView = popupView;
+        // 阅读设置面板停靠在「目录/夜间/设置」行上沿（窗口被裁到该行上沿），
+        // 因此「弹窗 + 底部目录行」整体占满屏幕下半部分。为满足「弹窗 + 底部目录行 = 半屏」，
+        // 面板高度 = 半屏 − 底部目录行高度，位置不变（仍贴底栏上沿）。
+        android.util.DisplayMetrics rsDm = new android.util.DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(rsDm);
+        int rsBottomRowH = 0;
+        View rsBottomRow = findViewById(R.id.layout_bottom_row);
+        if (rsBottomRow != null && rsBottomRow.getHeight() > 0) {
+            rsBottomRowH = rsBottomRow.getHeight();
+        } else {
+            rsBottomRowH = (int) (60f * rsDm.density); // 兜底：底部行固定 60dp
+        }
+        ViewGroup.LayoutParams rsLp = popupView.getLayoutParams();
+        if (rsLp != null) {
+            int panelH = rsDm.heightPixels / 2 - rsBottomRowH;
+            if (panelH < rsDm.heightPixels / 4) panelH = rsDm.heightPixels / 4; // 安全下限
+            rsLp.height = panelH;
+            popupView.setLayoutParams(rsLp);
+        }
         // 先隐藏，等窗口下沿收缩到该行上沿之后再播放入场，避免中间帧闪现
         popupView.setVisibility(View.INVISIBLE);
 
@@ -3830,43 +4363,69 @@ public class ReadActivity extends BaseActivity {
      * 保存书签到 SharedPreferences
      */
     private void saveBookmark(String chapterTitle, String contentPreview) {
-        // 外站书：用复合 key 命名 SP；本地/服务器书：只有 bookId>0 才保存
         long bid = safeBookId();
-        String spName;
+
+        // ===== 外站书：按用户隔离命名空间 + bm_<i>_ 键格式（与 PopupBookmarkFragment / ExternalSyncManager 一致）=====
         if (isExternalBook) {
             String st = currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "";
             String su = currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "";
-            spName = "local_bookmarks_ext_" + st + "_" + su;
-        } else if (bid > 0) {
-            spName = "local_bookmarks_" + bid;
-        } else {
-            Toast.makeText(this, "暂不可用：当前书籍没有有效书签空间", Toast.LENGTH_SHORT).show();
+            SharedPreferences sp = getSharedPreferences(ExternalPrefs.bookmarkName(this), MODE_PRIVATE);
+            int count = sp.getInt("bookmark_count", 0);
+            String p = "bm_" + count + "_";
+            sp.edit()
+                    .putString(p + "sourceType", st)
+                    .putString(p + "sourceBookId", su)
+                    .putInt(p + "chapterIndex", currentChapterIndex)
+                    .putString(p + "chapterTitle", chapterTitle)
+                    .putInt(p + "scrollPosition", currentPageInChapter)
+                    .putString(p + "preview", contentPreview)
+                    .putString(p + "note", "")
+                    .putLong(p + "time", System.currentTimeMillis())
+                    .putInt("bookmark_count", count + 1)
+                    .apply();
+
+            Hint.show(this, "书签已添加");
+
+            // 立即同步外站书签到服务器（用户主动操作，期望即时入库）
+            ExternalSyncManager.getInstance(this).flushBookmarksOnly();
             return;
         }
-        SharedPreferences sp = getSharedPreferences(spName, MODE_PRIVATE);
-        int count = sp.getInt("bookmark_count", 0);
-        
-        // 创建新书签
-        SharedPreferences.Editor editor = sp.edit();
-        editor.putInt("bookmark_count", count + 1);
-        editor.putInt("bookmark_chapterIndex_" + count, currentChapterIndex);
-        editor.putString("bookmark_chapterTitle_" + count, chapterTitle);
-        editor.putInt("bookmark_page_" + count, currentPageInChapter);
-        editor.putString("bookmark_preview_" + count, contentPreview);
-        editor.putLong("bookmark_time_" + count, System.currentTimeMillis());
-        editor.apply();
-        
-        Toast.makeText(this, "书签已添加", Toast.LENGTH_SHORT).show();
+
+        // ===== 本地/服务器书：只有 bookId>0 才保存 =====
+        if (bid > 0) {
+            SharedPreferences sp = getSharedPreferences("local_bookmarks_" + bid, MODE_PRIVATE);
+            int count = sp.getInt("bookmark_count", 0);
+            SharedPreferences.Editor editor = sp.edit();
+            editor.putInt("bookmark_count", count + 1);
+            editor.putInt("bookmark_chapterIndex_" + count, currentChapterIndex);
+            editor.putString("bookmark_chapterTitle_" + count, chapterTitle);
+            editor.putInt("bookmark_page_" + count, currentPageInChapter);
+            editor.putString("bookmark_preview_" + count, contentPreview);
+            editor.putLong("bookmark_time_" + count, System.currentTimeMillis());
+            editor.apply();
+            Hint.show(this, "书签已添加");
+        } else {
+            Hint.show(this, "暂不可用：当前书籍没有有效书签空间");
+        }
     }
     
     /**
      * 添加网络书籍的书签（使用服务器 API）
      */
     private void addNetworkBookmark() {
+        if (!LoginHelper.isLoggedIn(this)) {
+            LoginHelper.requireLogin(this, "添加书签需要登录后操作", this::doAddNetworkBookmark);
+            return;
+        }
+        doAddNetworkBookmark();
+    }
+
+    private void doAddNetworkBookmark() {
         String userIdStr = getSharedPreferences("user_info", MODE_PRIVATE).getString("userId", "");
         long userId = userIdStr.isEmpty() ? 0 : Long.parseLong(userIdStr);
         if (userId == 0) {
-            Toast.makeText(this, "请先登录", Toast.LENGTH_SHORT).show();
+            // 理论上不会走到这里（已通过 LoginHelper 校验），仅作兜底
+            Hint.show(this, "请先登录");
             return;
         }
 
@@ -3918,7 +4477,7 @@ public class ReadActivity extends BaseActivity {
             @Override
             public void onResponse(@NonNull Call<ApiResponse<Bookmark>> call, @NonNull Response<ApiResponse<Bookmark>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
-                    Toast.makeText(ReadActivity.this, "书签已添加", Toast.LENGTH_SHORT).show();
+                    Hint.show(ReadActivity.this, "书签已添加");
                 } else {
                     String errMsg = "添加失败";
                     try {
@@ -3930,13 +4489,13 @@ public class ReadActivity extends BaseActivity {
                     } catch (Exception ignored) {
                     }
                     android.util.Log.e("ReadActivity", "saveNetworkBookmark failed: code=" + response.code() + ", msg=" + errMsg);
-                    Toast.makeText(ReadActivity.this, errMsg, Toast.LENGTH_SHORT).show();
+                    Hint.show(ReadActivity.this, errMsg);
                 }
             }
             @Override
             public void onFailure(@NonNull Call<ApiResponse<Bookmark>> call, @NonNull Throwable t) {
                 android.util.Log.e("ReadActivity", "saveNetworkBookmark network error", t);
-                Toast.makeText(ReadActivity.this, "网络错误：" + t.getMessage(), Toast.LENGTH_SHORT).show();
+                Hint.show(ReadActivity.this, "网络错误：" + t.getMessage());
             }
         });
     }
@@ -3948,7 +4507,6 @@ public class ReadActivity extends BaseActivity {
                 "我正在阅读《" + currentBook.getBookName() + "》，非常精彩！");
         startActivity(Intent.createChooser(shareIntent, "分享书籍"));
     }
-
 
     @SuppressLint("SetTextI18n")
     private void initSettingsPanel(View view) {
@@ -4448,7 +5006,7 @@ public class ReadActivity extends BaseActivity {
         saveReadingPreferences();
         rebuildFontList(container);
         applyCurrentFontToSwitchButton();
-        Toast.makeText(this, "已删除「" + item.displayName + "」", Toast.LENGTH_SHORT).show();
+        Hint.show(this, "已删除「" + item.displayName + "」");
     }
 
     /**
@@ -4567,20 +5125,38 @@ public class ReadActivity extends BaseActivity {
             }
         }
 
-        // 卡片配色：只随「日/夜」切换（两套固定值），不随阅读器背景纹理/纯色变化，
-        // 保证切换字体重建卡片时颜色稳定，同时夜间模式下也不会是刺眼的白底。
-        int cardBgNormal = sIsDark ? Color.parseColor("#2C2C2E") : Color.parseColor("#FFFFFF");
-        int cardBgSelected = sIsDark ? Color.parseColor("#3A2E24") : Color.parseColor("#FFF5EE");
-        int strokeNormal = sIsDark ? Color.parseColor("#3A3A3C") : Color.parseColor("#E5E5EA");
-        int nameNormal = sIsDark ? Color.parseColor("#E5E5EA") : Color.parseColor("#1D1D1F");
+        // 卡片配色跟随「当前阅读调色板」，而非写死日/夜两套值：
+        // 这样更换阅读背景/夜间后，卡片与字体弹窗背景同色系，永不脱节、始终协调。
+        // 选中态用 sAccent（默认墨韵主题即朱印红）表达；描边进一步弱化（1dp + 向底色混 50%）以显高级。
+        boolean isDark = sIsDark;
+        int chrome  = sChrome1;            // 字体弹窗主底，卡片与之同色系
+        int textPri = sText1;              // 卡片主文字（随主题取深/浅）
+        int accent  = sAccent;             // 当前主题强调色（朱印红系）
+        // 普通卡片：在弹窗底色上做「顶受光、底背光」的细微明度偏移，浮出层次
+        int cardTop = mixColors(chrome, 0xFFFFFF, isDark ? 0.05f : 0.07f);
+        int cardMid = chrome;
+        int cardBot = mixColors(chrome, 0x000000, isDark ? 0.06f : 0.04f);
+        int strokeN = mixColors(chrome, 0x000000, isDark ? 0.18f : 0.12f);
+        // 选中卡片：底色向强调色轻微晕染（克制、不突兀）；描边用弱化后的强调色（宽度仅 1dp）
+        int washTop = mixColors(chrome, accent, isDark ? 0.14f : 0.10f);
+        int washMid = mixColors(chrome, accent, isDark ? 0.10f : 0.07f);
+        int washBot = mixColors(chrome, accent, isDark ? 0.07f : 0.05f);
+        int selStroke = mixColors(accent, chrome, 0.50f);
 
         // 卡片容器
         android.widget.FrameLayout card = new android.widget.FrameLayout(this);
-        int radius = (int) (8 * density);
+        int radius = (int) (12 * density);
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        bg.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM);
+        if (isCurrent) {
+            bg.setColors(new int[]{ washTop, washMid, washBot });
+            bg.setStroke((int) (1 * density), selStroke);
+        } else {
+            bg.setColors(new int[]{ cardTop, cardMid, cardBot });
+            bg.setStroke((int) (1 * density), strokeN);
+        }
         bg.setCornerRadius(radius);
-        bg.setColor(isCurrent ? cardBgSelected : cardBgNormal);
-        bg.setStroke((int) (1 * density), isCurrent ? Color.parseColor("#FF6600") : strokeNormal);
         card.setBackground(bg);
         // ✅ 字体卡片是「可选项 + 选中态」的功能性组件：底色必须表达自身状态，
         // 不能被浮窗重着色（否则白色底色会被映射成阅读器派生底色，切换字体重建卡片时
@@ -4595,7 +5171,7 @@ public class ReadActivity extends BaseActivity {
         tvName.setTag("font_name");
         tvName.setText(item.displayName);
         tvName.setTextSize(16);
-        tvName.setTextColor(isCurrent ? Color.parseColor("#FF6600") : nameNormal);
+        tvName.setTextColor(isCurrent ? accent : textPri);
         tvName.setGravity(android.view.Gravity.CENTER);
         if (preview != null) tvName.setTypeface(preview);
         if (isDownloading) tvName.setAlpha(0.6f);
@@ -4606,27 +5182,12 @@ public class ReadActivity extends BaseActivity {
         tvName.setLayoutParams(nameLp);
         card.addView(tvName);
 
-        // 选中对勾（右上角）
-        TextView tvCheck = new TextView(this);
-        tvCheck.setTag("font_check");
-        tvCheck.setText("✓");
-        tvCheck.setTextSize(14);
-        tvCheck.setTextColor(Color.parseColor("#FF6600"));
-        tvCheck.setPadding((int) (6 * density), (int) (4 * density), (int) (6 * density), 0);
-        tvCheck.setVisibility(isCurrent ? View.VISIBLE : View.GONE);
-        android.widget.FrameLayout.LayoutParams checkLp = new android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                android.view.Gravity.TOP | android.view.Gravity.END);
-        tvCheck.setLayoutParams(checkLp);
-        card.addView(tvCheck);
-
         // 下载进度：百分比文字 + 水平进度条（未下载时默认隐藏，点击后显示）
         TextView tvProgress = new TextView(this);
         tvProgress.setTag("font_progress_text");
         tvProgress.setText("0%");
         tvProgress.setTextSize(10);
-        tvProgress.setTextColor(Color.parseColor("#FF6600"));
+        tvProgress.setTextColor(accent);
         tvProgress.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
         android.widget.FrameLayout.LayoutParams pctLp = new android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -4641,7 +5202,7 @@ public class ReadActivity extends BaseActivity {
         pb.setTag("font_progress_bar");
         pb.setIndeterminate(false);
         pb.setProgressDrawable(getResources().getDrawable(android.R.drawable.progress_horizontal, getTheme()));
-        pb.getProgressDrawable().mutate().setColorFilter(Color.parseColor("#FF6600"), android.graphics.PorterDuff.Mode.SRC_IN);
+        pb.getProgressDrawable().mutate().setColorFilter(accent, android.graphics.PorterDuff.Mode.SRC_IN);
         pb.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
         pb.setProgress(0);
         pb.setMax(100);
@@ -4652,6 +5213,12 @@ public class ReadActivity extends BaseActivity {
         pbLp.bottomMargin = (int) (5 * density);
         pb.setLayoutParams(pbLp);
         card.addView(pb);
+
+        // 立体感：悬浮阴影（近淡远深；选中态用强调色投影，更突出「抬起」）
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            card.setOutlineSpotShadowColor(isCurrent ? accent : mixColors(chrome, 0x000000, 0.20f));
+        }
+        card.setElevation(isCurrent ? 8f * density : 3f * density);
 
         return card;
     }
@@ -4707,8 +5274,8 @@ public class ReadActivity extends BaseActivity {
         }
 
         final int cols = 3;
-        int margin = (int) (4 * density);
-        int cardHeight = (int) (56 * density);
+        int margin = (int) (6 * density);
+        int cardHeight = (int) (46 * density);
 
         LinearLayout currentRow = null;
         for (int i = 0; i < items.size(); i++) {
@@ -4797,7 +5364,7 @@ public class ReadActivity extends BaseActivity {
                 runOnUiThread(() -> {
                     downloadingFonts.remove(cssName);
                     downloadedFonts.add(cssName);
-                    Toast.makeText(this, displayName + " 下载完成", Toast.LENGTH_SHORT).show();
+                    Hint.show(this, displayName + " 下载完成");
                     // 自动切换到新下载的字体
                     currentFontFamily = cssName;
                     currentFontDisplay = displayName;
@@ -4809,7 +5376,7 @@ public class ReadActivity extends BaseActivity {
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     downloadingFonts.remove(cssName);
-                    Toast.makeText(this, "下载失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Hint.show(this, "下载失败：" + e.getMessage());
                     refreshFontSelection(container);
                 });
             }
@@ -4925,7 +5492,7 @@ public class ReadActivity extends BaseActivity {
                     stopAutoPage();
                     if (!autoPageSuspended) startAutoPage();
                 }
-                Toast.makeText(ReadActivity.this, "翻页间隔：" + (autoPageInterval / 1000) + " 秒", Toast.LENGTH_SHORT).show();
+                Hint.show(ReadActivity.this, "翻页间隔：" + (autoPageInterval / 1000) + " 秒");
             });
         }
 
@@ -5013,7 +5580,6 @@ public class ReadActivity extends BaseActivity {
         }
         window.setAttributes(lp);
     }
-
 
     // ==================== 自动翻页 ====================
     private long autoPageCycleStart = 0; // 当前翻页周期起点（用于页眉倒计时）
@@ -5334,6 +5900,8 @@ public class ReadActivity extends BaseActivity {
             cacheChapterTitle(bookId, i, dto.getTitle());
             // ✅ 新增：缓存章节ID
             cacheChapterId(bookId, i, dto.getId());
+            // ✅ 新增：缓存分卷键，供断网时仍能还原分卷结构（旧缓存无此键则退回平铺）
+            cacheChapterSortKey(bookId, i, dto.getSortKey());
         }
     }
     
@@ -5341,6 +5909,77 @@ public class ReadActivity extends BaseActivity {
     private void cacheChapterId(long bookId, int index, long chapterId) {
         getSharedPreferences("chapter_meta_" + bookId, MODE_PRIVATE)
             .edit().putLong("id_" + index, chapterId).apply();
+    }
+
+    /** 缓存章节分卷键（chapter_meta SP；null 会被 putString 存成 "null" 字面量，这里统一转空串） */
+    private void cacheChapterSortKey(long bookId, int index, String sortKey) {
+        getSharedPreferences("chapter_meta_" + bookId, MODE_PRIVATE)
+            .edit().putString("sortkey_" + index, sortKey == null ? "" : sortKey).apply();
+    }
+
+    /** 读取缓存的分卷键；无记录返回 null（视为无分卷，退回平铺） */
+    private String getChapterSortKeyCache(long bookId, int index) {
+        String v = getSharedPreferences("chapter_meta_" + bookId, MODE_PRIVATE)
+            .getString("sortkey_" + index, null);
+        return (v == null || v.isEmpty()) ? null : v;
+    }
+
+    /**
+     * 拉取本书记录的分卷表（后台导入 EPUB 时写入 major_chapter）。
+     * 仅用于服务器书目录浮窗的分卷折叠展示：成功则覆盖内存并写入缓存，失败则保留缓存里的旧值；
+     * 全程不影响章节列表与阅读。拉取不到分卷时目录浮窗保持平铺。
+     */
+    private void loadServerMajorChapters(long bookId) {
+        RetrofitClient.getApiService().getMajorChapters(bookId).enqueue(new Callback<ApiResponse<List<MajorChapter>>>() {
+            @Override
+            public void onResponse(@NonNull Call<ApiResponse<List<MajorChapter>>> call,
+                                   @NonNull Response<ApiResponse<List<MajorChapter>>> response) {
+                if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
+                    List<MajorChapter> list = response.body().getData();
+                    serverMajorChapters.clear();
+                    if (list != null) serverMajorChapters.addAll(list);
+                    cacheMajorChapters(bookId, serverMajorChapters);
+                    android.util.Log.d("ReadActivity", "major chapters loaded: " + serverMajorChapters.size());
+                } else {
+                    // 接口失败（网络/服务端）：保留缓存里已还原的分卷表，避免「本来有卷却丢卷」
+                    android.util.Log.d("ReadActivity", "major chapters unavailable, code=" + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(@NonNull Call<ApiResponse<List<MajorChapter>>> call, @NonNull Throwable t) {
+                android.util.Log.d("ReadActivity", "failed to load major chapters", t);
+            }
+        });
+    }
+
+    /** 缓存分卷表（复用 chapter_list_<bookId> SP，与章节列表同生命周期，便于断网还原） */
+    private void cacheMajorChapters(long bookId, List<MajorChapter> list) {
+        SharedPreferences.Editor e = getSharedPreferences("chapter_list_" + bookId, MODE_PRIVATE).edit();
+        int size = (list == null) ? 0 : list.size();
+        e.putInt("vol_count", size);
+        for (int v = 0; v < size; v++) {
+            MajorChapter mc = list.get(v);
+            e.putString("vol_title_" + v, (mc == null || mc.getTitle() == null) ? "" : mc.getTitle());
+            e.putString("vol_sortkey_" + v, (mc == null || mc.getSortKey() == null) ? "" : mc.getSortKey());
+            e.putInt("vol_sortorder_" + v, (mc == null || mc.getSortOrder() == null) ? (v + 1) : mc.getSortOrder());
+        }
+        e.apply();
+    }
+
+    /** 从缓存还原分卷表到内存（缓存为空/为旧版本无卷表时，置空 → 目录保持平铺） */
+    private void restoreMajorChaptersFromCache(long bookId) {
+        SharedPreferences sp = getSharedPreferences("chapter_list_" + bookId, MODE_PRIVATE);
+        int cnt = sp.getInt("vol_count", 0);
+        serverMajorChapters.clear();
+        if (cnt <= 0) return;
+        for (int v = 0; v < cnt; v++) {
+            MajorChapter mc = new MajorChapter();
+            mc.setTitle(sp.getString("vol_title_" + v, ""));
+            mc.setSortKey(sp.getString("vol_sortkey_" + v, ""));
+            mc.setSortOrder(sp.getInt("vol_sortorder_" + v, v + 1));
+            serverMajorChapters.add(mc);
+        }
     }
     
     private long getChapterIdCache(long bookId, int index) {
@@ -5371,6 +6010,8 @@ public class ReadActivity extends BaseActivity {
             ch.setIndex(i);
             ch.setId(dto.getId());
             ch.setTitle(dto.getTitle());
+            // 保留分卷键：目录浮窗据此按「最新 chapterList」实时推导分卷，保证下标一致
+            ch.setSortKey(dto.getSortKey());
             chapterList.add(ch);
             // 使用循环索引 i 作为缓存键，与 chapterList 索引保持一致
             // ✅ 外站书不走 chapter_content_ SP 缓存（bookId=0 时 key 全都重名）；
@@ -5467,12 +6108,70 @@ public class ReadActivity extends BaseActivity {
         }
     }
 
+    /**
+     * 上报「今天读过」，推进账号级连续阅读天数。
+     *
+     * <p>幂等，同一天重复进入阅读器不会把天数刷上去，所以每次打开阅读器都调即可，
+     * 无需在客户端判断「今天是否已打卡」。
+     *
+     * <p>首次调用会把旧版本存在本机的连续天数一起带上去（{@code migratedStreak}），
+     * 迁移成功后置位标记，之后不再上报本地值，避免覆盖服务端已有进度。
+     * 未登录/无 userId 时只做本地兜底记录，不影响阅读。
+     */
+    private void reportReadingCheckIn() {
+        try {
+            String userIdStr = getSharedPreferences("user_info", MODE_PRIVATE)
+                    .getString("userId", "");
+            if (userIdStr.isEmpty()) {
+                return;                       // 游客：连续天数与账号绑定，不适用
+            }
+            long userId = Long.parseLong(userIdStr);
+            int migrated = com.example.myapplication.utils.ReadingStreak.isMigrated(this)
+                    ? 0
+                    : com.example.myapplication.utils.ReadingStreak.getStreak(this);
+
+            com.example.myapplication.bean.ReadingCheckInRequest req =
+                    new com.example.myapplication.bean.ReadingCheckInRequest(userId, migrated);
+            RetrofitClient.getApiService().checkInReading(req).enqueue(
+                    new Callback<ApiResponse<com.example.myapplication.bean.UserReadingStat>>() {
+                        @Override
+                        public void onResponse(
+                                @NonNull Call<ApiResponse<com.example.myapplication.bean.UserReadingStat>> call,
+                                @NonNull Response<ApiResponse<com.example.myapplication.bean.UserReadingStat>> response) {
+                            if (response.isSuccessful() && response.body() != null
+                                    && response.body().isSuccess()) {
+                                // 服务端已承接本地天数，之后以账号数据为准
+                                com.example.myapplication.utils.ReadingStreak
+                                        .markMigrated(ReadActivity.this);
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(
+                                @NonNull Call<ApiResponse<com.example.myapplication.bean.UserReadingStat>> call,
+                                @NonNull Throwable t) {
+                            // 打卡失败不影响阅读，静默忽略
+                        }
+                    });
+        } catch (Throwable ignored) {
+            // 任何异常都不应影响阅读体验
+        }
+    }
+
+    /**
+     * 上报本次阅读时长。
+     *
+     * <p><b>单位是秒</b>——后端 {@code ReadTimeRequest.duration} 与累计字段
+     * {@code total_read_seconds} 都以秒为准。此处历史上按分钟传过，导致累计时长被少算 60 倍，
+     * 现已换算为秒；展示端（个人中心）自行折算成分钟/小时。
+     */
     private void uploadReadTime(long minutes) {
         String userIdStr = getSharedPreferences("user_info", MODE_PRIVATE).getString("userId", "");
         long userId = userIdStr.isEmpty() ? 0 : Long.parseLong(userIdStr);
         long bid = safeBookId();
         if (userId > 0 && currentBook != null && bid > 0) {
-            ReadTimeRequest request = new ReadTimeRequest(userId, bid, minutes);
+            // 业务上以分钟计，接口以秒为准 → 传入前换算
+            ReadTimeRequest request = new ReadTimeRequest(userId, bid, minutes * 60);
             RetrofitClient.getApiService().saveReadTime(request).enqueue(new Callback<ApiResponse<Void>>() {
                 @Override public void onResponse(@NonNull Call<ApiResponse<Void>> call, @NonNull Response<ApiResponse<Void>> response) {}
                 @Override public void onFailure(@NonNull Call<ApiResponse<Void>> call, @NonNull Throwable t) {}
@@ -5514,8 +6213,6 @@ public class ReadActivity extends BaseActivity {
         if (readStartTime > 0) {
             long minutes = (System.currentTimeMillis() - readStartTime) / 60000;
             if (minutes > 0) {
-                long total = readTimePref.getLong("total_read_time", 0) + minutes;
-                readTimePref.edit().putLong("total_read_time", total).apply();
                 uploadReadTime(minutes);
             }
             readStartTime = 0;
@@ -5543,15 +6240,34 @@ public class ReadActivity extends BaseActivity {
     private Thread.UncaughtExceptionHandler savedUncaughtHandler;
 
     @Override protected void onDestroy() {
+        // ✅ 兜底：移除仍挂在复用 WebView 上的「布局就绪」监听（防止 observer 随 detach 失效后崩溃）
+        if (layoutReadyListener != null) {
+            try {
+                android.view.ViewTreeObserver obs = webView.getViewTreeObserver();
+                if (obs.isAlive()) obs.removeOnGlobalLayoutListener(layoutReadyListener);
+            } catch (Throwable ignored) {}
+            layoutReadyListener = null;
+        }
+        // ✅ 复用池：把 WebView 从本 Activity 视图树摘离并归还给池子（绝不 destroy），
+        //    下次进书直接复用，跳过「重建 WebView + 重载 reader.html」的冷启动。
+        if (webView != null && webView.getParent() != null) {
+            try { ((ViewGroup) webView.getParent()).removeView(webView); } catch (Throwable ignored) {}
+        }
         // 恢复原始未捕获异常处理器，避免污染其它 Activity
         try {
             if (savedUncaughtHandler != null) Thread.currentThread().setUncaughtExceptionHandler(savedUncaughtHandler);
         } catch (Throwable ignored) {}
+        // ✅ 复用池：切断 JsBridge 对当前 Activity 的引用，避免已销毁 Activity 继续接收前端回调
+        try { JsBridge.detach(this); } catch (Throwable ignored) {}
         super.onDestroy();
         stopAutoPage();
         mainHandler.removeCallbacks(hideNavRunnable);
         timeUpdateHandler.removeCallbacks(timeUpdateRunnable);
         dismissPopups();
+        // ✅ 排版缓存写入池：退出时优雅关闭（已提交任务会跑完）
+        if (layoutExecutor != null) {
+            try { layoutExecutor.shutdown(); } catch (Throwable ignored) {}
+        }
     }
     @SuppressWarnings("deprecation")
     @Override public void onBackPressed() {
@@ -5572,6 +6288,8 @@ public class ReadActivity extends BaseActivity {
         private long id;
         private String title;
         private String content;
+        /** 服务器书章节分卷键（形如 "1-0001"）：供目录分卷推导使用；本地书/外站书为空 */
+        private String sortKey;
         public int getIndex() { return index; }
         public void setIndex(int index) { this.index = index; }
         public long getId() { return id; }
@@ -5580,6 +6298,8 @@ public class ReadActivity extends BaseActivity {
         public void setTitle(String title) { this.title = title; }
         public String getContent() { return content; }
         public void setContent(String content) { this.content = content; }
+        public String getSortKey() { return sortKey; }
+        public void setSortKey(String sortKey) { this.sortKey = sortKey; }
     }
 
     private static class PopupPagerAdapter extends FragmentStateAdapter {

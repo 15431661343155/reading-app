@@ -11,10 +11,9 @@
         <item name="android:statusBarColor" tools:targetApi="l">?attr/colorPrimaryVariant</item>
     </style>
 
-    <!-- 底部导航文字样式（iOS 风：6sp semibold） -->
+    <!-- 底部导航文字样式：12sp medium，选中/未选中恒定同一份（字重不随选中切换，避免“先变色后变粗”的卡顿感） -->
     <style name="NavTextAppearance" parent="TextAppearance.MaterialComponents.Body2">
-        <item name="android:textSize">6sp</item>
-        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">12sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
@@ -111,6 +110,45 @@
         <item name="android:windowAnimationStyle">@style/BottomSlideAnimation</item>
     </style>
 
+    <!-- 更换头像底部操作菜单：底部滑入 + 半透明遮罩（模糊与缩小由页面端 RenderEffect 实现） -->
+    <style name="AvatarSheetStyle" parent="BottomDialogStyle">
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.45</item>
+    </style>
+
+    <!--
+      清理缓存抽屉：底部滑入，遮罩由布局自带的 dim_cache(#73000000) 提供，
+      因此必须关掉 Window 层 dim —— 否则两层遮罩叠加，且 Window 层不在 App 的
+      View 树里，跟手拖拽时无法调它的透明度，会出现「面板跟手、阴影不动」的割裂感。
+    -->
+    <style name="CacheSheetStyle" parent="BottomDialogStyle">
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
+    <!-- 清理完成卡片：居中、无标题、淡入微放大 -->
+    <style name="ClearResultCardStyle" parent="BottomDialogStyle">
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowAnimationStyle">@style/FadeScaleAnimation</item>
+    </style>
+
+    <style name="FadeScaleAnimation">
+        <item name="android:windowEnterAnimation">@anim/fade_in_scale</item>
+        <item name="android:windowExitAnimation">@anim/fade_out</item>
+    </style>
+
+    <!--
+      登录提示弹窗（国风探出版）：屏幕居中卡片、透明窗口底、暖色半透明遮罩 + 淡入微放大。
+      布局见 layout/dialog_login_prompt.xml，唯一调用处 utils/LoginHelper.requireLogin(...)。
+    -->
+    <style name="LoginPromptDialogStyle" parent="BottomDialogStyle">
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.42</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowAnimationStyle">@style/FadeScaleAnimation</item>
+    </style>
+
+
     <!-- 消息中心文字样式 -->
     <style name="TextAppearance.MessageUnread" parent="TextAppearance.MaterialComponents.Body1">
         <item name="android:textSize">15sp</item>
@@ -127,6 +165,13 @@
         <item name="android:textSize">14sp</item>
         <item name="android:textStyle">normal</item>
         <item name="textAllCaps">false</item>
+    </style>
+
+    <!-- 关于书阁顶部应用图标：20dp 圆角裁切（半径与原 bg_app_icon_rounded 一致）。
+         显示完整启动图标 ic_launcher（全出血作品），替代原先「前景层+内边距」的双重缩小。 -->
+    <style name="ShapeAppearance.AboutAppIcon" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">20dp</item>
     </style>
 
 </resources>

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 书籍详情页「目录」底部弹窗（从底部滑出，顶部圆角） -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_sheet_top_rounded"
+    android:clipToOutline="true">
+
+    <!-- 顶栏：收起箭头 + 居中标题 + 倒序 -->
+    <LinearLayout
+        android:id="@+id/popup_title_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp">
+
+        <ImageView
+            android:id="@+id/iv_sheet_close"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@drawable/shouqi"
+            android:scaleType="centerInside"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="收起" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="目录"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"
+            android:gravity="center"/>
+
+        <TextView
+            android:id="@+id/btn_sheet_sort"
+            style="@style/TocSortButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="正序" />
+
+    </LinearLayout>
+
+    <!-- 分割线 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:background="@color/ios_separator" />
+
+    <!-- 信息行（连载信息 / 共 X 章），无内容时隐藏 -->
+    <TextView
+        android:id="@+id/tv_sheet_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="@color/ios_text_tertiary"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="2dp"
+        android:visibility="gone" />
+
+    <!-- 章节列表 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_sheet_chapters"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="16dp" />
+
+</LinearLayout>

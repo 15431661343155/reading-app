@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 书架分段滑动指示器：外层淡投影 + 白色圆角块（对齐效果稿 box-shadow 0 1px 4px rgba(0,0,0,.12)） -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 淡投影（比白块大一圈，往下偏移） -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#1E000000" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <!-- 白色圆角块：左右上收 1dp、底部收 2dp，露出下方投影 -->
+    <item
+        android:left="1dp"
+        android:top="1dp"
+        android:right="1dp"
+        android:bottom="2dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFFF" />
+            <corners android:radius="9dp" />
+        </shape>
+    </item>
+</layer-list>

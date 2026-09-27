@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--书架统一双模式 Item（列表⇄宫格形变切换共用同一批节点，不销毁重建、不重新加载封面）
+    结构：root(仅位移) / card_bg(白色卡片，缩放补偿) / cover_box(封面盒，独立缩放+位移+Matrix等比裁切)
+          / list_text_box(列表文字) / grid_text_box(宫格文字) / iv_checkbox(编辑多选)
+    几何由 BookAdapter.applyMode() 按 dp 常量布置；此处 XML 默认值 = 列表模式-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/item_root"
+    android:layout_width="match_parent"
+    android:layout_height="132dp"
+    android:clipChildren="false"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <!-- 白卡片（列表：上下 6dp 边距；宫格：四边 4dp，由代码设定） -->
+    <View
+        android:id="@+id/card_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="6dp"
+        android:background="@drawable/bg_ios_card" />
+
+    <!-- 封面盒：圆角裁切 + 灰底占位，ImageView 用 Matrix 等比裁切 -->
+    <FrameLayout
+        android:id="@+id/cover_box"
+        android:layout_width="72dp"
+        android:layout_height="96dp"
+        android:layout_marginStart="14dp"
+        android:layout_marginTop="18dp"
+        android:background="@drawable/bg_cover_rounded"
+        android:clipToOutline="true">
+
+        <ImageView
+            android:id="@+id/iv_book_cover"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="matrix"
+            android:src="@drawable/default_book_cover"
+            android:contentDescription="@null" />
+
+        <!-- 无封面时显示书名（半透明遮罩） -->
+        <TextView
+            android:id="@+id/tv_cover_title"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:text="书名"
+            android:textSize="14sp"
+            android:textColor="@color/white"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="#CC1D1D1F"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- 列表模式文字（书名/作者/进度/最新更新，垂直居中于封面右侧） -->
+    <LinearLayout
+        android:id="@+id/list_text_box"
+        android:layout_width="match_parent"
+        android:layout_height="96dp"
+        android:layout_marginStart="100dp"
+        android:layout_marginEnd="14dp"
+        android:layout_marginTop="18dp"
+        android:orientation="vertical"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tv_book_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:text="书名"
+            android:textColor="@color/ios_text_primary"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/tv_author"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_secondary"
+            android:layout_marginTop="4dp"
+            android:text="作者" />
+
+        <TextView
+            android:id="@+id/tv_read_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="@color/ios_text_secondary"
+            android:layout_marginTop="4dp"
+            android:text="继续阅读 第1章" />
+
+        <TextView
+            android:id="@+id/tv_last_update"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:textColor="@color/ios_text_tertiary"
+            android:layout_marginTop="2dp"
+            android:text="最新章节 第120章"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- 宫格模式文字（书名/进度，居中于封面下方；宽高与位置由代码按 span 宽设定） -->
+    <LinearLayout
+        android:id="@+id/grid_text_box"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_book_name_grid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:text="书名"
+            android:textColor="@color/ios_text_primary"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/tv_read_progress_grid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:textColor="@color/ios_text_secondary"
+            android:layout_marginTop="2dp"
+            android:text="未读"
+            android:gravity="center" />
+    </LinearLayout>
+
+    <!-- 编辑模式多选框（列表：封面左侧垂直居中；宫格：封面右下角，由代码设定） -->
+    <ImageView
+        android:id="@+id/iv_checkbox"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="14dp"
+        android:layout_marginTop="54dp"
+        android:src="@drawable/ic_checkbox_unchecked"
+        android:visibility="gone"
+        android:contentDescription="选择" />
+</FrameLayout>

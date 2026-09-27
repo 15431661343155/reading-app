@@ -7,11 +7,13 @@ public class ReadingProgress {
     private Long chapterId;
     private int chapterIndex;
     private int scrollPosition;
-    private float fontSize;
-    private int nightMode;
-    private int bgColor;
-    private String textAnchor;
     private String chapterTitle;
+    /** 服务端最后写入时间（ISO-8601，服务器本地时间，无时区）。
+     *  与 App 本地记录的 record_readTime_ 比对，决定「最后阅读的那一条」用谁的。 */
+    private String updatedAt;
+    /** 服务端下发的绝对时间戳（epoch 毫秒，与设备时区无关）。
+     *  比较「最后阅读时间」优先用它，缺失（老版本后端）才回退解析 updatedAt。 */
+    private Long updatedAtEpoch;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -31,18 +33,12 @@ public class ReadingProgress {
     public int getScrollPosition() { return scrollPosition; }
     public void setScrollPosition(int scrollPosition) { this.scrollPosition = scrollPosition; }
 
-    public float getFontSize() { return fontSize; }
-    public void setFontSize(float fontSize) { this.fontSize = fontSize; }
-
-    public int getNightMode() { return nightMode; }
-    public void setNightMode(int nightMode) { this.nightMode = nightMode; }
-
-    public int getBgColor() { return bgColor; }
-    public void setBgColor(int bgColor) { this.bgColor = bgColor; }
-
-    public String getTextAnchor() { return textAnchor; }
-    public void setTextAnchor(String textAnchor) { this.textAnchor = textAnchor; }
-
     public String getChapterTitle() { return chapterTitle; }
     public void setChapterTitle(String chapterTitle) { this.chapterTitle = chapterTitle; }
+
+    public String getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
+
+    public Long getUpdatedAtEpoch() { return updatedAtEpoch; }
+    public void setUpdatedAtEpoch(Long updatedAtEpoch) { this.updatedAtEpoch = updatedAtEpoch; }
 }

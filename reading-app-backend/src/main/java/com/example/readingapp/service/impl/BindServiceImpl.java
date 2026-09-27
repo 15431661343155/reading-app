@@ -4,6 +4,7 @@ import com.example.readingapp.entity.User;
 import com.example.readingapp.repository.UserRepository;
 import com.example.readingapp.service.BindService;
 import com.example.readingapp.service.VerificationCodeService;
+import com.example.readingapp.utils.PasswordPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -95,6 +96,12 @@ public class BindServiceImpl implements BindService {
             throw new RuntimeException("当前密码错误");
         }
 
+        // 新密码强度校验（在写库前拦截，避免不合规密码落库）
+        String passwordError = PasswordPolicy.validate(newPassword);
+        if (passwordError != null) {
+            throw new RuntimeException(passwordError);
+        }
+
         user.setPassword(passwordEncoder.encode(newPassword));
         return userRepository.save(user);
     }
@@ -103,6 +110,13 @@ public class BindServiceImpl implements BindService {
     public User changePasswordByEmail(Long userId, String email, String code, String newPassword) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("用户不存在"));
+
+        // 顺序铁律：先校验新密码，再消费验证码。
+        // 验证码是一次性的，若先消费却发现密码不合规，用户会白白废掉一次验证码。
+        String passwordError = PasswordPolicy.validate(newPassword);
+        if (passwordError != null) {
+            throw new RuntimeException(passwordError);
+        }
 
         if (!verificationCodeService.verifyEmailCode(email, code, "change_password")) {
             throw new RuntimeException("验证码无效或已过期");

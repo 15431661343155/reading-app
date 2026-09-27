@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  修改用户名弹窗（国风版 · 与登录提示弹窗同族）
+  · 入口：activity/ProfileActivity.showEditNicknameDialog()
+  · 无立绘：与登录提示弹窗、注销弹窗同族但不放人物，仅宣纸卡 + 云纹角饰 + 描金分隔。
+  · 卡片宽度写死 280dp —— ⚠️ 同 dialog_login_prompt.xml 的坑：Dialog 用
+    inflate(layout, null) 时根布局的 layout_width 会被丢弃，宽度必须由卡片自己定；
+    窗口宽度在 ProfileActivity 里用 window.setLayout(312dp) 显式指定（280 + 左右各 16dp 投影）。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:paddingHorizontal="16dp">
+
+    <FrameLayout
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_login_prompt_card"
+        android:elevation="14dp"
+        android:outlineAmbientShadowColor="#402E1E0A"
+        android:outlineSpotShadowColor="#402E1E0A">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="22dp"
+            android:paddingTop="28dp"
+            android:paddingEnd="22dp"
+            android:paddingBottom="20dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="serif"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.25"
+                android:text="修改用户名"
+                android:textColor="@color/gf_ink"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:layout_width="130dp"
+                android:layout_height="10dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="14dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_login_prompt_divider" />
+
+            <!-- 输入框：底图挂在 FrameLayout 上，聚焦时整块换描边色 -->
+            <FrameLayout
+                android:id="@+id/nick_field"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:background="@drawable/bg_gf_field">
+
+                <EditText
+                    android:id="@+id/nick_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@null"
+                    android:fontFamily="serif"
+                    android:hint="请输入新用户名"
+                    android:imeOptions="actionDone"
+                    android:includeFontPadding="false"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:paddingStart="15dp"
+                    android:paddingTop="13dp"
+                    android:paddingEnd="44dp"
+                    android:paddingBottom="13dp"
+                    android:singleLine="true"
+                    android:textColor="@color/gf_ink"
+                    android:textColorHint="#B9AE97"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/nick_clear"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_gf_clear"
+                    android:contentDescription="清空"
+                    android:gravity="center"
+                    android:text="✕"
+                    android:textColor="@color/gf_muted"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="好名字更容易被书友记住"
+                    android:textColor="@color/gf_muted"
+                    android:textSize="11.5sp" />
+
+                <TextView
+                    android:id="@+id/nick_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif"
+                    android:text="0 / 12"
+                    android:textColor="@color/gf_muted"
+                    android:textSize="11.5sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="18dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btn_nick_cancel"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_gf_btn_ghost"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="serif"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:letterSpacing="0.1"
+                    android:text="取消"
+                    android:textColor="@color/gf_ink_2"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/btn_nick_ok"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_gf_btn_primary"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="serif"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:letterSpacing="0.1"
+                    android:text="确定"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 卡片左上角云纹 -->
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="16dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="6dp"
+            android:layout_marginTop="8dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_login_prompt_cloud" />
+
+        <!-- 卡片右上角云纹（同一图形，靠 margin 对称摆放） -->
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="16dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="6dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_login_prompt_cloud" />
+    </FrameLayout>
+</FrameLayout>

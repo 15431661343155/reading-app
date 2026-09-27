@@ -12,9 +12,9 @@
         android:title="书城" />
 
     <item
-        android:id="@+id/nav_discussion"
-        android:icon="@drawable/ic_discussion"
-        android:title="讨论"/>
+        android:id="@+id/nav_category"
+        android:icon="@drawable/ic_fenlei"
+        android:title="分类"/>
 
     <item
         android:id="@+id/nav_mine"

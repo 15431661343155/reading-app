@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--登录提示弹窗·卡片底部淡金色波浪分隔-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="236dp"
+    android:height="10dp"
+    android:viewportWidth="236"
+    android:viewportHeight="10">
+    <path
+        android:pathData="M0,5 c20,-3 39,-3 59,0 s39,3 59,0 s39,-3 59,0 s39,3 59,0"
+        android:strokeColor="#EDDFC2"
+        android:strokeWidth="1.5" />
+</vector>

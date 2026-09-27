@@ -1,19 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- 全屏启动页主题 · 阁檐墨韵（保持国风，不在本次改造范围） -->
-    <style name="Theme.Splash" parent="Theme.MaterialComponents.NoActionBar">
-        <item name="colorPrimary">@color/splash_title</item>
-        <item name="colorPrimaryVariant">@color/splash_title</item>
-        <item name="colorOnPrimary">@color/splash_bg</item>
-        <item name="android:windowBackground">@color/splash_bg</item>
-        <item name="android:statusBarColor">@color/splash_bg</item>
-        <item name="android:navigationBarColor">@color/splash_bg</item>
-        <!-- 全屏设置 -->
-        <item name="android:windowFullscreen">true</item>
-        <!-- 状态栏图标使用深色以配合浅色背景 -->
-        <item name="android:windowLightStatusBar">true</item>
-    </style>
-
     <!-- ===== 默认主题：iOS 浅色磨砂玻璃 ===== -->
     <style name="Theme.MyApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- 主色调：iOS 系统蓝 -->
@@ -61,6 +47,21 @@
         <item name="navRipple">@color/ios_separator</item>
         <item name="navTextSelectedColor">@color/ios_blue</item>
         <item name="navTextUnselectedColor">@color/ios_text_tertiary</item>
+    </style>
+
+    <!-- 主页专用主题 = 启动入口主题（MainActivity 是 LAUNCHER）：
+         系统启动屏/窗口背景均为奶油色，主页首帧内的开屏浮层展示开屏图，
+         浮层在数据就绪后淡出直接揭示书架——单窗口、零转场、无系统伪影。
+         ⚠️ 仅 MainActivity 使用，其他 Activity 保持灰底。 -->
+    <style name="Theme.MyApp.Main" parent="Theme.MyApp">
+        <item name="android:windowBackground">@color/splash_bg</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
+    </style>
+
+    <!-- 海滨主题的主页变体：同 Theme.MyApp.Main（窗口背景/启动屏底色=奶油色） -->
+    <style name="Theme.MyApp.Seaside.Main" parent="Theme.MyApp.Seaside">
+        <item name="android:windowBackground">@color/splash_bg</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
     </style>
 
     <!-- ===== Toolbar 白色背景 + 深色图标/文字 ===== -->

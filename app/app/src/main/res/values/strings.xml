@@ -11,12 +11,24 @@
     <string name="profile">个人资料</string>
     <string name="account_security">账号管理</string>
     <string name="about_app">关于书阁</string>
-    <string name="phone_binding">手机绑定</string>
     <string name="email_binding">邮箱绑定</string>
     <string name="cancel_account">注销账号</string>
-    <string name="bind_phone">绑定手机</string>
     <string name="bind_email">绑定邮箱</string>
     <string name="unbind">解绑</string>
+    <!-- 个人资料页（融合账号管理） -->
+    <string name="basic_info">基础信息</string>
+    <string name="avatar">头像</string>
+    <string name="username">用户名</string>
+    <string name="gender">性别</string>
+    <string name="uid">UID</string>
+    <string name="email">邮箱</string>
+    <string name="security_group">安全</string>
+    <string name="change_password">修改密码</string>
+    <string name="done">完成</string>
+    <string name="copy">复制</string>
+    <string name="copied">已复制</string>
+    <string name="edit_nickname_title">修改用户名</string>
+    <string name="unbound_tip">未绑定</string>
     <string name="bookshelf">书架</string>
     <string name="bookcity">书城</string>
     <string name="discuss">讨论</string>
@@ -66,4 +78,58 @@
     <string name="message_type_comment">评论</string>
     <string name="message_type_like">赞和收藏</string>
     <string name="message_type_follow">关注</string>
+
+    <!-- ===== 关于书阁 ===== -->
+    <string name="about_slogan">沉浸式阅读，安放每一次翻页</string>
+    <string name="about_check_update">检查更新</string>
+    <string name="about_version_info">版本信息</string>
+    <string name="about_qq_group">官方QQ群</string>
+    <string name="about_copyright">2026 书阁 版权所有</string>
+
+    <!-- 协议 / 隐私政策（与 Web 端共用同一份 HTML） -->
+    <string name="doc_terms">用户协议</string>
+    <string name="doc_privacy">隐私政策</string>
+
+    <!-- ===== 我的页 ===== -->
+    <string name="mine_edit_profile">编辑资料</string>
+    <string name="mine_login_now">立即登录</string>
+    <string name="mine_stat_books">藏书</string>
+    <string name="mine_stat_time">阅读时长</string>
+    <string name="mine_group_reading">阅读相关</string>
+    <string name="mine_group_other">其他</string>
+    <string name="mine_general_settings">通用设置</string>
+    <string name="mine_about_us">关于我们</string>
+    <string name="mine_clear_cache">清理缓存</string>
+    <!-- 缓存行右侧：%1$s = 可清缓存体积，%2$s = 本地书数据体积 -->
+    <string name="mine_cache_with_local">%1$s · 本地书 %2$s</string>
+    <!-- 连续阅读天数，%1$d = 天数 -->
+    <string name="mine_streak_days">已连续阅读 %1$d 天</string>
+
+    <!-- ===== 清理缓存抽屉 ===== -->
+    <string name="mine_cache_sheet_sub">释放临时文件，不影响书架与进度</string>
+    <!-- 体积单位：%1$s = KB / MB / GB -->
+    <string name="mine_cache_unit">%1$s 可清理</string>
+    <string name="mine_cache_unit_idle">MB 可清理</string>
+    <string name="mine_cache_items_label">将被清理</string>
+    <string name="mine_cache_select_all">全选</string>
+    <!-- 已选数量，%1$d = 已选，%2$d = 总数 -->
+    <string name="mine_cache_selected_count">已选 %1$d / %2$d 项</string>
+    <!-- 主按钮：部分选中 / 全部选中 -->
+    <string name="mine_cache_clear">清理</string>
+    <string name="mine_cache_clear_all">清理全部</string>
+    <string name="mine_cancel">取消</string>
+    <!-- 明细项名 -->
+    <string name="mine_cache_item_chapter">章节与分卷缓存</string>
+    <string name="mine_cache_item_reading">分页与在线阅读缓存</string>
+    <string name="mine_cache_item_font">已下载的在线字体</string>
+    <string name="mine_cache_item_update">更新包与图片临时文件</string>
+    <string name="mine_cache_item_avatar">头像历史文件</string>
+    <string name="mine_cache_item_other">其他临时文件</string>
+    <!-- 本地书说明，%1$s = 本地书数据体积 -->
+    <string name="mine_cache_local_note">本地书数据 %1$s 不属于缓存，不会被清理；已下载的书与阅读进度也都保留。</string>
+    <!-- 完成卡片 -->
+    <string name="mine_cache_done">清理完成</string>
+    <!-- 已释放体积，%1$s = 体积 -->
+    <string name="mine_cache_freed">已释放 %1$s</string>
+    <string name="mine_cache_nothing">没有可清理的缓存</string>
 </resources>

@@ -1,7 +1,6 @@
 package com.example.myapplication.bean;
 
 public class BindRequest {
-    private String phone;
     private String email;
     private String code;
     private String userId;
@@ -15,13 +14,6 @@ public class BindRequest {
     public BindRequest(String email, String code, String operation) {
         this.email = email;
         this.code = code;
-        this.operation = operation;
-    }
-
-    public BindRequest(String phone, String code, String userId, String operation) {
-        this.phone = phone;
-        this.code = code;
-        this.userId = userId;
         this.operation = operation;
     }
 
@@ -53,8 +45,6 @@ public class BindRequest {
         return request;
     }
 
-    public String getPhone() { return phone; }
-    public void setPhone(String phone) { this.phone = phone; }
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
     public String getCode() { return code; }

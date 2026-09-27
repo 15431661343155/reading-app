@@ -3,6 +3,7 @@ package com.example.readingapp.service.impl;
 import com.example.readingapp.entity.Book;
 import com.example.readingapp.repository.*;
 import com.example.readingapp.service.BookService;
+import com.example.readingapp.util.BookCategories;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -56,9 +57,8 @@ public class BookServiceImpl implements BookService {
     @Override
     @Transactional
     public void incrementViewCount(Long bookId) {
-        Book book = findById(bookId);
-        book.setViewCount(book.getViewCount() + 1);
-        bookRepository.save(book);
+        // 原子自增：并发下不丢计数，且 view_count 为 NULL 的老数据不会 NPE
+        bookRepository.incrementViewCount(bookId);
     }
 
     @Override
@@ -96,10 +96,17 @@ public class BookServiceImpl implements BookService {
 
     @Override
     @Transactional
-    public void batchUpdateCategory(List<Long> ids, String category) {
+    public void batchUpdateCategory(List<Long> ids, String category, String subCategories) {
         List<Book> books = bookRepository.findAllById(ids);
+        boolean updateMain = category != null && !category.trim().isEmpty();
+        String main = updateMain ? category.trim() : null;
+        // 子分类统一走规范化：前端可能传 JSON 数组串 / 逗号分隔 / 空（清空）
+        String subs = BookCategories.toStorage(subCategories);
         for (Book book : books) {
-            book.setCategory(category);
+            if (updateMain) {
+                book.setCategory(main);
+            }
+            book.setSubCategories(subs);
         }
         bookRepository.saveAll(books);
     }

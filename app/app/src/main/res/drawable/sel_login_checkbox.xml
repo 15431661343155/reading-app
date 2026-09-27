@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 协议勾选态：选中=紫底白勾，未选=灰描边空心。
+     由 ImageView 承载，状态用 state_selected 驱动（LoginActivity#toggleConsent 里 setSelected）。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:state_selected="true"
+        android:drawable="@drawable/ic_cb_square_checked" />
+    <item android:drawable="@drawable/ic_cb_square_unchecked" />
+</selector>

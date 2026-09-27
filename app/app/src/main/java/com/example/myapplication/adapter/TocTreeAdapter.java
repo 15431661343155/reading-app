@@ -1,5 +1,6 @@
 package com.example.myapplication.adapter;
 
+import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,7 +24,9 @@ import java.util.List;
  * <p>有分卷信息时，卷渲染成一行可展开/折叠的分组（▸/▾ 箭头），卷内章节缩进显示为该卷的子项；
  * 无分卷信息（volumes 为空）时退化成与原来完全一致的平铺章节列表。</p>
  *
- * <p>仅用于阅读器目录浮窗：配色跟随阅读器背景派生色（外部页面请继续使用 {@link ChapterAdapter}）。</p>
+ * <p>配色默认使用「宿主页面自身配色」（与 {@link ChapterAdapter} 一致），仅当显式
+ * {@link #setFollowReaderTheme(boolean)} 置 true（阅读器目录浮窗）时才跟随阅读器背景派生色，
+ * 避免被阅读器调色板带到书城 / 书籍详情等外部页面。</p>
  */
 public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolder> {
 
@@ -42,6 +45,12 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
 
     private int currentChapterIndex;
     private OnChapterClickListener listener;
+    /**
+     * 是否跟随阅读器背景的派生配色。仅阅读器「目录」浮窗置 true（默认 false）。
+     * 本 Adapter 现在也被书籍详情页「目录」复用，该页面不属于阅读器，
+     * 必须保持自身配色，不能被阅读器的调色板带跑（与 {@link ChapterAdapter} 同款开关）。
+     */
+    private boolean followReaderTheme = false;
     /** 目录顺序：false = 正序（第 1 章在前，默认），true = 倒序（最后一章在前）。
      *  共用 utils.TocOrder，避免与详情页目录各自实现一遍。 */
     private final TocOrder order = new TocOrder();
@@ -87,6 +96,11 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
 
     public void setOnChapterClickListener(OnChapterClickListener l) {
         this.listener = l;
+    }
+
+    /** 是否跟随阅读器背景派生配色（默认 false；仅阅读器目录浮窗置 true） */
+    public void setFollowReaderTheme(boolean follow) {
+        this.followReaderTheme = follow;
     }
 
     public boolean isDescending() {
@@ -220,8 +234,7 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
             holder.tvTitle.setTextSize(16f);
             // 卷内包含当前阅读章节时，卷标题也用强调色，收起状态下也能一眼定位
             boolean holdsCurrent = containsChapter(vol, currentChapterIndex);
-            holder.tvTitle.setTextColor(holdsCurrent
-                    ? ReadActivity.getAccentColor() : ReadActivity.getTextPrimaryColor());
+            holder.tvTitle.setTextColor(holdsCurrent ? accentColor() : textPrimaryColor());
             holder.rowContent.setPaddingRelative(dp(PAD_VOLUME_DP, density), 0,
                     dp(PAD_VOLUME_DP, density), 0);
             holder.itemView.setOnClickListener(v -> toggleVolume(row.volumePos));
@@ -232,8 +245,7 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
             holder.tvTitle.setText(chapter.getTitle());
             holder.tvTitle.setTextSize(15f);
             boolean isCurrent = chapter.getIndex() == currentChapterIndex;
-            holder.tvTitle.setTextColor(isCurrent
-                    ? ReadActivity.getAccentColor() : ReadActivity.getTextPrimaryColor());
+            holder.tvTitle.setTextColor(isCurrent ? accentColor() : textPrimaryColor());
             // 只有分卷书才把章行缩进一层（表示从属关系）；无分卷的平铺列表保持常规边距
             int chapterPad = volumes.isEmpty() ? PAD_VOLUME_DP : PAD_CHAPTER_DP;
             holder.rowContent.setPaddingRelative(dp(chapterPad, density), 0,
@@ -243,8 +255,21 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
             });
         }
 
-        // 列表项（文字/分割线/背景）跟随阅读器背景派生配色
-        ReadActivity.themeViewTree(holder.itemView);
+        // 列表项（文字/分割线/背景）跟随阅读器背景派生配色；
+        // 非阅读器宿主（书籍详情页）保持自身配色
+        if (followReaderTheme) {
+            ReadActivity.themeViewTree(holder.itemView);
+        }
+    }
+
+    /** 当前章节强调色：阅读器目录跟随背景派生色，其它页面用详情页自身配色 */
+    private int accentColor() {
+        return followReaderTheme ? ReadActivity.getAccentColor() : Color.parseColor("#007AFF");
+    }
+
+    /** 普通章节文字色：阅读器目录跟随背景派生色，其它页面用详情页自身配色 */
+    private int textPrimaryColor() {
+        return followReaderTheme ? ReadActivity.getTextPrimaryColor() : Color.parseColor("#1D1D1F");
     }
 
     private static int dp(int value, float density) {

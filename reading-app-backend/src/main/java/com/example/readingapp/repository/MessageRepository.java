@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -28,4 +29,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Modifying
     @Query("UPDATE Message m SET m.isRead = true WHERE m.userId = :userId AND m.isRead = false")
     int markAllAsRead(@Param("userId") Long userId);
+
+    /** 删除某用户的全部站内消息（删除用户时级联清理）。派生删除方法必须带事务。 */
+    @Transactional
+    void deleteByUserId(Long userId);
 }

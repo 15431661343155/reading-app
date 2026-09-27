@@ -8,13 +8,14 @@
     android:background="?android:attr/windowBackground">
 
     <!-- 返回标题栏 -->
-    <androidx.appcompat.widget.Toolbar
+    <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="@color/ios_bg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="@string/feedback_title"
+        app:titleCentered="true"
         app:titleTextColor="@color/ios_text_primary" />
 
     <ScrollView
@@ -104,14 +105,11 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- 底部提交按钮 -->
-    <Button
+    <!-- 底部提交按钮（形变链：胶囊→圆→结果条，文字由控件自绘） -->
+    <com.example.myapplication.widget.MorphSubmitButton
         android:id="@+id/btn_feedback_submit"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="50dp"
-        android:text="@string/feedback_submit"
-        android:textSize="16sp"
+        android:layout_height="50dp"
         android:layout_marginHorizontal="20dp"
         android:layout_marginBottom="20dp" />
 

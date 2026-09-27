@@ -135,6 +135,12 @@ public final class TxtBookParser {
     /** 纯符号行 */
     private static final Pattern RE_PURE_SYMBOL = Pattern.compile("^[-=_*·—–\\s.。，,、|\\\\/~＃#]+$");
 
+    /** 装饰框字符（合集 TXT 的「〓作者〓　　醛石　　〓」信息块用它围边） */
+    private static final Pattern RE_FRAME_CHAR = Pattern.compile("[〓▬◆●■□★☆※═─━┃]");
+
+    /** 「作者：」「著者 」「笔名：」等前缀 */
+    private static final String AUTHOR_PREFIX = "(?:作\\s*者|著\\s*者|作者名|写手|笔名|著)";
+
     /** 文件名里的站点垃圾 */
     private static final Pattern[] RE_FILENAME_JUNK = {
             Pattern.compile("(?i)\\[[^\\]\\[]{0,40}(?:小说|文学|书屋|阁|网|下载|整理|校对|首发)[^\\]\\[]{0,40}\\]"),
@@ -553,9 +559,22 @@ public final class TxtBookParser {
         String t = tail.trim();
         Matcher m = Pattern.compile("^[\\(（\\[【]\\s*([^\\(\\（\\[【）)】\\]]{1,20})\\s*[\\)）\\]】]$").matcher(t);
         if (m.matches() && !isJunkToken(m.group(1))) return m.group(1).trim();
-        t = t.replaceAll("^[:：\\s]+", "").trim();
+        // 「作者：醛石」「著者 醛石」「笔名：醛石」——合集文件名的主流写法，先剥前缀再判定，
+        // 否则「作者：醛石」会因含全角冒号被 looksLikeName 的标点规则拒掉
+        t = stripAuthorPrefix(t).replaceAll("^[:：\\s]+", "").trim();
         if (!t.isEmpty() && t.length() <= 20 && !isJunkToken(t) && looksLikeName(t)) return t;
         return "";
+    }
+
+    /**
+     * 剥掉「作者：」「著者 」「笔名：」这类前缀（分隔符必需，避免把「作者简介」剥成「简介」），
+     * 顺带清掉尾部的「著 / 作品 / 创作」。
+     */
+    private static String stripAuthorPrefix(String s) {
+        if (s == null) return "";
+        return s.replaceFirst("^\\s*" + AUTHOR_PREFIX + "\\s*[:：\\s]\\s*", "")
+                .replaceFirst("\\s*(?:著|作品|创作)$", "")
+                .trim();
     }
 
     private static boolean isJunkToken(String s) {
@@ -589,10 +608,13 @@ public final class TxtBookParser {
             if (s.isEmpty() || RE_PURE_SYMBOL.matcher(s).matches()) continue;
             if (isAdLine(s)) continue;
             if (matchTitleLine(s) != null) continue;
+            // 装饰框信息行（「〓作者〓　　醛石　　〓」）归一成「作者 醛石」后再匹配标签
+            String label = stripDecorFrame(s);
+            if (label.isEmpty()) continue;
 
             if (!meta.containsKey("title")) {
                 for (Pattern p : RE_TITLE_LABEL) {
-                    Matcher m = p.matcher(s);
+                    Matcher m = p.matcher(label);
                     if (m.matches()) {
                         String cand = m.group(1).trim();
                         if (!isJunkToken(cand) && !RE_JUNK_TITLE.matcher(cand).find()) {
@@ -604,7 +626,7 @@ public final class TxtBookParser {
             }
             if (!meta.containsKey("author")) {
                 for (Pattern p : RE_AUTHOR_LABEL) {
-                    Matcher m = p.matcher(s);
+                    Matcher m = p.matcher(label);
                     if (m.matches()) {
                         String cand = m.group(1).trim();
                         cand = cand.replaceAll("^[:：\\s]+", "").trim();
@@ -618,6 +640,17 @@ public final class TxtBookParser {
             if (meta.containsKey("title") && meta.containsKey("author")) break;
         }
         return meta;
+    }
+
+    /**
+     * 把「〓作者〓　　醛石　　〓」这类装饰框行归一成「作者 醛石」。
+     * 只处理短行且必须含装饰符，普通正文行原样返回 —— 不动正文判定。
+     */
+    private static String stripDecorFrame(String s) {
+        if (s == null || s.length() > 40 || !RE_FRAME_CHAR.matcher(s).find()) return s;
+        String t = RE_FRAME_CHAR.matcher(s).replaceAll(" ").replace('\u3000', ' ');
+        t = t.replaceAll("\\s+", " ").trim();
+        return t;
     }
 
     private static String extractIntro(String[] lines, int bodyStart, String title, String author) {
@@ -798,6 +831,22 @@ public final class TxtBookParser {
         s = s.replaceAll("[\\-—_\\.\\s]+$", "").trim();
         if (s.length() > 60) s = s.substring(0, 60);
         return s;
+    }
+
+    /**
+     * 调用方传入的作者提示（前端按文件名猜的、或手填的）是否可用。
+     *
+     * <p>前端「按文件名猜作者」的口径比后端宽松，形如 {@code 我的属性修行人生(1).txt} 的
+     * 下载序号会被猜成作者「1」；而 hintAuthor 优先级最高，直接采信会把正文标注 /
+     * EPUB 元数据里解析出的正确作者覆盖掉。故这里加一道守卫：不像人名的提示值视为未填，
+     * 让解析器回落到自动解析。纯手填的合法作者（如「天蚕土豆」）不受影响。
+     */
+    public static boolean isPlausibleAuthor(String a) {
+        if (a == null) return false;
+        String t = a.trim();
+        if (t.isEmpty()) return false;
+        if (isJunkToken(t)) return false;   // 已含长度上限、数字占比过半、垃圾词、纯符号判定
+        return looksLikeName(t);            // 中英文开头且不含标点噪音
     }
 
     /** 清理作者名 */

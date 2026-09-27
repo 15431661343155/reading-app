@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="EnZI8TPAHUInJ4LJttTPaF">
+<head data-page-node-id="V2tkAVSbDxEd6CV6QS16o8">
+  <meta charset="UTF-8" data-page-node-id="9lSYr9uQuKuYhGLvWEuq5H">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="VpDGKfXTqUtCwrvTiSgEDq">
+  <title>书阁 · 管理后台登录</title>
+  <style>
+    /* ============================================================
+       书阁 · 管理后台登录页
+       设计方向：墨韵朱印 —— 深墨底 + 宣纸米白 + 单一朱砂强调色
+       字体策略：中文衬线（题签/印章）+ 无衬线（表单/正文），
+                 不依赖外部字体 CDN，避免网络受限时降级成默认字体
+       ============================================================ */
+    :root {
+      --ink-900: #0a0e13;
+      --ink-850: #0e131a;
+      --ink-800: #141b24;
+      --ink-700: #1d2632;
+
+      --paper: #efe6d6;
+      --paper-soft: #cfc4b2;
+      --paper-faint: #a1978a;
+      --paper-mute: #9a9184;
+
+      --cinnabar: #b83f29;
+      --cinnabar-lit: #d8563a;
+      --cinnabar-bright: #e2643f;
+      --cinnabar-deep: #8e2f1e;
+
+      --line: rgba(239, 230, 214, 0.14);
+      --line-strong: rgba(239, 230, 214, 0.28);
+
+      --serif: "Source Han Serif SC", "Noto Serif CJK SC", "STZhongsong",
+               "Songti SC", "STSong", "SimSun", "Georgia", serif;
+      --sans: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei",
+              "Hiragino Sans GB", "Segoe UI", sans-serif;
+
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.45);
+      --shadow-3: 0 24px 60px rgba(0, 0, 0, 0.55);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--paper);
+      background:
+        radial-gradient(1100px 620px at 12% -10%, #1b2531 0%, transparent 62%),
+        radial-gradient(760px 520px at 92% 108%, #2a1a17 0%, transparent 60%),
+        linear-gradient(168deg, var(--ink-900) 0%, var(--ink-850) 52%, #0c1116 100%);
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* 纸纹颗粒：让深色背景不平板 */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.4;
+      mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+    }
+
+    /* 顶部一道极细的朱砂界线 */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0 0 auto 0;
+      height: 2px;
+      z-index: 2;
+      background: linear-gradient(90deg, transparent, var(--cinnabar) 22%, var(--cinnabar-lit) 50%, var(--cinnabar) 78%, transparent);
+      opacity: 0.85;
+    }
+
+    .stage {
+      position: relative;
+      z-index: 1;
+      min-height: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+      align-items: center;
+      gap: clamp(24px, 5vw, 88px);
+      padding: clamp(28px, 5vh, 64px) clamp(24px, 6vw, 96px);
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    /* ---------------- 左：品牌题签区 ---------------- */
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      align-items: flex-start;
+      animation: rise 720ms var(--ease-out) both;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: flex-start;
+      gap: clamp(18px, 2.4vw, 34px);
+    }
+
+    /* 朱砂印章 */
+    .seal {
+      flex: none;
+      width: 88px;
+      height: 88px;
+      border-radius: 6px;
+      background: linear-gradient(155deg, var(--cinnabar-lit), var(--cinnabar-deep));
+      box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+      display: grid;
+      place-items: center;
+      transform: rotate(-3.5deg);
+      animation: sealIn 900ms var(--ease-out) both;
+      animation-delay: 80ms;
+    }
+
+    .seal span {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      font-family: var(--serif);
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: #fdf6ea;
+      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+    }
+
+    /* 竖排题签 */
+    .titles {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .title-main {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      font-family: var(--serif);
+      font-size: clamp(28px, 2.6vw, 40px);
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      margin: 0;
+      padding-left: 6px;
+      line-height: 1;
+      animation: rise 760ms var(--ease-out) both;
+      animation-delay: 180ms;
+    }
+
+    .title-sub {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      font-family: var(--serif);
+      font-size: clamp(13px, 1.05vw, 16px);
+      letter-spacing: 0.32em;
+      color: var(--paper-soft);
+      margin: 4px 0 0;
+      padding-left: 4px;
+      line-height: 1;
+      border-left: 1px solid var(--line);
+      animation: rise 760ms var(--ease-out) both;
+      animation-delay: 260ms;
+    }
+
+    .brand-note {
+      max-width: 30ch;
+      font-size: 13.5px;
+      line-height: 1.9;
+      color: var(--paper-faint);
+      margin: 0;
+      padding-left: 14px;
+      border-left: 2px solid var(--line-strong);
+      animation: rise 760ms var(--ease-out) both;
+      animation-delay: 340ms;
+    }
+
+    .brand-meta {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      color: var(--paper-mute);
+      animation: rise 760ms var(--ease-out) both;
+      animation-delay: 420ms;
+    }
+
+    /* ---------------- 右：登录面板 ---------------- */
+    .panel {
+      position: relative;
+      justify-self: end;
+      width: 100%;
+      max-width: 452px;
+      padding: clamp(30px, 3.4vw, 46px);
+      border-radius: 4px;
+      background: linear-gradient(163deg, rgba(29, 38, 50, 0.94), rgba(14, 19, 26, 0.96));
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-3);
+      animation: rise 820ms var(--ease-out) both;
+      animation-delay: 140ms;
+    }
+
+    /* 面板左上角朱砂小角标 */
+    .panel::before {
+      content: "";
+      position: absolute;
+      top: -1px;
+      left: -1px;
+      width: 54px;
+      height: 3px;
+      background: var(--cinnabar);
+    }
+
+    .panel-head { margin-bottom: 30px; }
+
+    .panel-kicker {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 0.42em;
+      text-transform: uppercase;
+      color: var(--cinnabar-bright);
+      margin-bottom: 12px;
+      animation: rise 640ms var(--ease-out) both;
+      animation-delay: 220ms;
+    }
+
+    .panel-title {
+      margin: 0 0 8px;
+      font-family: var(--serif);
+      font-size: clamp(24px, 2vw, 30px);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      animation: rise 640ms var(--ease-out) both;
+      animation-delay: 280ms;
+    }
+
+    .panel-desc {
+      margin: 0;
+      font-size: 13px;
+      color: var(--paper-faint);
+      animation: rise 640ms var(--ease-out) both;
+      animation-delay: 320ms;
+    }
+
+    .field {
+      margin-bottom: 20px;
+      animation: rise 640ms var(--ease-out) both;
+    }
+
+    .field:nth-of-type(1) { animation-delay: 380ms; }
+    .field:nth-of-type(2) { animation-delay: 440ms; }
+
+    .field label {
+      display: block;
+      font-size: 12.5px;
+      letter-spacing: 0.1em;
+      color: var(--paper-soft);
+      margin-bottom: 9px;
+    }
+
+    .control { position: relative; }
+
+    .field input {
+      width: 100%;
+      min-height: 50px;
+      padding: 13px 15px;
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--paper);
+      background: rgba(10, 14, 19, 0.72);
+      border: 1px solid var(--line-strong);
+      border-radius: 3px;
+      outline: none;
+      transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .field input::placeholder { color: #8a8175; }
+
+    .field input:hover { border-color: rgba(239, 230, 214, 0.4); }
+
+    .field input:focus {
+      border-color: var(--cinnabar-lit);
+      background: rgba(10, 14, 19, 0.9);
+      box-shadow: 0 0 0 3px rgba(216, 86, 58, 0.22);
+    }
+
+    .field.pwd input { padding-right: 74px; }
+
+    .reveal {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      transform: translateY(-50%);
+      min-width: 56px;
+      min-height: 36px;
+      padding: 0 8px;
+      font-family: inherit;
+      font-size: 12px;
+      color: var(--paper-faint);
+      background: transparent;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: color 160ms ease, background 160ms ease;
+    }
+
+    .reveal:hover { color: var(--paper); background: rgba(239, 230, 214, 0.07); }
+    .reveal:focus-visible { outline: 2px solid var(--cinnabar-lit); outline-offset: 1px; }
+
+    .alert {
+      display: none;
+      align-items: flex-start;
+      gap: 9px;
+      margin: 0 0 18px;
+      padding: 11px 13px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #ffd9d0;
+      background: rgba(184, 63, 41, 0.16);
+      border: 1px solid rgba(216, 86, 58, 0.42);
+      border-radius: 3px;
+    }
+
+    .alert.show { display: flex; }
+    .alert::before { content: "!"; flex: none; font-weight: 700; color: var(--cinnabar-lit); }
+
+    .submit {
+      width: 100%;
+      min-height: 52px;
+      margin-top: 6px;
+      font-family: inherit;
+      font-size: 15.5px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      color: #fdf6ea;
+      /* 渐变最亮端控制在 --cinnabar：#fdf6ea 正文与其对比度约 5.2:1（≥4.5） */
+      background: linear-gradient(160deg, var(--cinnabar) 0%, #a8381f 52%, var(--cinnabar-deep) 100%);
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      box-shadow: var(--shadow-2);
+      transition: transform 160ms var(--ease-out), filter 160ms ease, opacity 160ms ease;
+      animation: rise 640ms var(--ease-out) both;
+      animation-delay: 500ms;
+    }
+
+    .submit:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+    .submit:active:not(:disabled) { transform: translateY(0); }
+    .submit:focus-visible { outline: 2px solid var(--paper); outline-offset: 3px; }
+    .submit:disabled { opacity: 0.62; cursor: not-allowed; }
+
+    .panel-foot {
+      margin-top: 22px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      line-height: 1.75;
+      color: var(--paper-faint);
+      animation: rise 640ms var(--ease-out) both;
+      animation-delay: 560ms;
+    }
+
+    .panel.shake { animation: shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+
+    /* ---------------- 关键帧 ---------------- */
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes sealIn {
+      0%   { opacity: 0; transform: rotate(-14deg) scale(0.72); }
+      60%  { opacity: 1; transform: rotate(-2deg) scale(1.04); }
+      100% { opacity: 1; transform: rotate(-3.5deg) scale(1); }
+    }
+
+    @keyframes shake {
+      10%, 90% { transform: translateX(-2px); }
+      20%, 80% { transform: translateX(4px); }
+      30%, 50%, 70% { transform: translateX(-7px); }
+      40%, 60% { transform: translateX(7px); }
+    }
+
+    /* ---------------- 响应式 ---------------- */
+    @media (max-width: 900px) {
+      .stage {
+        grid-template-columns: 1fr;
+        gap: 36px;
+        align-items: start;
+        padding-top: 48px;
+        padding-bottom: 48px;
+      }
+      .panel { justify-self: stretch; max-width: none; }
+      .brand { align-items: flex-start; }
+      .brand-note { max-width: none; }
+    }
+
+    @media (max-width: 520px) {
+      .seal { width: 70px; height: 70px; }
+      .seal span { font-size: 24px; }
+      .title-main { font-size: 26px; letter-spacing: 0.16em; }
+    }
+
+    /* ---------------- 动效降级 ---------------- */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-delay: 0ms !important;
+        transition-duration: 0.001ms !important;
+      }
+    }
+  </style>
+</head>
+<body data-page-node-id="95tWVa0VPiIzCH0phFZqH0">
+<main class="stage" data-page-node-id="GtrQACE67keZpDDCEAMViA">
+  <!-- 左：品牌题签 -->
+  <section class="brand" data-page-node-id="vXyjqA5AMOiDRuT7D7UCoE">
+    <div class="brand-mark" data-page-node-id="E5RBg4Px5qNDMtqfDCamrW">
+      <div class="seal" aria-hidden="true" data-page-node-id="v1mynSfSNW2RDdbAUmmX7O"><span data-page-node-id="u0CjBz2c9tkiiyn6raBekX">书阁</span></div>
+      <div class="titles" data-page-node-id="AmUE4PMWa80Rz3Dxo0zaRP">
+        <h1 class="title-main" data-page-node-id="O4scClx6T7a6nxfOvWJReo">管理后台</h1>
+        <p class="title-sub" data-page-node-id="5gUVPFNoTapXRTHW7pTDjK">仅限管理员</p>
+      </div>
+    </div>
+    <p class="brand-note" data-page-node-id="LMZipsA8R2T9Jw8jwJKYzA">
+      本站为「书阁」阅读 App 的内容与运营管理入口。登录后将获得书籍、章节、用户、书源与资源的管理权限，请勿在公共设备上保持登录状态。
+    </p>
+    <div class="brand-meta" data-page-node-id="c10D3QvPL3qShUq3A3eWCp">书阁 · 内容管理平台</div>
+  </section>
+
+  <!-- 右：登录表单 -->
+  <section class="panel" id="panel" data-page-node-id="MowESK30ppV2RAiAtwsCfa">
+    <div class="panel-head" data-page-node-id="cEoXVoFPUpvucoEYzo9gDn">
+      <span class="panel-kicker" data-page-node-id="QDYbZHFwzmHi6KXfIdJKoH">Administrator</span>
+      <h2 class="panel-title" data-page-node-id="7fpmeRpYSGS1Tz45F1FAuE">管理员登录</h2>
+      <p class="panel-desc" data-page-node-id="ATSXfD5PKBxjAObnuVMoTN">请输入管理员账号与密码</p>
+    </div>
+
+    <div class="alert" id="alert" role="alert" aria-live="polite" data-page-node-id="UONSx2GGvv258Z3laBCAM8"></div>
+
+    <form id="loginForm" novalidate data-page-node-id="7cniwJmu40TyN2FAe4h5QS">
+      <div class="field" data-page-node-id="vFgVOpsTSDrg7C90efXNKy">
+        <label for="username" data-page-node-id="zQTywmq5qMZDYMBSUZUGdP">管理员账号</label>
+        <div class="control" data-page-node-id="PgJ4tIvFRRXQQZHZRqKz68">
+          <input id="username" name="username" type="text" autocomplete="username"
+                 placeholder="请输入管理员账号" required autofocus data-page-node-id="IBc6tOa6qgiWyv7ydAjDRQ">
+        </div>
+      </div>
+
+      <div class="field pwd" data-page-node-id="NvxiLd2xFKvBpz7LbNDKDl">
+        <label for="password" data-page-node-id="6uwVAiSrmnHQ6lSy6Dm0OQ">登录密码</label>
+        <div class="control" data-page-node-id="sGElCCA0IkODdnhgKa8NCA">
+          <input id="password" name="password" type="password" autocomplete="current-password"
+                 placeholder="请输入登录密码" required data-page-node-id="FgJwEaGyenpPmcIht63W7b">
+          <button type="button" class="reveal" id="reveal" aria-label="显示密码" data-page-node-id="WKJWEYxtgMkr8ae2p4AkfO">显示</button>
+        </div>
+      </div>
+
+      <button class="submit" id="submit" type="submit" data-page-node-id="YI2EHgw24N00EvoSyAqe6W">登 录</button>
+    </form>
+
+    <p class="panel-foot" data-page-node-id="uPOGUPhkiiZAi9lZhKeDUe">
+      普通用户账号无法登录管理后台。
+    </p>
+  </section>
+</main>
+
+<script>
+  (function () {
+    'use strict';
+
+    var form = document.getElementById('loginForm');
+    var panel = document.getElementById('panel');
+    var alertBox = document.getElementById('alert');
+    var submitBtn = document.getElementById('submit');
+    var usernameInput = document.getElementById('username');
+    var passwordInput = document.getElementById('password');
+    var revealBtn = document.getElementById('reveal');
+
+    function showError(message) {
+      alertBox.textContent = message;
+      alertBox.classList.add('show');
+      panel.classList.remove('shake');
+      // 强制重排以重放抖动动画
+      void panel.offsetWidth;
+      panel.classList.add('shake');
+    }
+
+    function clearError() {
+      alertBox.classList.remove('show');
+      alertBox.textContent = '';
+    }
+
+    revealBtn.addEventListener('click', function () {
+      var showing = passwordInput.type === 'text';
+      passwordInput.type = showing ? 'password' : 'text';
+      revealBtn.textContent = showing ? '显示' : '隐藏';
+      revealBtn.setAttribute('aria-label', showing ? '显示密码' : '隐藏密码');
+      passwordInput.focus();
+    });
+
+    [usernameInput, passwordInput].forEach(function (input) {
+      input.addEventListener('input', clearError);
+    });
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      clearError();
+
+      var username = usernameInput.value.trim();
+      var password = passwordInput.value;
+
+      if (!username || !password) {
+        showError('请输入管理员账号和密码');
+        (username ? passwordInput : usernameInput).focus();
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '验证中…';
+
+      fetch('/api/admin/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ username: username, password: password })
+      })
+        .then(function (response) {
+          return response.json().catch(function () { return null; });
+        })
+        .then(function (result) {
+          if (result && result.success) {
+            submitBtn.textContent = '登录成功，正在进入…';
+            window.location.replace('index.html');
+            return;
+          }
+          submitBtn.disabled = false;
+          submitBtn.textContent = '登 录';
+          showError((result && result.message) ? result.message : '登录失败，请稍后重试');
+          passwordInput.select();
+        })
+        .catch(function () {
+          submitBtn.disabled = false;
+          submitBtn.textContent = '登 录';
+          showError('网络异常，无法连接服务器');
+        });
+    });
+  })();
+</script>
+</body>
+</html>

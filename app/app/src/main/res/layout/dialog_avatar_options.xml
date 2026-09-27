@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <!-- 操作卡片：圆角白底，clipToOutline 让内部涟漪也收在圆角内 -->
+    <LinearLayout
+        android:id="@+id/sheet_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_sheet_card"
+        android:clipToOutline="true">
+
+        <TextView
+            android:id="@+id/action_camera"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:gravity="center"
+            android:text="拍照"
+            android:textSize="17sp"
+            android:textColor="@color/ios_text_primary"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1px"
+            android:background="@color/ios_separator" />
+
+        <TextView
+            android:id="@+id/action_album"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:gravity="center"
+            android:text="从相册选择"
+            android:textSize="17sp"
+            android:textColor="@color/ios_text_primary"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1px"
+            android:background="@color/ios_separator" />
+
+        <TextView
+            android:id="@+id/action_default"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:gravity="center"
+            android:text="使用默认头像"
+            android:textSize="17sp"
+            android:textColor="@color/ios_text_primary"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <!-- 取消：独立圆角按钮，与卡片间隔 8dp -->
+    <TextView
+        android:id="@+id/action_cancel"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:text="取消"
+        android:textSize="17sp"
+        android:textColor="@color/ios_text_primary"
+        android:background="@drawable/bg_sheet_card"
+        android:foreground="?attr/selectableItemBackground"
+        android:clipToOutline="true"
+        android:clickable="true"
+        android:focusable="true" />
+
+</LinearLayout>

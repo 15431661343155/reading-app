@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「全选」用的小号勾选框，比明细行的稍小、描边稍细 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:drawable="@drawable/ic_cache_cb_on_small" />
+    <item android:drawable="@drawable/ic_cache_cb_off_small" />
+</selector>

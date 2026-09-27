@@ -4,7 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@color/ios_bg"
+    android:background="@drawable/bg_sheet_top_rounded"
+    android:clipToOutline="true"
     android:paddingTop="12dp"
     android:paddingBottom="12dp">
 
@@ -357,7 +358,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:paddingHorizontal="20dp"
-        android:paddingVertical="6dp"
+        android:paddingVertical="4dp"
         android:gravity="center_vertical">
 
         <LinearLayout
@@ -366,7 +367,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingVertical="6dp"
+            android:paddingVertical="2dp"
             android:paddingEnd="8dp"
             android:clickable="true"
             android:focusable="true"

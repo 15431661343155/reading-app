@@ -5,7 +5,7 @@
     android:background="#FF000000">
 
     <!-- 裁剪视图 -->
-    <com.example.myapplication.view.CropCircleView
+    <com.example.myapplication.view.CropSquareView
         android:id="@+id/crop_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
@@ -16,7 +16,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|center_horizontal"
         android:layout_marginTop="24dp"
-        android:text="拖动和缩放调整裁剪区域"
+        android:text="拖动方框选择区域，拖右下角手柄可缩放大小"
         android:textColor="#B3FFFFFF"
         android:textSize="14sp" />
 

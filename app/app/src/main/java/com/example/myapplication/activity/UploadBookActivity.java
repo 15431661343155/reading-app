@@ -9,7 +9,6 @@ import android.provider.OpenableColumns;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.widget.Toolbar;
 
@@ -24,6 +23,7 @@ import java.io.OutputStreamWriter;
 import java.util.List;
 import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.utils.ThemeManager;
+import com.example.myapplication.utils.Hint;
 
 //图书上传页
 public class UploadBookActivity extends BaseActivity {
@@ -108,7 +108,7 @@ public class UploadBookActivity extends BaseActivity {
 
             //校验后缀
             if(!isEbookFile(selectedFileName)){
-                Toast.makeText(this,"请选择 TXT 或 EPUB 电子书",Toast.LENGTH_SHORT).show();
+                Hint.show(this, "请选择 TXT 或 EPUB 电子书");
                 selectedFileUri = null;
                 tvFileName.setText("未选择文件");
             }
@@ -149,7 +149,7 @@ public class UploadBookActivity extends BaseActivity {
         final String inputAuthor = etAuthor.getText().toString().trim();
 
         if(selectedFileUri == null){
-            Toast.makeText(this,"请选择TXT/EPUB电子书文件",Toast.LENGTH_SHORT).show();
+            Hint.show(this, "请选择TXT/EPUB电子书文件");
             return;
         }
 
@@ -188,11 +188,11 @@ public class UploadBookActivity extends BaseActivity {
                 if (isFinishing() || isDestroyed()) return;
                 if (err != null || bookInfo == null) {
                     btnSubmit.setEnabled(true);
-                    Toast.makeText(this, "导入失败：" + (err != null ? err : "未知错误"), Toast.LENGTH_LONG).show();
+                    Hint.showLong(this, "导入失败：" + (err != null ? err : "未知错误"));
                     return;
                 }
                 String okName = inputName.isEmpty() ? bookInfo.title : inputName;
-                Toast.makeText(this, "成功导入：" + okName + "（" + bookInfo.chapters.size() + "章）", Toast.LENGTH_SHORT).show();
+                Hint.show(this, "成功导入：" + okName + "（" + bookInfo.chapters.size() + "章）");
                 finish();
             });
         }, "local-book-import").start();

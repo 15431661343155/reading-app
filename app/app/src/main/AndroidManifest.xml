@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 拍照更换头像 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:name=".AppApplication"
@@ -14,16 +17,19 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:largeHeap="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApp"
         android:usesCleartextTraffic="true">
 
-        <!-- 全屏启动页 -->
+        <!-- 主页 = 启动入口（单窗口开屏：主页内浮层展示开屏图，数据就绪后直接揭示书架，
+             不再有开屏 Activity→主页的系统转场 / starting window 伪影） -->
         <activity
-            android:name=".activity.SplashActivity"
+            android:name=".activity.MainActivity"
+            android:theme="@style/Theme.MyApp.Main"
             android:exported="true"
-            android:theme="@style/Theme.Splash">
+            android:configChanges="orientation|screenSize|layoutDirection|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -35,29 +41,25 @@
             android:name=".activity.LoginActivity"
             android:exported="false"/>
 
-        <!-- 注册页 -->
+        <!-- 协议 / 隐私政策 内嵌页 -->
         <activity
-            android:name=".activity.RegisterActivity"
-            android:exported="false"/>
+            android:name=".activity.WebDocActivity"
+            android:exported="false"
+            android:label="文档" />
 
-        <activity android:name=".activity.MainActivity"
-            android:configChanges="orientation|screenSize|layoutDirection|uiMode"/>
         <activity android:name=".activity.UploadBookActivity"/>
         <activity android:name=".activity.ThemeSettingActivity"/>
         <activity android:name=".activity.SettingsActivity"/>
         <activity android:name=".activity.BookSourceActivity"/>
         <activity android:name=".activity.ProfileActivity"/>
-        <activity android:name=".activity.SecurityActivity"/>
-        <activity android:name=".activity.PhoneBindingActivity"/>
         <activity android:name=".activity.EmailBindingActivity"/>
         <activity android:name=".activity.ChangePasswordActivity"/>
         <activity android:name=".activity.AboutActivity"/>
         <activity android:name=".activity.FeedbackActivity"/>
         <activity android:name=".activity.MessageCenterActivity"/>
         <activity android:name=".activity.BookDetailActivity" />
+        <activity android:name=".activity.CategoryBooksActivity" android:label="分类书籍" />
         <activity android:name=".activity.ReadActivity" />
-        <activity android:name=".activity.ChapterListActivity" />
-        <activity android:name=".activity.OnlineChapterListActivity" android:label="目录" />
         <activity android:name=".activity.ReadingRecordActivity" android:label="阅读记录" />
         <activity android:name=".activity.SearchActivity" android:label="搜索" android:exported="true" android:windowSoftInputMode="stateVisible|adjustResize"/>
         <activity android:name=".activity.CropAvatarActivity" android:label="裁剪头像" />

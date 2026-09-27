@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>用户管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/admin-theme.css">
+<script src="assets/js/admin-auth.js"></script>
+</head>
+<body>
+<nav class="admin-nav">
+  <div class="admin-nav-inner">
+    <a class="admin-nav-brand" href="index.html">
+      <span class="brand-seal" aria-hidden="true"><span>书阁</span></span>
+      <span class="brand-text">
+        <span class="brand-title">管理后台</span>
+        <span class="brand-sub">内容管理平台</span>
+      </span>
+    </a>
+    <div class="admin-nav-links">
+      <a href="index.html" class="">首页</a>
+      <a href="books.html" class="">书籍管理</a>
+      <a href="categories.html" class="">分类管理</a>
+      <a href="import.html" class="">数据导入</a>
+      <a href="online-source.html" class="-source">在线书源</a>
+      <a href="book-source.html" class="-source">书源管理</a>
+      <a href="users.html" class="is-active">用户管理</a>
+      <a href="resource.html" class="">资源管理</a>
+      <a href="feedback.html" class="">意见反馈</a>
+    </div>
+    <div class="admin-nav-auth">
+      <span class="admin-auth-name" id="adminAuthName">管理员</span>
+      <button type="button" class="admin-logout" onclick="adminLogout()">退出登录</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-3 admin-main">
+  <div class="page-head">
+  <span class="kicker">Accounts</span>
+  <h1 id="pageTitle">用户管理</h1>
+  <p class="desc">查看注册用户、账号状态与阅读数据</p>
+  <div class="head-rule"></div>
+</div>
+
+  <div id="opMsg" class="alert d-none" role="alert"></div>
+
+  <table class="table table-striped">
+    <thead>
+    <tr>
+      <th>ID</th>
+      <th>用户名</th>
+      <th>昵称</th>
+      <th>邮箱</th>
+      <th>注册时间</th>
+      <th>状态</th>
+      <th>操作</th>
+    </tr>
+    </thead>
+    <tbody id="userTable"></tbody>
+  </table>
+  <nav>
+    <ul class="pagination" id="pagination"></ul>
+  </nav>
+</div>
+
+<footer class="admin-foot">
+  <span>
+    书阁 · 内容管理平台
+    <span class="foot-sep">/</span>
+    <span>阅读 App 运营控制台</span>
+  </span>
+  <span>请勿在公共设备上保持登录状态</span>
+</footer>
+
+<!-- 编辑用户弹窗 -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editModalLabel">编辑用户</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editId">
+        <div class="mb-3">
+          <label class="form-label">用户名</label>
+          <input type="text" class="form-control" id="editUsername" readonly>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">昵称</label>
+          <input type="text" class="form-control" id="editNickname">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">邮箱</label>
+          <input type="email" class="form-control" id="editEmail">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">电话</label>
+          <input type="text" class="form-control" id="editPhone">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">性别</label>
+          <select class="form-select" id="editGender">
+            <option value="0">未知</option>
+            <option value="1">男</option>
+            <option value="2">女</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" onclick="saveUser()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  let currentPage = 0;
+
+  function loadUsers(page = 0) {
+    currentPage = page;
+    fetch(`/api/users?page=${page}&size=10`)
+            .then(r => r.json())
+            .then(d => {
+              const tbody = document.getElementById('userTable');
+              tbody.innerHTML = d.data.content.map(u => `
+                        <tr>
+                            <td>${u.id}</td>
+                            <td>${u.username}</td>
+                            <td>${u.nickname || '-'}</td>
+                            <td>${u.email || '-'}</td>
+                            <td>${u.createdAt ? u.createdAt.substring(0, 10) : '-'}</td>
+                            <td>
+                                <span class="badge bg-${u.status == 1 ? 'success' : 'danger'}">
+                                    ${u.status == 1 ? '正常' : '禁用'}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-secondary" onclick="editUser(${u.id})">编辑</button>
+                                <button class="btn btn-sm btn-warning" onclick="toggleStatus(${u.id}, ${u.status})">
+                                    ${u.status == 1 ? '禁用' : '启用'}
+                                </button>
+                                <button class="btn btn-sm btn-info" onclick="viewReading(${u.id}, '${u.username}')">阅读数据</button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">删除</button>
+                            </td>
+                        </tr>
+                    `).join('');
+            });
+  }
+
+  function toggleStatus(id, currentStatus) {
+    const newStatus = currentStatus == 1 ? 0 : 1;
+    const action = newStatus == 1 ? '启用' : '禁用';
+    if (confirm(`确定${action}该用户？`)) {
+      fetch(`/api/users/${id}/status?status=${newStatus}`, {method: 'PUT'})
+              .then(() => loadUsers(currentPage));
+    }
+  }
+
+  function viewReading(userId, username) {
+    window.location.href = `user-reading.html?userId=${userId}&username=${encodeURIComponent(username)}`;
+  }
+
+  // 统一操作结果提示（配合主题 alert 配色）
+  function showMsg(text, type) {
+    const el = document.getElementById('opMsg');
+    el.textContent = text;
+    el.className = 'alert alert-' + (type === 'success' ? 'success' : 'danger');
+    el.classList.remove('d-none');
+    setTimeout(() => el.classList.add('d-none'), 3500);
+  }
+
+  // 编辑：拉取用户详情回填弹窗
+  function editUser(id) {
+    fetch(`/api/users/${id}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.success || !d.data) {
+          showMsg('获取用户信息失败', 'danger');
+          return;
+        }
+        const u = d.data;
+        document.getElementById('editId').value = u.id;
+        document.getElementById('editUsername').value = u.username || '';
+        document.getElementById('editNickname').value = u.nickname || '';
+        document.getElementById('editEmail').value = u.email || '';
+        document.getElementById('editPhone').value = u.phone || '';
+        document.getElementById('editGender').value = (u.gender == null ? 0 : u.gender);
+        new bootstrap.Modal(document.getElementById('editModal')).show();
+      })
+      .catch(err => showMsg('获取用户信息失败：' + err, 'danger'));
+  }
+
+  // 编辑：提交保存
+  function saveUser() {
+    const id = document.getElementById('editId').value;
+    const payload = {
+      nickname: document.getElementById('editNickname').value.trim(),
+      email: document.getElementById('editEmail').value.trim(),
+      phone: document.getElementById('editPhone').value.trim(),
+      gender: parseInt(document.getElementById('editGender').value, 10)
+    };
+    fetch(`/api/users/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    })
+      .then(r => r.json().then(body => ({ok: r.ok, body})))
+      .then(({ok, body}) => {
+        if (ok && body && body.success) {
+          showMsg('保存成功', 'success');
+          bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+          loadUsers(currentPage);
+        } else {
+          showMsg('保存失败：' + (body && body.message ? body.message : '未知错误'), 'danger');
+        }
+      })
+      .catch(err => showMsg('保存请求失败：' + err, 'danger'));
+  }
+
+  function deleteUser(id) {
+    if (!confirm('确定删除该用户？此操作不可恢复！')) return;
+    fetch(`/api/users/${id}`, {method: 'DELETE'})
+      .then(r => r.json().then(body => ({ok: r.ok, body})))
+      .then(({ok, body}) => {
+        if (ok && body && body.success) {
+          showMsg('删除成功', 'success');
+          loadUsers(currentPage);
+        } else {
+          // 后端现在会把真实失败原因回传（如外键约束），不再是无声的 500
+          showMsg('删除失败：' + (body && body.message ? body.message : '未知错误'), 'danger');
+        }
+      })
+      .catch(err => showMsg('删除请求失败：' + err, 'danger'));
+  }
+
+  loadUsers();
+</script>
+</body>
+</html>

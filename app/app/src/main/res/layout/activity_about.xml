@@ -1,216 +1,331 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--关于书阁页布局：应用标识 + 分组列表（版本/法律条款/联系我们）-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/ios_bg">
-
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/toolbar_back"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:background="@color/ios_bg"
-        app:navigationIcon="@drawable/ic_back_black"
-        app:title="@string/about_app"
-        app:titleTextColor="#1D1D1F"/>
+    android:background="@color/ios_bg_grouped"
+    android:fillViewport="true"
+    android:scrollbars="none">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <!-- 顶部导航栏 -->
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar_back"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="@color/ios_bg_grouped"
+            app:navigationIcon="@drawable/ic_back_black"
+            app:title="@string/about_app"
+            app:titleCentered="true"
+            app:titleTextColor="@color/ios_text_primary" />
+
+        <!-- ===== 应用标识区 ===== -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:layout_marginTop="14dp"
             android:gravity="center_horizontal"
-            android:background="#F5F5F5"
-            android:paddingTop="60dp"
-            android:paddingBottom="40dp">
+            android:orientation="vertical"
+            android:paddingTop="16dp"
+            android:paddingBottom="22dp">
 
-            <ImageView
-                android:id="@+id/iv_app_icon"
-                android:layout_width="100dp"
-                android:layout_height="100dp"
-                android:background="@drawable/ic_launcher_background"
-                android:src="@mipmap/ic_launcher"/>
+            <!-- 完整启动图标（全出血作品 + 20dp 圆角裁切）。
+                 勿用 ic_launcher_foreground：自适应前景自带 ~1/3 透明安全区，会显得图标被缩小 -->
+            <com.google.android.material.imageview.ShapeableImageView
+                android:layout_width="84dp"
+                android:layout_height="84dp"
+                android:contentDescription="@null"
+                android:elevation="8dp"
+                android:scaleType="centerCrop"
+                android:src="@mipmap/ic_launcher"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.AboutAppIcon" />
 
             <TextView
-                android:id="@+id/tv_app_name"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:text="@string/app_name"
-                android:textColor="#1D1D1F"
-                android:textSize="24sp"
-                android:layout_marginTop="20dp"/>
+                android:textColor="@color/ios_text_primary"
+                android:textSize="23sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/about_slogan"
+                android:textColor="@color/ios_text_secondary"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_capsule_gray"
+                android:paddingHorizontal="11dp"
+                android:paddingVertical="4dp"
+                android:text="@string/app_version"
+                android:textColor="@color/ios_text_secondary"
+                android:textSize="12sp" />
         </LinearLayout>
 
+        <!-- ===== 分组：版本与更新 ===== -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@color/ios_bg">
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_about_group_card"
+            android:orientation="vertical">
 
             <LinearLayout
                 android:id="@+id/btn_check_update"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="20dp"
+                android:layout_height="50dp"
+                android:background="?attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true"
-                android:background="?attr/selectableItemBackground">
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:background="@drawable/bg_about_icon_tile"
+                    android:contentDescription="@null"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_doc_update" />
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
-                    android:text="检查更新"
-                    android:textColor="#8E8E93"
-                    android:textSize="18sp"/>
+                    android:text="@string/about_check_update"
+                    android:textColor="@color/ios_text_primary"
+                    android:textSize="15sp" />
 
                 <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_arrow_right"
-                    android:contentDescription="@null"/>
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_arrow_right" />
             </LinearLayout>
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#e0e0e0"/>
+                android:layout_marginStart="14dp"
+                android:background="@color/ios_separator" />
 
             <LinearLayout
                 android:id="@+id/btn_version"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="20dp"
+                android:layout_height="50dp"
+                android:background="?attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true"
-                android:background="?attr/selectableItemBackground">
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:background="@drawable/bg_about_icon_tile"
+                    android:contentDescription="@null"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_doc_version" />
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
-                    android:text="版本信息"
-                    android:textColor="#8E8E93"
-                    android:textSize="18sp"/>
+                    android:text="@string/about_version_info"
+                    android:textColor="@color/ios_text_primary"
+                    android:textSize="15sp" />
 
                 <TextView
                     android:id="@+id/tv_version"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="v1.5.3"
-                    android:textColor="#8E8E93"
-                    android:textSize="16sp"/>
+                    android:layout_marginEnd="4dp"
+                    android:text="@string/app_version"
+                    android:textColor="@color/ios_text_secondary"
+                    android:textSize="14sp" />
 
                 <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_arrow_right"
-                    android:contentDescription="@null"/>
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_arrow_right" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ===== 分组：法律条款 ===== -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_about_group_card"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/btn_terms"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:background="@drawable/bg_about_icon_tile"
+                    android:contentDescription="@null"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_doc_terms" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:text="@string/doc_terms"
+                    android:textColor="@color/ios_text_primary"
+                    android:textSize="15sp" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_arrow_right" />
             </LinearLayout>
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#e0e0e0"/>
+                android:layout_marginStart="14dp"
+                android:background="@color/ios_separator" />
 
             <LinearLayout
-                android:id="@+id/btn_qq_group"
+                android:id="@+id/btn_privacy"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="20dp"
+                android:layout_height="50dp"
+                android:background="?attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true"
-                android:background="?attr/selectableItemBackground">
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:background="@drawable/bg_about_icon_tile"
+                    android:contentDescription="@null"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_doc_privacy" />
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
-                    android:text="官方QQ群"
-                    android:textColor="#8E8E93"
-                    android:textSize="18sp"/>
+                    android:text="@string/doc_privacy"
+                    android:textColor="@color/ios_text_primary"
+                    android:textSize="15sp" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_arrow_right" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ===== 分组：联系我们 ===== -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_about_group_card"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/btn_qq_group"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:background="@drawable/bg_about_icon_tile"
+                    android:contentDescription="@null"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_doc_qq_group" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:text="@string/about_qq_group"
+                    android:textColor="@color/ios_text_primary"
+                    android:textSize="15sp" />
 
                 <TextView
                     android:id="@+id/tv_qq_group"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
                     android:text="970467573"
-                    android:textColor="#8E8E93"
-                    android:textSize="16sp"/>
+                    android:textColor="@color/ios_text_secondary"
+                    android:textSize="14sp" />
 
                 <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_arrow_right"
-                    android:contentDescription="@null"/>
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#e0e0e0"/>
-
-            <LinearLayout
-                android:id="@+id/btn_license"
-                android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="20dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?attr/selectableItemBackground">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="相关许可证"
-                    android:textColor="#8E8E93"
-                    android:textSize="18sp"/>
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_arrow_right"
-                    android:contentDescription="@null"/>
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_arrow_right" />
             </LinearLayout>
         </LinearLayout>
 
+        <!-- ===== 底部版权区 ===== -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:orientation="vertical"
             android:gravity="bottom|center_horizontal"
-            android:paddingBottom="30dp">
+            android:minHeight="70dp"
+            android:orientation="vertical"
+            android:paddingBottom="18dp"
+            android:paddingTop="14dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="《用户协议》《隐私政策》《未成年个人信息保护规则》"
-                android:textColor="#8E8E93"
-                android:textSize="13sp"
-                android:layout_marginBottom="8dp"/>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="《未成年人文明公约》"
-                android:textColor="#8E8E93"
-                android:textSize="13sp"/>
+                android:text="@string/about_copyright"
+                android:textColor="@color/ios_text_tertiary"
+                android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</ScrollView>

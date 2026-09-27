@@ -52,10 +52,29 @@ public class JwtUtils {
         return extractExpiration(token).before(new Date());
     }
 
+    /** 普通用户 token（不带角色声明） */
     public String generateToken(String username, Long userId) {
+        return generateToken(username, userId, null);
+    }
+
+    /**
+     * 生成 token，可携带角色声明。
+     *
+     * @param role 角色标识（如 ADMIN）；传 null 表示普通用户 token
+     */
+    public String generateToken(String username, Long userId, String role) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
+        if (role != null && !role.isBlank()) {
+            claims.put("role", role);
+        }
         return createToken(claims, username);
+    }
+
+    /** 读取 token 中的角色声明，不存在时返回 null */
+    public String extractRole(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("role", String.class);
     }
 
     private String createToken(Map<String, Object> claims, String subject) {

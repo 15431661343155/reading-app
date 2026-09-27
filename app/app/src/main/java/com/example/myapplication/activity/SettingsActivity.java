@@ -1,19 +1,12 @@
 package com.example.myapplication.activity;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.LinearLayout;
 
 import androidx.appcompat.widget.Toolbar;
 
 import com.example.myapplication.R;
-import com.example.myapplication.activity.LoginActivity;
-import com.example.myapplication.activity.ThemeSettingActivity;
-import com.example.myapplication.activity.ProfileActivity;
-import com.example.myapplication.activity.SecurityActivity;
-import com.example.myapplication.activity.AboutActivity;
 import com.example.myapplication.utils.ThemeManager;
 
 public class SettingsActivity extends BaseActivity {
@@ -41,16 +34,6 @@ public class SettingsActivity extends BaseActivity {
 
         toolbar.setNavigationOnClickListener(v -> finish());
 
-        LinearLayout btnProfile = findViewById(R.id.btn_profile);
-        btnProfile.setOnClickListener(v -> {
-            startActivity(new Intent(SettingsActivity.this, ProfileActivity.class));
-        });
-
-        LinearLayout btnSecurity = findViewById(R.id.btn_security);
-        btnSecurity.setOnClickListener(v -> {
-            startActivity(new Intent(SettingsActivity.this, SecurityActivity.class));
-        });
-
         LinearLayout btnTheme = findViewById(R.id.btn_theme);
         btnTheme.setOnClickListener(v -> {
             startActivity(new Intent(SettingsActivity.this, ThemeSettingActivity.class));
@@ -62,19 +45,6 @@ public class SettingsActivity extends BaseActivity {
                 startActivity(new Intent(SettingsActivity.this, BookSourceActivity.class));
             });
         }
-
-        LinearLayout btnAbout = findViewById(R.id.btn_about);
-        btnAbout.setOnClickListener(v -> {
-            startActivity(new Intent(SettingsActivity.this, AboutActivity.class));
-        });
-
-        LinearLayout btnLogout = findViewById(R.id.btn_logout);
-        btnLogout.setOnClickListener(v -> {
-            SharedPreferences sp = getSharedPreferences("user_info", MODE_PRIVATE);
-            sp.edit().clear().apply();
-            startActivity(new Intent(SettingsActivity.this, LoginActivity.class));
-            finish();
-        });
     }
 
     @Override

@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  登录提示弹窗（国风探出版）
+  · 全站「需要登录」提示的唯一实现，入口：utils/LoginHelper.requireLogin(...)
+  · 结构：根 FrameLayout 预留人物探出空间；卡片 marginTop 83dp + paddingTop 72dp
+    正好容纳人物下半身，形成「人物约四成探出卡片上沿」的效果——
+    参数与 dialog_cancel_account.xml（注销弹窗）对齐：人物同 140dp 宽、
+    探出比例一致（人物图比例不同：login 442×462 / cancel 420×526）。
+  · 人物图 drawable-nodpi/login_prompt_char.png 为透明底 PNG。
+-->
+<!--
+  ⚠️ 关键坑：Dialog 里用 LayoutInflater.inflate(layout, null) 时，**根布局的 layout_* 会被丢弃**
+  （root 传 null 就拿不到 LayoutParams 类型）→ 这里写多少都不生效，根会变成 MATCH_PARENT。
+  所以卡片宽度**必须由卡片自己的固定宽（280dp）决定**，不能依赖根宽度；
+  窗口宽度在 LoginHelper 里用 window.setLayout(312dp) 显式指定。
+  312 = 卡片 280 + 左右各 16dp（留给卡片投影，配合 clipChildren=false）。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:paddingHorizontal="16dp">
+
+    <!--
+      人物立绘：必须「压在卡片之上」。
+      卡片设了 elevation=14dp，而同级 View 的绘制顺序由 Z(elevation) 决定 ——
+      所以这里必须给立绘更高的 elevation，否则会被卡片盖住，
+      看起来像「人被卡片截断」而不是「从卡片上沿探出」。
+      outlineProvider=none：只要 Z 高，但别让立绘自己投出一块方形阴影。
+    -->
+    <ImageView
+        android:id="@+id/iv_login_prompt_char"
+        android:layout_width="140dp"
+        android:layout_height="146dp"
+        android:layout_gravity="top|center_horizontal"
+        android:contentDescription="@null"
+        android:elevation="20dp"
+        android:outlineProvider="none"
+        android:scaleType="fitCenter"
+        android:src="@drawable/login_prompt_char" />
+
+    <!-- 卡片：宽度必须写死 280dp（不能 match_parent，见文件顶部说明） -->
+    <FrameLayout
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginTop="83dp"
+        android:background="@drawable/bg_login_prompt_card"
+        android:elevation="14dp"
+        android:outlineAmbientShadowColor="#402E1E0A"
+        android:outlineSpotShadowColor="#402E1E0A"
+        tools:targetApi="28">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="22dp"
+            android:paddingTop="72dp"
+            android:paddingEnd="22dp"
+            android:paddingBottom="22dp">
+
+            <TextView
+                android:id="@+id/tv_login_prompt_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="serif"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.25"
+                android:text="请先登录"
+                android:textColor="#33261A"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:layout_width="130dp"
+                android:layout_height="10dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="14dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_login_prompt_divider" />
+
+            <TextView
+                android:id="@+id/tv_login_prompt_line1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="serif"
+                android:gravity="center"
+                android:text="还没有登录哦"
+                android:textColor="#8C8177"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tv_login_prompt_line2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:fontFamily="serif"
+                android:gravity="center"
+                android:text="登录后可体验完整功能"
+                android:textColor="#8C8177"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="10dp"
+                android:layout_marginTop="14dp"
+                android:contentDescription="@null"
+                android:scaleType="fitXY"
+                android:src="@drawable/ic_login_prompt_wave" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="40dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btn_login_prompt_cancel"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_login_prompt_btn_ghost"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="serif"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="下次再说"
+                    android:textColor="#5A4A32"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/btn_login_prompt_confirm"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_login_prompt_btn_primary"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="serif"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="这就登录"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 卡片左上角云纹 -->
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="16dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="6dp"
+            android:layout_marginTop="8dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_login_prompt_cloud" />
+
+        <!-- 卡片右上角云纹 -->
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="16dp"
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="6dp"
+            android:layout_marginTop="8dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_login_prompt_cloud" />
+    </FrameLayout>
+</FrameLayout>

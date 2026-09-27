@@ -7,7 +7,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,6 +18,7 @@ import com.example.myapplication.activity.ReadActivity;
 import com.example.myapplication.adapter.TocTreeAdapter;
 import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.utils.TocOrder;
+import com.example.myapplication.utils.Hint;
 import com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView;
 
 import java.util.ArrayList;
@@ -85,19 +85,21 @@ public class PopupChapterFragment extends Fragment {
             final SharedPreferences sortSp = requireContext()
                     .getSharedPreferences("read_settings", Context.MODE_PRIVATE);
             TocTreeAdapter adapter = new TocTreeAdapter(chapterList, currentChapterIndex, volumeList);
+            // 阅读器目录浮窗：列表项跟随阅读器背景派生配色
+            adapter.setFollowReaderTheme(true);
             adapter.setDescending(sortSp.getBoolean("toc_descending", false));
             adapter.setOnChapterClickListener(c -> {
                 if (listener == null) return;
                 try {
                     int idx = c.getIndex();
                     if (idx < 0 || idx >= chapterList.size()) {
-                        Toast.makeText(getContext(), "章节索引异常，请重试", Toast.LENGTH_SHORT).show();
+                        Hint.show(getContext(), "章节索引异常，请重试");
                         return;
                     }
                     listener.onChapterSelected(idx);
                 } catch (Throwable t) {
                     android.util.Log.e("PopupChapter", "章节点击回调异常", t);
-                    Toast.makeText(getContext(), "切换章节失败：" + t.getMessage(), Toast.LENGTH_SHORT).show();
+                    Hint.show(getContext(), "切换章节失败：" + t.getMessage());
                 }
             });
             rv.setAdapter(adapter);
@@ -163,7 +165,7 @@ public class PopupChapterFragment extends Fragment {
             fallback.setLayoutParams(new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             try {
-                Toast.makeText(inflater.getContext(), "目录加载失败：" + t.getMessage(), Toast.LENGTH_SHORT).show();
+                Hint.show(inflater.getContext(), "目录加载失败：" + t.getMessage());
             } catch (Throwable ignored) {}
             return fallback;
         }

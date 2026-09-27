@@ -7,14 +7,15 @@
     android:background="?attr/android:windowBackground">
 
     <!-- 返回标题栏 -->
-    <androidx.appcompat.widget.Toolbar
+    <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="@color/ios_bg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="主题设置"
-        app:titleTextColor="@color/white"/>
+        app:titleCentered="true"
+        app:titleTextColor="@color/ios_text_primary"/>
 
     <!-- 主题选项列表 -->
     <LinearLayout

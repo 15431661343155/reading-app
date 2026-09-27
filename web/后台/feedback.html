@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>意见反馈管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/admin-theme.css">
+<script src="assets/js/admin-auth.js"></script>
+</head>
+<body>
+<nav class="admin-nav">
+  <div class="admin-nav-inner">
+    <a class="admin-nav-brand" href="index.html">
+      <span class="brand-seal" aria-hidden="true"><span>书阁</span></span>
+      <span class="brand-text">
+        <span class="brand-title">管理后台</span>
+        <span class="brand-sub">内容管理平台</span>
+      </span>
+    </a>
+    <div class="admin-nav-links">
+      <a href="index.html" class="">首页</a>
+      <a href="books.html" class="">书籍管理</a>
+      <a href="categories.html" class="">分类管理</a>
+      <a href="import.html" class="">数据导入</a>
+      <a href="online-source.html" class="-source">在线书源</a>
+      <a href="book-source.html" class="-source">书源管理</a>
+      <a href="users.html" class="">用户管理</a>
+      <a href="resource.html" class="">资源管理</a>
+      <a href="feedback.html" class="is-active">意见反馈</a>
+    </div>
+    <div class="admin-nav-auth">
+      <span class="admin-auth-name" id="adminAuthName">管理员</span>
+      <button type="button" class="admin-logout" onclick="adminLogout()">退出登录</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-4 admin-main">
+  <div class="page-head">
+  <span class="kicker">Feedback</span>
+  <h1 id="pageTitle">意见反馈</h1>
+  <p class="desc">查看用户反馈并回复处理</p>
+  <div class="head-rule"></div>
+</div>
+
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card text-white bg-danger mb-3">
+        <div class="card-body text-center">
+          <h5 class="card-title">待处理</h5>
+          <h2 id="pendingCount">-</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-primary mb-3">
+        <div class="card-body text-center">
+          <h5 class="card-title">已回复</h5>
+          <h2 id="repliedCount">-</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-secondary mb-3">
+        <div class="card-body text-center">
+          <h5 class="card-title">已关闭</h5>
+          <h2 id="closedCount">-</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-success mb-3">
+        <div class="card-body text-center">
+          <h5 class="card-title">总反馈</h5>
+          <h2 id="totalCount">-</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="input-group">
+        <input type="text" id="searchInput" class="form-control" placeholder="搜索用户名或邮箱..." onkeyup="handleSearch()">
+        <button class="btn btn-primary" onclick="loadFeedbacks()">搜索</button>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="btn-group" role="group">
+        <button class="btn btn-outline-primary" onclick="filterByStatus(null)">全部</button>
+        <button class="btn btn-outline-danger" onclick="filterByStatus(0)">待处理</button>
+        <button class="btn btn-outline-primary" onclick="filterByStatus(1)">已回复</button>
+        <button class="btn btn-outline-secondary" onclick="filterByStatus(2)">已关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <table class="table table-striped">
+    <thead>
+    <tr>
+      <th>ID</th>
+      <th>类型</th>
+      <th>用户</th>
+      <th>联系方式</th>
+      <th>内容摘要</th>
+      <th>状态</th>
+      <th>提交时间</th>
+      <th>操作</th>
+    </tr>
+    </thead>
+    <tbody id="feedbackTable"></tbody>
+  </table>
+  <nav>
+    <ul class="pagination" id="pagination"></ul>
+  </nav>
+</div>
+
+<div class="modal fade" id="replyModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">回复反馈</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">反馈内容</label>
+          <p id="feedbackContent" class="border p-2 bg-light"></p>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">回复内容</label>
+          <textarea id="replyContent" class="form-control" rows="4"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" onclick="submitReply()">提交回复</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">反馈详情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">反馈类型</label>
+          <p id="detailType" class="border p-2 bg-light"></p>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">用户ID</label>
+          <p id="detailUserId" class="border p-2 bg-light"></p>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">用户名</label>
+          <p id="detailUsername" class="border p-2 bg-light"></p>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">联系方式</label>
+          <p id="detailContact" class="border p-2 bg-light"></p>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">反馈内容</label>
+          <p id="detailContent" class="border p-2 bg-light"></p>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">回复内容</label>
+          <p id="detailReply" class="border p-2 bg-light"></p>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">回复时间</label>
+          <p id="detailReplyTime" class="border p-2 bg-light"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="admin-foot">
+  <span>
+    书阁 · 内容管理平台
+    <span class="foot-sep">/</span>
+    <span>阅读 App 运营控制台</span>
+  </span>
+  <span>请勿在公共设备上保持登录状态</span>
+</footer>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  let currentPage = 0;
+  let currentStatus = null;
+  let currentKeyword = '';
+  let replyFeedbackId = null;
+
+  function loadFeedbacks(page = 0) {
+    currentPage = page;
+    let url = `/api/feedback?page=${page}&size=10`;
+    if (currentStatus !== null) {
+      url += `&status=${currentStatus}`;
+    }
+    if (currentKeyword) {
+      url += `&keyword=${encodeURIComponent(currentKeyword)}`;
+    }
+    
+    fetch(url)
+      .then(r => r.json())
+      .then(d => {
+        const tbody = document.getElementById('feedbackTable');
+        tbody.innerHTML = d.data.content.map(f => `
+          <tr>
+            <td>${f.id}</td>
+            <td><span class="badge bg-${getTypeColor(f.type)}">${f.type || '其他'}</span></td>
+            <td>${f.username || '-'}</td>
+            <td>${f.contact || '-'}</td>
+            <td>${f.content.length > 50 ? f.content.substring(0, 50) + '...' : f.content}</td>
+            <td>
+              <span class="badge bg-${getStatusColor(f.status)}">${getStatusText(f.status)}</span>
+            </td>
+            <td>${f.createdAt ? f.createdAt.substring(0, 16) : '-'}</td>
+            <td>
+              <button class="btn btn-sm btn-info" onclick="viewDetail(${f.id})">查看</button>
+              ${f.status == 0 ? `<button class="btn btn-sm btn-primary" onclick="openReply(${f.id}, '${escapeHtml(f.content)}')">回复</button>` : ''}
+              <button class="btn btn-sm btn-secondary" onclick="closeFeedback(${f.id})">关闭</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteFeedback(${f.id})">删除</button>
+            </td>
+          </tr>
+        `).join('');
+        renderPagination(d.data);
+      });
+  }
+
+  function loadCounts() {
+    fetch('/api/feedback/count')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('pendingCount').textContent = d.data.pending || 0;
+        document.getElementById('repliedCount').textContent = d.data.replied || 0;
+        document.getElementById('closedCount').textContent = d.data.closed || 0;
+        document.getElementById('totalCount').textContent = (d.data.pending || 0) + (d.data.replied || 0) + (d.data.closed || 0);
+      });
+  }
+
+  function filterByStatus(status) {
+    currentStatus = status;
+    currentKeyword = '';
+    document.getElementById('searchInput').value = '';
+    loadFeedbacks(0);
+  }
+
+  function handleSearch() {
+    currentKeyword = document.getElementById('searchInput').value;
+    currentStatus = null;
+    loadFeedbacks(0);
+  }
+
+  function getStatusColor(status) {
+    switch(status) {
+      case 0: return 'danger';
+      case 1: return 'primary';
+      case 2: return 'secondary';
+      default: return 'light';
+    }
+  }
+
+  function getStatusText(status) {
+    switch(status) {
+      case 0: return '待处理';
+      case 1: return '已回复';
+      case 2: return '已关闭';
+      default: return '未知';
+    }
+  }
+
+  function escapeHtml(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function openReply(id, content) {
+    replyFeedbackId = id;
+    document.getElementById('feedbackContent').textContent = content;
+    document.getElementById('replyContent').value = '';
+    new bootstrap.Modal(document.getElementById('replyModal')).show();
+  }
+
+  function submitReply() {
+    const content = document.getElementById('replyContent').value.trim();
+    if (!content) {
+      alert('请输入回复内容');
+      return;
+    }
+    fetch(`/api/feedback/${replyFeedbackId}/reply`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replyContent: content })
+    }).then(() => {
+      bootstrap.Modal.getInstance(document.getElementById('replyModal')).hide();
+      loadFeedbacks(currentPage);
+      loadCounts();
+    });
+  }
+
+  function viewDetail(id) {
+    fetch(`/api/feedback/${id}`)
+      .then(r => r.json())
+      .then(d => {
+        const f = d.data;
+        document.getElementById('detailType').textContent = f.type || '其他';
+        document.getElementById('detailUserId').textContent = f.userId || '-';
+        document.getElementById('detailUsername').textContent = f.username || '-';
+        document.getElementById('detailContact').textContent = f.contact || '-';
+        document.getElementById('detailContent').textContent = f.content || '-';
+        document.getElementById('detailReply').textContent = f.replyContent || '-';
+        document.getElementById('detailReplyTime').textContent = f.replyTime ? f.replyTime.substring(0, 16) : '-';
+        new bootstrap.Modal(document.getElementById('detailModal')).show();
+      });
+  }
+
+  function getTypeColor(type) {
+    switch(type) {
+      case '故障报告': return 'danger';
+      case '功能建议': return 'primary';
+      case '其他': return 'secondary';
+      default: return 'info';
+    }
+  }
+
+  function closeFeedback(id) {
+    if (confirm('确定关闭此反馈？')) {
+      fetch(`/api/feedback/${id}/close`, { method: 'PUT' })
+        .then(() => {
+          loadFeedbacks(currentPage);
+          loadCounts();
+        });
+    }
+  }
+
+  function deleteFeedback(id) {
+    if (confirm('确定删除此反馈？此操作不可恢复！')) {
+      fetch(`/api/feedback/${id}`, { method: 'DELETE' })
+        .then(() => {
+          loadFeedbacks(currentPage);
+          loadCounts();
+        });
+    }
+  }
+
+  function renderPagination(pageData) {
+    const pagination = document.getElementById('pagination');
+    const totalPages = pageData.totalPages;
+    const current = pageData.number;
+    
+    let html = '';
+    if (current > 0) {
+      html += `<li class="page-item"><a class="page-link" onclick="loadFeedbacks(${current - 1})">上一页</a></li>`;
+    }
+    
+    for (let i = 0; i < totalPages; i++) {
+      html += `<li class="page-item ${i == current ? 'active' : ''}"><a class="page-link" onclick="loadFeedbacks(${i})">${i + 1}</a></li>`;
+    }
+    
+    if (current < totalPages - 1) {
+      html += `<li class="page-item"><a class="page-link" onclick="loadFeedbacks(${current + 1})">下一页</a></li>`;
+    }
+    
+    pagination.innerHTML = html;
+  }
+
+  loadFeedbacks();
+  loadCounts();
+</script>
+</body>
+</html>

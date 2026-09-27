@@ -36,7 +36,7 @@ Single-module Gradle project (`:app`). AGP 7.4.1, compileSdk 34, minSdk 24, Java
 - **`activity/`** — All Activities. `LoginActivity` is the launcher. `ReadActivity` (~96KB) is the core reading screen using a WebView with JS bridge for pagination and rendering. `BaseActivity` applies the current theme before `super.onCreate()`.
 - **`fragment/`** — `MainActivity` hosts 4 bottom-nav fragments: `BookShelfFragment`, `BookStoreFragment`, `DiscussionFragment`, `MineFragment`. Popup fragments (`PopupBookmarkFragment`, `PopupChapterFragment`) overlay `ReadActivity`.
 - **`adapter/`** — RecyclerView adapters for books, chapters, bookmarks, reading records.
-- **`api/`** — `RetrofitClient` (singleton, base URL `http://47.98.102.24:8080/`) and `ApiService` (Retrofit interface for all REST endpoints: auth, books, chapters, bookshelf, progress, bookmarks, read time).
+- **`api/`** — `RetrofitClient` (singleton, base URL `http://8.148.8.146:8080/`) and `ApiService` (Retrofit interface for all REST endpoints: auth, books, chapters, bookshelf, progress, bookmarks, read time).
 - **`bean/`** — Data models. `ShelfBook` is the Room entity for the local bookshelf table.
 - **`dao/`** — `BookDao` is the Room DAO for `shelf_books`. Note: no `RoomDatabase` subclass exists in the `database/` package (empty directory) — Room integration is incomplete.
 - **`manager/`** — Key reading subsystem managers:

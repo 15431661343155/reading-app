@@ -2,10 +2,9 @@ package com.example.myapplication.activity;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.widget.Button;
+import com.example.myapplication.widget.MorphSubmitButton;
 import android.widget.EditText;
 import android.widget.RadioGroup;
-import android.widget.Toast;
 
 import androidx.appcompat.widget.Toolbar;
 
@@ -16,6 +15,7 @@ import com.example.myapplication.api.SafeCallback;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.FeedbackRequest;
 import com.example.myapplication.utils.ThemeManager;
+import com.example.myapplication.utils.Hint;
 
 import retrofit2.Call;
 import retrofit2.Response;
@@ -27,7 +27,7 @@ public class FeedbackActivity extends BaseActivity {
 
     private RadioGroup rgType;
     private EditText etContent, etContact;
-    private Button btnSubmit;
+    private MorphSubmitButton btnSubmit;
     private boolean isSubmitting = false;
 
     @Override
@@ -49,6 +49,8 @@ public class FeedbackActivity extends BaseActivity {
         etContent = findViewById(R.id.et_feedback_content);
         etContact = findViewById(R.id.et_feedback_contact);
         btnSubmit = findViewById(R.id.btn_feedback_submit);
+        btnSubmit.setIdleColor(0xFF6C5CE7);
+        btnSubmit.setIdleText(getString(R.string.feedback_submit));
     }
 
     /**
@@ -92,7 +94,7 @@ public class FeedbackActivity extends BaseActivity {
 
         String content = etContent.getText().toString().trim();
         if (content.isEmpty()) {
-            Toast.makeText(this, R.string.feedback_content_empty, Toast.LENGTH_SHORT).show();
+            Hint.show(this, R.string.feedback_content_empty);
             return;
         }
 
@@ -106,39 +108,30 @@ public class FeedbackActivity extends BaseActivity {
 
         FeedbackRequest request = new FeedbackRequest(userId, content, contact, type);
 
-        // 显示加载状态
-        setSubmitting(true);
+        // 进入加载态：按钮内收成圆 + 画环
+        isSubmitting = true;
+        btnSubmit.startLoading();
 
         ApiService api = RetrofitClient.getApiService();
         api.submitFeedback(request).enqueue(SafeCallback.from(this,
                 // onSuccess
                 (call, response) -> {
-                    setSubmitting(false);
+                    isSubmitting = false;
                     ApiResponse<Void> body = response.body();
                     if (body != null && body.isSuccess()) {
-                        Toast.makeText(FeedbackActivity.this,
-                                R.string.feedback_submit_success, Toast.LENGTH_LONG).show();
-                        finish();
+                        btnSubmit.succeed(getString(R.string.feedback_submit_success));
+                        btnSubmit.postDelayed(() -> finish(), 1200);
                     } else {
                         String msg = body != null ? body.getMessage() : getString(R.string.feedback_submit_fail);
-                        Toast.makeText(FeedbackActivity.this, msg, Toast.LENGTH_SHORT).show();
+                        btnSubmit.fail(msg);
                     }
                 },
                 // onError
                 (call, t) -> {
-                    setSubmitting(false);
-                    Toast.makeText(FeedbackActivity.this,
-                            R.string.feedback_submit_fail, Toast.LENGTH_SHORT).show();
+                    isSubmitting = false;
+                    btnSubmit.fail(getString(R.string.feedback_submit_fail));
                 }
         ));
     }
 
-    /**
-     * 切换提交按钮的加载状态
-     */
-    private void setSubmitting(boolean submitting) {
-        isSubmitting = submitting;
-        btnSubmit.setEnabled(!submitting);
-        btnSubmit.setText(submitting ? R.string.feedback_submitting : R.string.feedback_submit);
-    }
 }

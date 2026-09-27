@@ -3,8 +3,9 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ios_bg"
-    android:paddingTop="16dp"
+    android:background="@drawable/bg_sheet_top_rounded"
+    android:clipToOutline="true"
+    android:paddingTop="8dp"
     android:paddingBottom="12dp">
 
     <!-- 标题 -->
@@ -15,7 +16,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="20dp"
-        android:paddingBottom="12dp">
+        android:paddingBottom="6dp">
 
         <TextView
             android:layout_width="0dp"

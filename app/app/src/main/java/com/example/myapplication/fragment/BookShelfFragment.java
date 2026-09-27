@@ -1,28 +1,39 @@
 package com.example.myapplication.fragment;
 
 import android.annotation.SuppressLint;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.RectF;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.myapplication.R;
 import com.example.myapplication.activity.BookDetailActivity;
+import com.example.myapplication.activity.MainActivity;
 import com.example.myapplication.activity.ReadActivity;
+import com.example.myapplication.activity.ReaderWebViewPool;
 import com.example.myapplication.activity.UploadBookActivity;
 import com.example.myapplication.adapter.BookAdapter;
 import com.example.myapplication.api.RetrofitClient;
@@ -31,6 +42,12 @@ import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.Bookshelf;
 import com.example.myapplication.bean.ReadingProgress;
 import com.example.myapplication.utils.LocalBookParser;
+import com.example.myapplication.utils.ExternalPrefs;
+import com.example.myapplication.utils.ExternalSyncManager;
+import com.example.myapplication.utils.Hint;
+import com.example.myapplication.utils.ReadTimeText;
+import com.example.myapplication.utils.ShelfPrefetch;
+import com.example.myapplication.widget.LoadingView;
 import com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView;
 
 import java.io.File;
@@ -50,12 +67,25 @@ public class BookShelfFragment extends Fragment {
     private SwipeRefreshLayout swipeRefresh;
     private BookAdapter adapter;
     private final List<Book> shelfBookList = new ArrayList<>();
-    private TextView tvEmptyHint, tvReadTime;
+    private TextView tvReadTime;
+    /** 空状态容器（人物插画 + 文案 + CTA），替代原先的纯文字提示 */
+    private View layoutEmpty;
+    /** 全站统一加载动画（首屏向服务器请求书架期间显示） */
+    private LoadingView loadingView;
     private android.widget.PopupWindow shelfMenuPopup;
 
     private android.app.Dialog topDialog;
     private android.app.Dialog bottomDialog;
     private boolean isGridView = false;
+    /** 统一 GridLayoutManager：列表 span=1 / 宫格 span=3，切换时只改 spanCount（不销毁重建节点） */
+    private GridLayoutManager shelfLM;
+
+    // ========== 列表⇄宫格形变切换（FLIP + 弧线 + 错帧） ==========
+    private boolean morphAnimating = false;
+    private final List<ValueAnimator> morphAnimators = new ArrayList<>();
+    private static final long MORPH_DURATION_MS = 520L;
+    private static final long MORPH_STAGGER_MS = 50L;   // 相邻项错开 3 帧（60fps ≈ 16.7ms/帧）
+    private RecyclerView.OnScrollListener morphCancelOnScroll;
 
     private final Map<Long, Integer> progressMap = new HashMap<>();
     private final Map<Long, String> chapterTitleMap = new HashMap<>();
@@ -78,6 +108,14 @@ public class BookShelfFragment extends Fragment {
     private final java.util.List<Book> allBooks = new ArrayList<>();   // 全量(本地+网络+外站)
     private android.widget.LinearLayout layoutGroupTabs;
 
+    // 分组 Tab 滑动指示器
+    private static final int COL_SHELF_SEL = 0xFF007AFF;   // iOS 蓝
+    private static final int COL_SHELF_UNSEL = 0xFF8E8E93; // iOS 次文字
+    private View segThumbShelf;
+    private ValueAnimator thumbAnim, chipColorAnim;
+    /** 切换分段前各 chip 的文字颜色（作为颜色渐变的真实起点，防止闪现蓝色） */
+    private java.util.Map<TextView, Integer> pendingChipStartColors;
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_shelf, container, false);
@@ -90,9 +128,25 @@ public class BookShelfFragment extends Fragment {
 
         rvShelf = view.findViewById(R.id.rv_shelf);
         swipeRefresh = view.findViewById(R.id.swipe_refresh);
-        tvEmptyHint = view.findViewById(R.id.tv_empty_hint);
         tvReadTime = view.findViewById(R.id.tv_read_time);
+        layoutEmpty = view.findViewById(R.id.layout_empty);
+        loadingView = view.findViewById(R.id.loading_view);
+
+        // 空状态 CTA：切到底部导航的「书城」tab
+        View btnGoStore = view.findViewById(R.id.btn_go_store);
+        if (btnGoStore != null) {
+            btnGoStore.setOnClickListener(v -> {
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).switchToTab(R.id.nav_bookstore);
+                }
+            });
+        }
         layoutGroupTabs = view.findViewById(R.id.layout_group_tabs);
+        segThumbShelf = view.findViewById(R.id.seg_thumb_shelf);
+        if (segThumbShelf != null) {
+            // 白块 + 淡投影（对齐效果稿），圆角 9dp
+            segThumbShelf.setBackgroundResource(R.drawable.bg_shelf_seg_thumb);
+        }
         loadCustomGroups();
         buildGroupTabs();
 
@@ -119,13 +173,24 @@ public class BookShelfFragment extends Fragment {
         rvShelf.setAdapter(adapter);
 
         // 从 SharedPreferences 恢复布局模式（默认列表）
+        // 统一用 GridLayoutManager：列表=span1 / 宫格=span3，切换只改 spanCount，
+        // 同一批 ViewHolder 复用（不销毁重建、不重新绑定、Glide 不重载）
         SharedPreferences spPref = getActivity().getSharedPreferences("shelf_pref", Context.MODE_PRIVATE);
         isGridView = spPref.getBoolean("is_grid_mode", false);
-        if (isGridView) {
-            rvShelf.setLayoutManager(new GridLayoutManager(getActivity(), 3));
-        } else {
-            rvShelf.setLayoutManager(new LinearLayoutManager(getActivity()));
-        }
+        shelfLM = new GridLayoutManager(getActivity(), isGridView ? 3 : 1);
+        rvShelf.setLayoutManager(shelfLM);
+        // 形变动画期间禁用默认 ItemAnimator（避免移动动画与手动 FLIP 叠加）
+        rvShelf.setItemAnimator(null);
+        // 形变飞行中允许越出 item 边界（与效果稿一致的重叠观感）
+        rvShelf.setClipChildren(false);
+        // 形变过程中用户滚动 → 取消动画并复位
+        morphCancelOnScroll = new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (morphAnimating) cancelMorph();
+            }
+        };
+        rvShelf.addOnScrollListener(morphCancelOnScroll);
         adapter.setGridMode(isGridView);
 
         adapter.setOnItemClickListener(book -> {
@@ -155,8 +220,7 @@ public class BookShelfFragment extends Fragment {
                 startActivity(intent);
             } catch (Throwable t) {
                 android.util.Log.e("BookShelf", "书架点击书籍失败", t);
-                try { android.widget.Toast.makeText(getContext(), "打开失败：" + t.getMessage(),
-                        android.widget.Toast.LENGTH_SHORT).show(); } catch (Throwable ignored) {}
+                try { Hint.show(getContext(), "打开失败：" + t.getMessage()); } catch (Throwable ignored) {}
             }
         });
 
@@ -185,7 +249,7 @@ public class BookShelfFragment extends Fragment {
             return;
         }
         // 缓存未命中：先可靠拉取章节列表（与书城在线阅读同一套逻辑），成功后再进入阅读器
-        android.widget.Toast.makeText(getActivity(), "加载章节列表...", android.widget.Toast.LENGTH_SHORT).show();
+        Hint.show(getActivity(), "加载章节列表...");
         BookDetailActivity.fetchOnlineChapters(getActivity(), book, new BookDetailActivity.ChaptersCallback() {
             @Override
             public void onSuccess(List<String[]> chapters) {
@@ -194,9 +258,7 @@ public class BookShelfFragment extends Fragment {
             @Override
             public void onFail(String msg, boolean sourceMayDown) {
                 if (getActivity() != null) {
-                    android.widget.Toast.makeText(getActivity(),
-                            sourceMayDown ? "书源暂不可用，请稍后重试" : msg,
-                            android.widget.Toast.LENGTH_SHORT).show();
+                    Hint.show(getActivity(), sourceMayDown ? "书源暂不可用，请稍后重试" : msg);
                 }
             }
         });
@@ -225,12 +287,33 @@ public class BookShelfFragment extends Fragment {
         getActivity().getWindow().getDecorView().setSystemUiVisibility(flags);
     }
 
+    /** 外站数据拉取完成后刷新书架（登录后 pullAll 是异步的，此前的加载会读不到数据）。 */
+    private final ExternalSyncManager.PullListener pullListener = () -> {
+        if (isAdded()) loadBookshelf();
+    };
+
     @Override
     public void onResume() {
         super.onResume();
+        // ✅ 预热阅读器 WebView（复用池）：在书架页就把 reader.html 异步加载好，
+        //    这样进书时通常已命中缓存，跳过「重建 WebView + 重载 reader.html」的冷启动。
+        if (getContext() != null) {
+            ReaderWebViewPool.preload(getContext().getApplicationContext());
+        }
         updateStatusBarColor();
         loadBookshelf();
         loadReadTime();
+        if (getContext() != null) {
+            ExternalSyncManager.getInstance(getContext()).addPullListener(pullListener);
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (getContext() != null) {
+            ExternalSyncManager.getInstance(getContext()).removePullListener(pullListener);
+        }
     }
 
     @Override
@@ -304,7 +387,7 @@ public class BookShelfFragment extends Fragment {
 
     private void deleteSelectedBooks() {
         List<Book> selected = adapter.getSelectedBooks();
-        if (selected.isEmpty()) { Toast.makeText(getActivity(), "请选择要删除的书籍", Toast.LENGTH_SHORT).show(); return; }
+        if (selected.isEmpty()) { Hint.show(getActivity(), "请选择要删除的书籍"); return; }
         long userId = getUserId();
         for (Book book : selected) {
             if (book.getStatus() == -2) {
@@ -323,6 +406,7 @@ public class BookShelfFragment extends Fragment {
             allBooks.remove(book);
             shelfBookList.remove(book);
         }
+        cancelMorph();
         adapter.refreshList(shelfBookList);
         updateEmptyView(shelfBookList.isEmpty());
         hideEditMode();
@@ -332,7 +416,266 @@ public class BookShelfFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        cancelMorph();
         if (shelfMenuPopup != null && shelfMenuPopup.isShowing()) shelfMenuPopup.dismiss();
+    }
+
+    // ==================================================================
+    // 列表⇄宫格形变切换：FLIP 矩形记录 → 位移/缩放反向补偿 → 二次贝塞尔弧线
+    // 缓动 → 相邻项错开 3 帧 → 封面 Matrix 等比裁切。全程同一批 ViewHolder，
+    // 不重绑、不重新加载图片（对齐效果稿 preview_shelf_morph.html）。
+    // ==================================================================
+    private void switchShelfLayoutAnimated() {
+        if (!isAdded() || rvShelf == null || adapter == null || shelfLM == null) return;
+        cancelMorph();
+
+        // 1) 记录每项切换前矩形（卡片 + 封面，相对 RecyclerView）
+        Map<Integer, RectF> oldCards = new HashMap<>();
+        Map<Integer, RectF> oldCovers = new HashMap<>();
+        for (int i = 0; i < rvShelf.getChildCount(); i++) {
+            View child = rvShelf.getChildAt(i);
+            RecyclerView.ViewHolder vh = rvShelf.getChildViewHolder(child);
+            if (!(vh instanceof BookAdapter.BookHolder)) continue;
+            BookAdapter.BookHolder h = (BookAdapter.BookHolder) vh;
+            int pos = rvShelf.getChildAdapterPosition(child);
+            if (pos == RecyclerView.NO_POSITION) continue;
+            oldCards.put(pos, rectInRv(h.cardBg));
+            oldCovers.put(pos, rectInRv(h.coverBox));
+        }
+
+        // 2) 切模式：只改 spanCount + 就地布置可见 holder（同一批节点）
+        isGridView = !isGridView;
+        adapter.setGridModeSilently(isGridView);
+        shelfLM.setSpanCount(isGridView ? 3 : 1);
+        for (int i = 0; i < rvShelf.getChildCount(); i++) {
+            View child = rvShelf.getChildAt(i);
+            int pos = rvShelf.getChildAdapterPosition(child);
+            if (pos == RecyclerView.NO_POSITION) continue;
+            adapter.applyMode(rvShelf.getChildViewHolder(child), pos);
+        }
+        // 持久化布局模式
+        if (isAdded()) {
+            SharedPreferences.Editor editor = requireActivity()
+                    .getSharedPreferences("shelf_pref", Context.MODE_PRIVATE).edit();
+            editor.putBoolean("is_grid_mode", isGridView);
+            editor.apply();
+        }
+
+        // 3) 新布局测量完成后：反向补偿 + 弧线动画（PreDraw 时机 = 布局后、绘制前，无闪帧）
+        final Map<Integer, RectF> fOldCards = oldCards;
+        final Map<Integer, RectF> fOldCovers = oldCovers;
+        final ViewTreeObserver vto = rvShelf.getViewTreeObserver();
+        if (vto == null || !vto.isAlive()) return;
+        vto.addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                if (rvShelf != null) {
+                    ViewTreeObserver cur = rvShelf.getViewTreeObserver();
+                    if (cur != null && cur.isAlive()) cur.removeOnPreDrawListener(this);
+                }
+                if (!isAdded() || rvShelf == null) return true;
+                startMorph(fOldCards, fOldCovers);
+                return true;
+            }
+        });
+    }
+
+    /** 子视图相对 RecyclerView 的矩形（祖父 = item root，均无变换残留下调用） */
+    private RectF rectInRv(View v) {
+        View p = (View) v.getParent();
+        float x = v.getX() + p.getX();
+        float y = v.getY() + p.getY();
+        return new RectF(x, y, x + v.getWidth(), y + v.getHeight());
+    }
+
+    /** 单个形变项的预计算数据（主时钟动画器每帧驱动） */
+    private static class MorphItem {
+        View child;
+        BookAdapter.BookHolder h;
+        int index;
+        boolean hasFrom;          // false = 新进入可视区（淡入路径）
+        RectF r0, r1;             // 卡片旧/新矩形（RV 相对）
+        float cx, cy;             // 贝塞尔控制点
+        float sx0, sy0;           // 卡片初始缩放补偿
+        float csx0, csy0;         // 封面初始缩放补偿
+        float ctx0, cty0;         // 封面初始位移补偿
+        View outBox, inBox;       // 旧/新文字盒
+    }
+
+    private final android.view.animation.Interpolator morphInterp = new AccelerateDecelerateInterpolator();
+
+    private void startMorph(Map<Integer, RectF> oldCards, Map<Integer, RectF> oldCovers) {
+        cancelMorph();
+        morphAnimating = true;
+        float d = getResources().getDisplayMetrics().density;
+        final float inShiftY = 8 * d;
+
+        List<MorphItem> items = new ArrayList<>();
+        for (int i = 0; i < rvShelf.getChildCount(); i++) {
+            View child = rvShelf.getChildAt(i);
+            RecyclerView.ViewHolder vh = rvShelf.getChildViewHolder(child);
+            if (!(vh instanceof BookAdapter.BookHolder)) continue;
+            BookAdapter.BookHolder h = (BookAdapter.BookHolder) vh;
+            int pos = rvShelf.getChildAdapterPosition(child);
+            if (pos == RecyclerView.NO_POSITION) continue;
+
+            MorphItem it = new MorphItem();
+            it.child = child;
+            it.h = h;
+            it.index = items.size();
+            it.r1 = rectInRv(h.cardBg);
+            RectF c1 = rectInRv(h.coverBox);
+            RectF r0 = oldCards.get(pos);
+            RectF c0 = oldCovers.get(pos);
+            it.outBox = isGridView ? h.listTextBox : h.gridTextBox;
+            it.inBox = isGridView ? h.gridTextBox : h.listTextBox;
+            it.hasFrom = r0 != null && c0 != null && it.r1.width() > 0 && it.r1.height() > 0;
+
+            if (it.hasFrom) {
+                it.r0 = r0;
+                float dx = it.r1.left - r0.left, dy = it.r1.top - r0.top;
+                float dist = (float) Math.max(1f, Math.sqrt(dx * dx + dy * dy));
+                float sgn = (dx >= 0 ? 1f : -1f) * (it.index % 2 == 0 ? 1f : -1f);
+                float k = 0.2f * dist * sgn;
+                it.cx = (r0.left + it.r1.left) / 2f + (-dy / dist) * k;
+                it.cy = (r0.top + it.r1.top) / 2f + (dx / dist) * k;
+                it.sx0 = r0.width() / it.r1.width();
+                it.sy0 = r0.height() / it.r1.height();
+                it.csx0 = c1.width() > 0 ? c0.width() / c1.width() : 1f;
+                it.csy0 = c1.height() > 0 ? c0.height() / c1.height() : 1f;
+                float cl0x = c0.left - r0.left, cl0y = c0.top - r0.top;
+                float cl1x = c1.left - it.r1.left, cl1y = c1.top - it.r1.top;
+                it.ctx0 = cl0x - it.csx0 * cl1x;
+                it.cty0 = cl0y - it.csy0 * cl1y;
+                // 同步施加初始状态（e=0），杜绝 PreDraw 帧与动画首帧之间「闪跳到新位置」
+                applyMorphState(it, 0f, inShiftY);
+            } else {
+                // 新进入可视区：先补一次 applyMode（防复用/重绑残留旧模式几何），随错帧淡入
+                adapter.applyMode(vh, pos);
+                child.setAlpha(0f);
+            }
+            items.add(it);
+        }
+        if (items.isEmpty()) { morphAnimating = false; return; }
+
+        final List<MorphItem> fItems = items;
+        final float fInShiftY = inShiftY;
+        final long total = MORPH_DURATION_MS + (long) (items.size() - 1) * MORPH_STAGGER_MS;
+
+        // 主时钟动画器：单一 ValueAnimator 每帧驱动全部项。
+        // 未起步/已起步的项每帧重申各自状态 —— 自愈动画期间任何 rebind/二次布局
+        // 触发的 applyMode 变换复位（此前「封面已放大但卡片还是列表宽、文字全空」即此因：
+        // 初始补偿态被 onAnimationEnd/重绑路径清掉，而该项的错帧还没走到首个更新帧）。
+        ValueAnimator master = ValueAnimator.ofFloat(0f, 1f);
+        master.setDuration(total);
+        master.addUpdateListener(anim -> {
+            long now = (long) ((Float) anim.getAnimatedValue() * total);
+            for (MorphItem it : fItems) {
+                float local = (now - it.index * (float) MORPH_STAGGER_MS) / MORPH_DURATION_MS;
+                if (!it.hasFrom) {
+                    // 淡入项：几何已是终态，只做 alpha（每帧重申，自愈复位）
+                    float a = Math.max(0f, Math.min(1f, local / 0.4f));
+                    it.child.setAlpha(a);
+                    continue;
+                }
+                float e;
+                if (local <= 0f) {
+                    e = 0f;
+                } else if (local >= 1f) {
+                    e = 1f;
+                } else {
+                    e = morphInterp.getInterpolation(local);
+                }
+                applyMorphState(it, e, fInShiftY);
+            }
+        });
+        master.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                morphAnimators.remove(master);
+                if (morphAnimators.isEmpty()) {
+                    morphAnimating = false;
+                    // 全部结束：复位到静止态（清变换/透明度/可见性/封面 Matrix）
+                    if (isAdded() && rvShelf != null && adapter != null) {
+                        for (int j = 0; j < rvShelf.getChildCount(); j++) {
+                            View ch = rvShelf.getChildAt(j);
+                            RecyclerView.ViewHolder vh2 = rvShelf.getChildViewHolder(ch);
+                            if (vh2 instanceof BookAdapter.BookHolder) {
+                                adapter.applyMode(vh2, rvShelf.getChildAdapterPosition(ch));
+                            } else {
+                                ch.setAlpha(1f);
+                                ch.setTranslationX(0f);
+                                ch.setTranslationY(0f);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        master.start();
+        morphAnimators.add(master);
+    }
+
+    /** 施加某项在进度 e 下的渲染状态（e=0 = 旧位置旧尺寸，e=1 = 新布局终态） */
+    private void applyMorphState(MorphItem it, float e, float inShiftY) {
+        BookAdapter.BookHolder h = it.h;
+        View child = it.child;
+        // 根：贝塞尔弧线位移（顶角沿二次贝塞尔）
+        float u = 1 - e;
+        float bx = u * u * it.r0.left + 2 * u * e * it.cx + e * e * it.r1.left;
+        float by = u * u * it.r0.top + 2 * u * e * it.cy + e * e * it.r1.top;
+        float rtx = bx - child.getLeft();
+        float rty = by - child.getTop();
+        child.setTranslationX(rtx);
+        child.setTranslationY(rty);
+        // 文字盒/多选框随根刚性位移（只淡化不缩放 → 字形永不变形）；
+        // 可见性每帧重申（rebind 的 applyMode 会把旧盒设回 INVISIBLE）
+        it.outBox.setVisibility(View.VISIBLE);
+        it.inBox.setVisibility(View.VISIBLE);
+        it.outBox.setTranslationX(rtx);
+        it.outBox.setTranslationY(rty);
+        it.inBox.setTranslationX(rtx);
+        if (h.ivCheckbox != null) {
+            h.ivCheckbox.setTranslationX(rtx);
+            h.ivCheckbox.setTranslationY(rty);
+        }
+        // 卡片：缩放归一（pivot 左上角）
+        h.cardBg.setPivotX(0f);
+        h.cardBg.setPivotY(0f);
+        h.cardBg.setScaleX(it.sx0 + (1 - it.sx0) * e);
+        h.cardBg.setScaleY(it.sy0 + (1 - it.sy0) * e);
+        // 封面：独立 FLIP + 逐帧 Matrix 等比裁切（位图不挤压）
+        h.coverBox.setPivotX(0f);
+        h.coverBox.setPivotY(0f);
+        float csx = it.csx0 + (1 - it.csx0) * e;
+        float csy = it.csy0 + (1 - it.csy0) * e;
+        h.coverBox.setScaleX(csx);
+        h.coverBox.setScaleY(csy);
+        h.coverBox.setTranslationX(it.ctx0 * (1 - e));
+        h.coverBox.setTranslationY(it.cty0 * (1 - e));
+        adapter.applyCoverMatrix(h, csx, csy);
+        // 无封面书名蒙版：宫格切入时随形变进度淡入（applyMode 已按模式点亮可见性，
+        // 这里只管 alpha；结束回调/取消路径由 applyMode 复位 alpha=1）
+        if (h.tvCoverTitle != null && h.tvCoverTitle.getVisibility() == View.VISIBLE) {
+            h.tvCoverTitle.setAlpha(e);
+        }
+        // 文字交叉淡化（旧字 25%~60% 退场、新字 30%~65% 滑入 —— 有重叠、无空档）
+        float outA = 1f - Math.max(0f, Math.min(1f, (e - 0.25f) / 0.35f));
+        float inA = Math.max(0f, Math.min(1f, (e - 0.30f) / 0.35f));
+        it.outBox.setAlpha(outA);
+        it.inBox.setAlpha(inA);
+        it.inBox.setTranslationY(rty + (1 - inA) * inShiftY);
+    }
+
+    private void cancelMorph() {
+        if (!morphAnimators.isEmpty()) {
+            for (ValueAnimator an : new ArrayList<>(morphAnimators)) {
+                an.removeAllUpdateListeners();
+                an.cancel();
+            }
+            morphAnimators.clear();
+        }
+        morphAnimating = false;
     }
 
     @SuppressLint("InflateParams")
@@ -350,20 +693,10 @@ public class BookShelfFragment extends Fragment {
             tvLayoutText.setText("宫格布局");
         }
 
-        // 布局切换
+        // 布局切换（形变动画：记录矩形 → 位移/缩放反向补偿 → 弧线缓动 → 错帧）
         popupView.findViewById(R.id.item_layout_switch).setOnClickListener(v -> {
             dismissMenu();
-            isGridView = !isGridView;
-            adapter.setGridMode(isGridView);
-            if (isGridView) {
-                rvShelf.setLayoutManager(new GridLayoutManager(getActivity(), 3));
-            } else {
-                rvShelf.setLayoutManager(new LinearLayoutManager(getActivity()));
-            }
-            // 保存布局模式到 SharedPreferences
-            SharedPreferences.Editor editor = getActivity().getSharedPreferences("shelf_pref", Context.MODE_PRIVATE).edit();
-            editor.putBoolean("is_grid_mode", isGridView);
-            editor.apply();
+            switchShelfLayoutAnimated();
         });
         // 导入书籍
         popupView.findViewById(R.id.item_import_book).setOnClickListener(v -> {
@@ -387,41 +720,36 @@ public class BookShelfFragment extends Fragment {
         if (shelfMenuPopup != null && shelfMenuPopup.isShowing()) shelfMenuPopup.dismiss();
     }
 
-
     private void loadReadTime() {
         if (tvReadTime == null || getActivity() == null) return;
-        SharedPreferences sp = getActivity().getSharedPreferences("read_time", Context.MODE_PRIVATE);
-        long totalMinutes = sp.getLong("total_read_time", 0);
-        displayReadTime(totalMinutes);
+        // 与「我的」页同源同格式：只认服务端 user_reading_stat 的累计值（秒），
+        // 文案统一走 ReadTimeText，保证两页显示的数字永远一致。
+        // 不再回退本地 SP——旧逻辑的本地累计不分用户、含未上报时长，
+        // 服务端返回 0 或请求失败时会与服务端值对不上（两页显示不一致）。
         long userId = getUserId();
-        if (userId > 0) {
-            RetrofitClient.getApiService().getTotalReadTime(userId)
-                    .enqueue(new Callback<ApiResponse<Long>>() {
-                        @Override
-                        public void onResponse(@NonNull Call<ApiResponse<Long>> call, @NonNull Response<ApiResponse<Long>> response) {
-                            if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
-                                Long totalSeconds = response.body().getData();
-                                if (totalSeconds != null && totalSeconds > 0) {
-                                    long minutes = totalSeconds / 60;
-                                    displayReadTime(minutes);
-                                }
-                            }
+        if (userId <= 0) {
+            tvReadTime.setText("阅读时长 0 分钟");
+            return;
+        }
+        RetrofitClient.getApiService().getTotalReadTime(userId)
+                .enqueue(new Callback<ApiResponse<Long>>() {
+                    @Override
+                    public void onResponse(@NonNull Call<ApiResponse<Long>> call, @NonNull Response<ApiResponse<Long>> response) {
+                        long seconds = 0;
+                        if (response.isSuccessful() && response.body() != null && response.body().isSuccess()
+                                && response.body().getData() != null) {
+                            seconds = Math.max(0, response.body().getData());
                         }
-                        @Override
-                        public void onFailure(@NonNull Call<ApiResponse<Long>> call, @NonNull Throwable t) {}
-                    });
-        }
-    }
-
-    @SuppressLint("SetTextI18n")
-    private void displayReadTime(long totalMinutes) {
-        if (totalMinutes < 60) {
-            tvReadTime.setText("阅读时长 " + totalMinutes + " 分钟");
-        } else {
-            long hours = totalMinutes / 60;
-            long mins = totalMinutes % 60;
-            tvReadTime.setText("阅读时长 " + hours + " 小时 " + mins + " 分钟");
-        }
+                        // 失败/空数据分支与「我的」页一致：归零，保证两页永远显示同一个数
+                        if (tvReadTime != null) {
+                            tvReadTime.setText("阅读时长 " + ReadTimeText.format(seconds));
+                        }
+                    }
+                    @Override
+                    public void onFailure(@NonNull Call<ApiResponse<Long>> call, @NonNull Throwable t) {
+                        if (tvReadTime != null) tvReadTime.setText("阅读时长 0 分钟");
+                    }
+                });
     }
 
     /**
@@ -535,12 +863,15 @@ public class BookShelfFragment extends Fragment {
     private void applySortAndNotify() {
         if (getActivity() == null) return;
         SharedPreferences sp = getActivity().getSharedPreferences("reading_records", Context.MODE_PRIVATE);
-        SharedPreferences spExt = getActivity().getSharedPreferences("external_reading_records", Context.MODE_PRIVATE);
+        SharedPreferences spExt = getActivity().getSharedPreferences(ExternalPrefs.recordsName(getActivity()), Context.MODE_PRIVATE);
         shelfBookList.sort((a, b) -> {
             long timeA = getLastReadTimeFor(sp, spExt, a);
             long timeB = getLastReadTimeFor(sp, spExt, b);
             return Long.compare(timeB, timeA);
         });
+        // 重绑前先终止进行中的形变动画：主时钟若还在跑，会在重绑后的 holder 上
+        // 继续盖中途 FLIP 态（封面放大/文字消失），且每帧重申会顶掉 applyMode 复位
+        cancelMorph();
         adapter.notifyDataSetChanged();
         updateEmptyView(shelfBookList.isEmpty());
     }
@@ -566,18 +897,22 @@ public class BookShelfFragment extends Fragment {
      */
     private void loadBookshelf() {
         long userId = getUserId();
+        // 旧版全局外站数据迁移到当前登录用户命名空间（幂等，未登录则跳过）
+        ExternalPrefs.migrateIfNeeded(getActivity());
+        final List<Book> localBooks = loadLocalBooksFromPref();
+        final List<Book> externalBooks = loadExternalBooks();
+
         if (userId == 0) {
+            // 游客模式：外站书按用户隔离，游客命名空间恒空，故只展示本地导入书，不请求服务器书架
             allBooks.clear();
-            shelfBookList.clear();
-            adapter.notifyDataSetChanged();
-            updateEmptyView(true);
+            allBooks.addAll(mergeAllBooks(localBooks, new ArrayList<>(), externalBooks));
+            loadReadingProgresses();
+            applyGroupFilter();
             stopRefreshing();
             return;
         }
 
-        final List<Book> localBooks = loadLocalBooksFromPref();
         final List<Book> cachedNetworkBooks = loadCachedNetworkBooks();
-        final List<Book> externalBooks = loadExternalBooks();
         final List<Book> baseline = mergeAllBooks(localBooks, cachedNetworkBooks, externalBooks);
 
         boolean needShowBaseline = !firstLoadDone || shelfBookList.isEmpty();
@@ -587,28 +922,26 @@ public class BookShelfFragment extends Fragment {
             applyGroupFilter();
         }
 
-        // 后台请求服务器刷新
+        // 只有「首屏且本地一无所有」（此刻列表注定是空的）才用整页加载动画。
+        // ⚠️ 本方法被三个入口共用：onResume（每次从阅读页返回）、下拉刷新、外站同步完成回调 ——
+        //    那几种情况列表里已经有书、也各有自己的反馈（下拉转圈），再无条件盖一层整页动画
+        //    会把已有列表整块刷掉（踩过）。
+        if (!firstLoadDone && baseline.isEmpty()) setShelfLoading(true);
+
+        // 开屏预取命中：书架请求已在开屏窗口内完成，直接同步上屏（省 ~670ms 网络等待）
+        ApiResponse<List<Bookshelf>> prefetched = ShelfPrefetch.consume(userId);
+        if (prefetched != null) {
+            applyServerBooks(prefetched.getData(), localBooks, externalBooks);
+            firstLoadDone = true;
+            stopRefreshing();
+            return;
+        }
+
         RetrofitClient.getApiService().getBookshelf(userId).enqueue(new Callback<ApiResponse<List<Bookshelf>>>() {
             @Override
             public void onResponse(@NonNull Call<ApiResponse<List<Bookshelf>>> call, @NonNull Response<ApiResponse<List<Bookshelf>>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
-                    List<Bookshelf> list = response.body().getData();
-                    List<Book> serverBooks = new ArrayList<>();
-                    if (list != null) {
-                        for (Bookshelf bs : list) {
-                            if (bs != null && bs.getBook() != null) {
-                                serverBooks.add(bs.getBook());
-                            }
-                        }
-                    }
-                    // 缓存网络书籍
-                    saveNetworkBooksCache(serverBooks);
-
-                    // 合并本地 + 网络 + 外站，全量存入 allBooks
-                    allBooks.clear();
-                    allBooks.addAll(mergeAllBooks(localBooks, serverBooks, externalBooks));
-                    loadReadingProgresses();
-                    applyGroupFilter();
+                    applyServerBooks(response.body().getData(), localBooks, externalBooks);
                     firstLoadDone = true;
                 }
                 stopRefreshing();
@@ -620,6 +953,29 @@ public class BookShelfFragment extends Fragment {
                 stopRefreshing();
             }
         });
+    }
+
+    /**
+     * 网络书架数据处理：缓存网络书 + 合并本地/网络/外站 + 刷新进度与分组过滤。
+     * 供普通网络回调与开屏预取命中两条路径共用。
+     */
+    private void applyServerBooks(List<Bookshelf> list, List<Book> localBooks, List<Book> externalBooks) {
+        List<Book> serverBooks = new ArrayList<>();
+        if (list != null) {
+            for (Bookshelf bs : list) {
+                if (bs != null && bs.getBook() != null) {
+                    serverBooks.add(bs.getBook());
+                }
+            }
+        }
+        // 缓存网络书籍
+        saveNetworkBooksCache(serverBooks);
+
+        // 合并本地 + 网络 + 外站，全量存入 allBooks
+        allBooks.clear();
+        allBooks.addAll(mergeAllBooks(localBooks, serverBooks, externalBooks));
+        loadReadingProgresses();
+        applyGroupFilter();
     }
 
     /**
@@ -657,7 +1013,7 @@ public class BookShelfFragment extends Fragment {
     private List<Book> loadExternalBooks() {
         List<Book> external = new ArrayList<>();
         if (getActivity() == null) return external;
-        SharedPreferences sp = getActivity().getSharedPreferences("external_bookshelf", Context.MODE_PRIVATE);
+        SharedPreferences sp = getActivity().getSharedPreferences(ExternalPrefs.shelfName(getActivity()), Context.MODE_PRIVATE);
         java.util.Map<String, ?> all = sp.getAll();
         for (java.util.Map.Entry<String, ?> entry : all.entrySet()) {
             String key = entry.getKey();
@@ -695,16 +1051,21 @@ public class BookShelfFragment extends Fragment {
     private void removeExternalBook(Book book) {
         if (book.getSourceType() == null || book.getSourceUrl() == null) return;
         String key = book.getSourceType() + "|" + book.getSourceUrl();
-        SharedPreferences sp = getActivity().getSharedPreferences("external_bookshelf", Context.MODE_PRIVATE);
+        SharedPreferences sp = getActivity().getSharedPreferences(ExternalPrefs.shelfName(getActivity()), Context.MODE_PRIVATE);
         sp.edit().remove(key).apply();
         // 同步移除阅读记录
         String recordKey = "ext_" + book.getSourceType() + "|" + book.getSourceUrl();
-        getActivity().getSharedPreferences("external_reading_records", Context.MODE_PRIVATE)
-                .edit().remove(recordKey + "_chapterIndex")
+        getActivity().getSharedPreferences(ExternalPrefs.recordsName(getActivity()), Context.MODE_PRIVATE)
+                .edit()                .remove(recordKey + "_chapterIndex")
                 .remove(recordKey + "_chapterTitle")
                 .remove(recordKey + "_page")
                 .remove(recordKey + "_readTime")
                 .apply();
+
+        // 同步删除服务器侧外站书架 + 阅读记录（离散主动操作，立即同步；否则下次 pullAll 会把记录拉回）
+        ExternalSyncManager.getInstance(getActivity()).removeShelfRemote(book.getSourceType(), book.getSourceUrl());
+        ExternalSyncManager.getInstance(getActivity()).deleteReadingRecordRemote(book.getSourceType(), book.getSourceUrl());
+
         // 移除分组归属
         getActivity().getSharedPreferences(PREF_GROUP_ASSIGN, Context.MODE_PRIVATE)
                 .edit().remove(getBookGroupKey(book)).apply();
@@ -852,20 +1213,11 @@ public class BookShelfFragment extends Fragment {
         getActivity().getSharedPreferences("local_bookmarks_" + bookId, Context.MODE_PRIVATE)
                 .edit().clear().apply();
 
-        // 3) 分页缓存 page_cache：删除所有 page_info_{bookId}_* 条目
-        SharedPreferences pageSp = getActivity().getSharedPreferences("page_cache", Context.MODE_PRIVATE);
-        String pagePrefix = "page_info_" + bookId + "_";
-        SharedPreferences.Editor pageEditor = pageSp.edit();
-        for (String k : pageSp.getAll().keySet()) {
-            if (k != null && k.startsWith(pagePrefix)) pageEditor.remove(k);
-        }
-        pageEditor.apply();
-
-        // 4) 分组归属 shelf_group_assign：移除 id_{bookId}
+        // 3) 分组归属 shelf_group_assign：移除 id_{bookId}
         getActivity().getSharedPreferences(PREF_GROUP_ASSIGN, Context.MODE_PRIVATE)
                 .edit().remove("id_" + bookId).apply();
 
-        // 5) EPUB「保留样式」HTML 文件缓存：删除 filesDir/local_book_html/<bookId> 整目录
+        // 4) EPUB「保留样式」HTML 文件缓存：删除 filesDir/local_book_html/<bookId> 整目录
         //    否则重导入同书会生成新 bookId 目录，旧目录残留成为孤儿文件
         LocalBookParser.deleteHtmlCache(getActivity(), bookId);
     }
@@ -893,7 +1245,7 @@ public class BookShelfFragment extends Fragment {
         }
 
         // ✅ 外站书籍：从 external_reading_records 读取阅读进度
-        SharedPreferences extSp = getActivity().getSharedPreferences("external_reading_records", Context.MODE_PRIVATE);
+        SharedPreferences extSp = getActivity().getSharedPreferences(ExternalPrefs.recordsName(getActivity()), Context.MODE_PRIVATE);
         for (Book book : allBooks) {
             Integer stObj = book.getStatus();
             int st = stObj == null ? 0 : stObj;
@@ -943,9 +1295,25 @@ public class BookShelfFragment extends Fragment {
         }
     }
 
+    /**
+     * 统一刷新「书籍列表 / 空状态」的可见性。
+     * 加载动画还在转时（loadingView 可见）绝不显示「书架空空如也」——否则首屏会先闪一下空状态。
+     */
     private void updateEmptyView(boolean isEmpty) {
-        if (tvEmptyHint != null) tvEmptyHint.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
-        rvShelf.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
+        boolean loading = loadingView != null && loadingView.getVisibility() == View.VISIBLE;
+        boolean showEmpty = isEmpty && !loading;
+        if (layoutEmpty != null) layoutEmpty.setVisibility(showEmpty ? View.VISIBLE : View.GONE);
+        rvShelf.setVisibility(showEmpty ? View.GONE : View.VISIBLE);
+    }
+
+    /** 首屏加载动画：转起来时同时收起列表与空状态。 */
+    private void setShelfLoading(boolean loading) {
+        if (loadingView == null) return;
+        loadingView.setVisibility(loading ? View.VISIBLE : View.GONE);
+        if (loading) {
+            if (layoutEmpty != null) layoutEmpty.setVisibility(View.GONE);
+            rvShelf.setVisibility(View.GONE);
+        }
     }
 
     private long getUserId() {
@@ -957,6 +1325,9 @@ public class BookShelfFragment extends Fragment {
         if (swipeRefresh != null && swipeRefresh.isRefreshing()) {
             swipeRefresh.setRefreshing(false);
         }
+        // 首屏加载结束：收起加载动画，再由真实数据决定显示列表还是空状态
+        setShelfLoading(false);
+        updateEmptyView(shelfBookList.isEmpty());
     }
 
     // ======================== 分组 ========================
@@ -992,9 +1363,20 @@ public class BookShelfFragment extends Fragment {
 
     /**
      * 构建分组 Tab（默认 + 自定义）。
+     * 等宽分段：所有分组 weight 均分，新增分组时其余分段压缩让位（FLIP 位移动画），新组淡入。
      */
     private void buildGroupTabs() {
         if (layoutGroupTabs == null || getActivity() == null) return;
+        // 记录重建前各 chip 的横向位置，重建后做"让位"位移动画
+        java.util.Map<String, Integer> oldLefts = new java.util.HashMap<>();
+        for (int i = 0; i < layoutGroupTabs.getChildCount(); i++) {
+            View c = layoutGroupTabs.getChildAt(i);
+            if (c instanceof TextView) {
+                oldLefts.put(((TextView) c).getText().toString(), c.getLeft());
+            }
+        }
+        boolean rebuild = !oldLefts.isEmpty();
+
         layoutGroupTabs.removeAllViews();
         java.util.List<String> groups = new ArrayList<>();
         groups.add(GROUP_ALL);
@@ -1005,23 +1387,33 @@ public class BookShelfFragment extends Fragment {
         // 若当前分组已被删除，回退到"全部"
         if (!groups.contains(currentGroup)) currentGroup = GROUP_ALL;
 
-        float density = getResources().getDisplayMetrics().density;
+        // 分组多时字号自适应缩小（等分后宽度变小）
+        int n = groups.size();
+        float textSize = n >= 8 ? 12f : (n >= 6 ? 13f : 14f);
         for (String g : groups) {
             TextView chip = new TextView(getActivity());
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.MATCH_PARENT);
-            lp.setMargins((int) (4 * density), 0, (int) (4 * density), 0);
+                    0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
             chip.setLayoutParams(lp);
             chip.setGravity(android.view.Gravity.CENTER);
-            chip.setPadding((int) (14 * density), 0, (int) (14 * density), 0);
             chip.setText(g);
-            chip.setTextSize(14);
+            chip.setTextSize(textSize);
+            chip.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); // 效果稿 font-weight:600
+            chip.setSingleLine(true);
+            chip.setEllipsize(android.text.TextUtils.TruncateAt.END);
             chip.setClickable(true);
             chip.setFocusable(true);
             applyChipStyle(chip, g.equals(currentGroup));
             chip.setOnClickListener(v -> {
+                if (g.equals(currentGroup)) return;
                 currentGroup = g;
+                // 先记录切换前各 chip 的真实颜色作为渐变起点（必须在样式刷新之前）
+                java.util.Map<TextView, Integer> startColors = new java.util.HashMap<>();
+                for (int i = 0; i < layoutGroupTabs.getChildCount(); i++) {
+                    View c = layoutGroupTabs.getChildAt(i);
+                    if (c instanceof TextView) startColors.put((TextView) c, ((TextView) c).getCurrentTextColor());
+                }
+                pendingChipStartColors = startColors;
                 // 刷新所有 chip 样式
                 for (int i = 0; i < layoutGroupTabs.getChildCount(); i++) {
                     View c = layoutGroupTabs.getChildAt(i);
@@ -1029,23 +1421,153 @@ public class BookShelfFragment extends Fragment {
                         applyChipStyle((TextView) c, ((TextView) c).getText().toString().equals(currentGroup));
                     }
                 }
-                applyGroupFilter();
+                animateShelfThumbTo(chip);
+                animateGroupContent();
             });
             layoutGroupTabs.addView(chip);
         }
+        // 布局完成后：让位动画（重建且有位置变化时）+ 按当前分组定位指示器
+        layoutGroupTabs.post(() -> {
+            if (layoutGroupTabs == null || !isAdded()) return;
+            boolean moved = false;
+            for (int i = 0; i < layoutGroupTabs.getChildCount(); i++) {
+                View c = layoutGroupTabs.getChildAt(i);
+                if (!(c instanceof TextView)) continue;
+                Integer old = oldLefts.get(((TextView) c).getText().toString());
+                if (old == null) {
+                    // 新增的分组：淡入
+                    c.setAlpha(0f);
+                    c.animate().alpha(1f).setDuration(220L)
+                            .setInterpolator(new DecelerateInterpolator()).start();
+                } else if (old != c.getLeft()) {
+                    // 已有分组位置被挤动：从旧位置滑到新位置（让位）
+                    c.setTranslationX(old - c.getLeft());
+                    c.animate().translationX(0f).setDuration(260L)
+                            .setInterpolator(new DecelerateInterpolator()).start();
+                    moved = true;
+                }
+            }
+            positionShelfThumb(rebuild && moved);
+        });
     }
 
     private void applyChipStyle(TextView chip, boolean selected) {
         if (selected) {
-            chip.setTextColor(0xFF007AFF); // iOS 蓝
-            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-            bg.setColor(0xFFFFFFFF); // 选中：白底
-            bg.setCornerRadius(getResources().getDisplayMetrics().density * 6);
-            chip.setBackground(bg);
+            chip.setTextColor(COL_SHELF_SEL); // iOS 蓝
+            if (segThumbShelf != null) {
+                chip.setBackground(null); // 白底由滑动指示器承担
+            } else {
+                android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+                bg.setColor(0xFFFFFFFF); // 选中：白底
+                bg.setCornerRadius(getResources().getDisplayMetrics().density * 6);
+                chip.setBackground(bg);
+            }
         } else {
-            chip.setTextColor(0xFF8E8E93); // iOS 次文字
+            chip.setTextColor(COL_SHELF_UNSEL); // iOS 次文字
             chip.setBackground(null); // 未选中：透明，让外层容器露出来
         }
+    }
+
+    /** 在 chip 行里找指定分组名的 chip */
+    private View findGroupChip(String name) {
+        if (layoutGroupTabs == null) return null;
+        for (int i = 0; i < layoutGroupTabs.getChildCount(); i++) {
+            View c = layoutGroupTabs.getChildAt(i);
+            if (c instanceof TextView && ((TextView) c).getText().toString().equals(name)) return c;
+        }
+        return null;
+    }
+
+    /** 无动画归位指示器（重建 Tab 时用） */
+    private void positionShelfThumb(boolean animate) {
+        if (segThumbShelf == null || layoutGroupTabs == null) return;
+        View target = findGroupChip(currentGroup);
+        if (target == null || target.getWidth() == 0) {
+            segThumbShelf.setVisibility(View.INVISIBLE);
+            return;
+        }
+        segThumbShelf.setVisibility(View.VISIBLE);
+        ViewGroup.LayoutParams lp = segThumbShelf.getLayoutParams();
+        if (lp.width != target.getWidth()) {
+            lp.width = target.getWidth();
+            segThumbShelf.setLayoutParams(lp);
+        }
+        float x = target.getLeft();
+        if (animate) {
+            animateShelfThumb(x, target.getWidth());
+        } else {
+            if (thumbAnim != null) thumbAnim.cancel();
+            segThumbShelf.setTranslationX(x);
+        }
+    }
+
+    /** 指示器滑到指定 chip（等宽分段下即滑动到目标分段） */
+    private void animateShelfThumbTo(View chip) {
+        if (segThumbShelf == null || layoutGroupTabs == null) return;
+        ViewGroup.LayoutParams lp = segThumbShelf.getLayoutParams();
+        if (lp.width != chip.getWidth()) {
+            lp.width = chip.getWidth();
+            segThumbShelf.setLayoutParams(lp);
+        }
+        animateShelfThumb(chip.getLeft(), chip.getWidth());
+    }
+
+    private void animateShelfThumb(float endX, int width) {
+        if (thumbAnim != null) thumbAnim.cancel();
+        thumbAnim = ValueAnimator.ofFloat(segThumbShelf.getTranslationX(), endX);
+        thumbAnim.setDuration(260L);
+        thumbAnim.setInterpolator(new DecelerateInterpolator());
+        thumbAnim.addUpdateListener(a -> segThumbShelf.setTranslationX((float) a.getAnimatedValue()));
+        thumbAnim.start();
+        animateChipColors();
+    }
+
+    /** chip 文字颜色渐变到新的选中态（起点取切换前的真实颜色，避免其他选项闪现蓝色） */
+    private void animateChipColors() {
+        if (chipColorAnim != null) chipColorAnim.cancel();
+        List<TextView> chips = new ArrayList<>();
+        for (int i = 0; i < layoutGroupTabs.getChildCount(); i++) {
+            View c = layoutGroupTabs.getChildAt(i);
+            if (c instanceof TextView) chips.add((TextView) c);
+        }
+        java.util.Map<TextView, Integer> starts = pendingChipStartColors;
+        pendingChipStartColors = null;
+        ArgbEvaluator ev = new ArgbEvaluator();
+        chipColorAnim = ValueAnimator.ofFloat(0f, 1f);
+        chipColorAnim.setDuration(220L);
+        chipColorAnim.addUpdateListener(a -> {
+            float t = a.getAnimatedFraction();
+            for (TextView c : chips) {
+                boolean sel = c.getText().toString().equals(currentGroup);
+                int from = (starts != null && starts.containsKey(c)) ? starts.get(c) : c.getCurrentTextColor();
+                int to = sel ? COL_SHELF_SEL : COL_SHELF_UNSEL;
+                c.setTextColor((int) ev.evaluate(t, from, to));
+            }
+        });
+        chipColorAnim.start();
+    }
+
+    /** 分组切换内容过渡：列表先快速淡出，换数据后淡入 */
+    private void animateGroupContent() {
+        if (rvShelf == null || !isAdded()) {
+            applyGroupFilter();
+            return;
+        }
+        rvShelf.animate().cancel();
+        rvShelf.animate()
+                .alpha(0.4f)
+                .setDuration(110L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> {
+                    if (!isAdded()) return;
+                    applyGroupFilter();
+                    rvShelf.animate()
+                            .alpha(1f)
+                            .setDuration(200L)
+                            .setInterpolator(new DecelerateInterpolator())
+                            .start();
+                })
+                .start();
     }
 
     /**
@@ -1153,13 +1675,13 @@ public class BookShelfFragment extends Fragment {
         android.widget.EditText etName = view.findViewById(R.id.et_group_name);
         view.findViewById(R.id.btn_add_group).setOnClickListener(v -> {
             String name = etName.getText().toString().trim();
-            if (name.isEmpty()) { Toast.makeText(getActivity(), "请输入分组名", Toast.LENGTH_SHORT).show(); return; }
+            if (name.isEmpty()) { Hint.show(getActivity(), "请输入分组名"); return; }
             if (name.equals(GROUP_ALL) || name.equals(GROUP_LOCAL)
                     || name.equals(GROUP_UNGROUPED) || name.equals(GROUP_EXTERNAL)) {
-                Toast.makeText(getActivity(), "与默认分组重名", Toast.LENGTH_SHORT).show();
+                Hint.show(getActivity(), "与默认分组重名");
                 return;
             }
-            if (customGroups.contains(name)) { Toast.makeText(getActivity(), "分组已存在", Toast.LENGTH_SHORT).show(); return; }
+            if (customGroups.contains(name)) { Hint.show(getActivity(), "分组已存在"); return; }
             customGroups.add(name);
             saveCustomGroups();
             adapterGrp.notifyDataSetChanged();
@@ -1182,14 +1704,14 @@ public class BookShelfFragment extends Fragment {
     private void showMoveGroupPicker() {
         List<Book> selected = adapter.getSelectedBooks();
         if (selected.isEmpty()) {
-            Toast.makeText(getActivity(), "请先选择书籍", Toast.LENGTH_SHORT).show();
+            Hint.show(getActivity(), "请先选择书籍");
             return;
         }
         java.util.List<String> options = new ArrayList<>();
         options.add(GROUP_UNGROUPED);
         options.addAll(customGroups);
         if (customGroups.isEmpty()) {
-            Toast.makeText(getActivity(), "请先在分组管理中创建自定义分组", Toast.LENGTH_LONG).show();
+            Hint.showLong(getActivity(), "请先在分组管理中创建自定义分组");
             return;
         }
         String[] arr = options.toArray(new String[0]);
@@ -1204,7 +1726,7 @@ public class BookShelfFragment extends Fragment {
                     }
                     hideEditMode();
                     applyGroupFilter();
-                    Toast.makeText(getActivity(), "已移动到 " + group, Toast.LENGTH_SHORT).show();
+                    Hint.show(getActivity(), "已移动到 " + group);
                 })
                 .setNegativeButton("取消", null).show();
     }

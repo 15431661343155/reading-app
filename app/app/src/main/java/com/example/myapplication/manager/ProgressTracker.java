@@ -6,7 +6,6 @@ import android.util.Log;
 
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
-import com.example.myapplication.bean.ReadTimeRequest;
 import com.example.myapplication.bean.ReadingProgress;
 
 import retrofit2.Call;
@@ -155,27 +154,6 @@ public class ProgressTracker {
             public void onFailure(Call<ApiResponse<ReadingProgress>> call, Throwable t) {
                 Log.e(TAG, "Failed to load progress from server", t);
                 callback.onError("网络错误: " + t.getMessage());
-            }
-        });
-    }
-    
-    /**
-     * 更新阅读时间
-     */
-    public void updateReadTime(long userId, long bookId, int minutes) {
-        ReadTimeRequest request = new ReadTimeRequest(userId, bookId, minutes);
-        
-        RetrofitClient.getApiService().saveReadTime(request).enqueue(new Callback<ApiResponse<Void>>() {
-            @Override
-            public void onResponse(Call<ApiResponse<Void>> call, Response<ApiResponse<Void>> response) {
-                if (response.isSuccessful()) {
-                    Log.d(TAG, "Read time updated: " + minutes + " minutes");
-                }
-            }
-            
-            @Override
-            public void onFailure(Call<ApiResponse<Void>> call, Throwable t) {
-                Log.e(TAG, "Failed to update read time", t);
             }
         });
     }

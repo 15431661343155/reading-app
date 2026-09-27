@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--登录提示弹窗·金色菱形分隔线—— ◆ ——-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="130dp"
+    android:height="10dp"
+    android:viewportWidth="130"
+    android:viewportHeight="10">
+    <path
+        android:pathData="M2,5 L52,5"
+        android:strokeColor="#C9A96E"
+        android:strokeWidth="1" />
+    <path
+        android:pathData="M78,5 L128,5"
+        android:strokeColor="#C9A96E"
+        android:strokeWidth="1" />
+    <path
+        android:fillColor="#C9A96E"
+        android:pathData="M65,1.2 L69,5 L65,8.8 L61,5 Z" />
+</vector>

@@ -8,6 +8,8 @@ import java.util.List;
 import retrofit2.Call;
 import retrofit2.http.*;
 
+import okhttp3.MultipartBody;
+
 public interface ApiService {
 
     // ========== 用户认证 ==========
@@ -16,6 +18,18 @@ public interface ApiService {
 
     @POST("/api/auth/login")
     Call<ApiResponse<LoginResponse>> login(@Body LoginRequest request);
+
+    // 发送邮箱验证码（登录 / 注册通用，匿名可调；复用 SendCodeRequest 的 email 字段）
+    @POST("/api/auth/email-code")
+    Call<ApiResponse<Void>> sendAuthEmailCode(@Body SendCodeRequest request);
+
+    // 邮箱验证码登录（未注册邮箱首次登录自动创建账号）
+    @POST("/api/auth/login-by-code")
+    Call<ApiResponse<LoginResponse>> loginByEmailCode(@Body CodeLoginRequest request);
+
+    // 邮箱注册（邮箱 + 验证码 + 用户名 + 密码）
+    @POST("/api/auth/register-by-email")
+    Call<ApiResponse<LoginResponse>> registerByEmail(@Body EmailRegisterRequest request);
 
     // ========== 书籍 ==========
     @GET("/api/books")
@@ -28,8 +42,19 @@ public interface ApiService {
     Call<ApiResponse<PageResponse<Book>>> getFictionBooks(
             @Query("page") int page,
             @Query("size") int size,
-            @Query("category") String category
+            @Query("category") String category,
+            @Query("mainCategory") String mainCategory,
+            @Query("subCategory") String subCategory,
+            @Query("sortBy") String sortBy
     );
+
+    /** 书籍分类树（主分类 + 子分类），「分类」页与后台分类管理的数据源 */
+    @GET("/api/books/category-tree")
+    Call<ApiResponse<CategoryTree>> getCategoryTree();
+
+    /** 阅读量埋点：打开本站书籍详情时 +1（书城「热门」按它排序）；后端 200/失败都静默处理 */
+    @POST("/api/books/{id}/view")
+    Call<ApiResponse<Void>> incrementBookView(@Path("id") long id);
 
     @GET("/api/books/fiction/categories")
     Call<ApiResponse<List<String>>> getFictionCategories();
@@ -51,6 +76,10 @@ public interface ApiService {
     // 获取最后一章（O(1) 查询，用于"连载至"显示）
     @GET("/api/books/{bookId}/latest-chapter")
     Call<ApiResponse<ChapterDto>> getLatestChapter(@Path("bookId") long bookId);
+
+    // 获取某本书的分卷列表（后台导入 EPUB 时写入；App 端公开只读，用于目录分卷折叠展示）
+    @GET("/api/major-chapters/book/{bookId}")
+    Call<ApiResponse<List<MajorChapter>>> getMajorChapters(@Path("bookId") long bookId);
 
     @GET("/api/chapters/{id}")
     Call<ApiResponse<Chapter>> getChapterContent(@Path("id") long id);
@@ -76,6 +105,15 @@ public interface ApiService {
 
     @GET("/api/user/readtime/total/{userId}")
     Call<ApiResponse<Long>> getTotalReadTime(@Path("userId") long userId);
+
+    // ========== 阅读统计（账号级：连续天数 / 累计时长） ==========
+    // 个人中心统计卡：一次拿到连续天数 + 累计时长 + 累计打卡天数
+    @GET("/api/user/reading-stat/{userId}")
+    Call<ApiResponse<UserReadingStat>> getReadingStat(@Path("userId") long userId);
+
+    // 阅读打卡：记「今天读过」并推进连续天数（幂等，同一天重复调不叠加）
+    @POST("/api/user/reading-stat/checkin")
+    Call<ApiResponse<UserReadingStat>> checkInReading(@Body ReadingCheckInRequest request);
     // ========== 阅读进度 ==========
     @POST("/api/user/progress/save")
     Call<ApiResponse<ReadingProgress>> saveProgress(@Body ReadingProgress progress);
@@ -131,34 +169,36 @@ public interface ApiService {
     @GET("/api/fonts")
     Call<ApiResponse<List<FontItem>>> getFonts();
 
-    // ========== 账号绑定 ==========
-    // 发送手机验证码
-    @POST("/api/user/bind/send-sms-code")
-    Call<ApiResponse<Void>> sendSmsCode(@Body SendCodeRequest request);
+    // ========== 个人资料（自助修改，当前用户由后端从 JWT 取） ==========
+    /** 读取当前登录用户资料，用于「个人信息」页回填 */
+    @GET("/api/user/profile")
+    Call<ApiResponse<java.util.Map<String, Object>>> getProfile();
 
+    /** 修改昵称 / 性别 / 头像（null 字段表示不修改） */
+    @PUT("/api/user/profile")
+    Call<ApiResponse<java.util.Map<String, Object>>> updateProfile(@Body ProfileUpdateRequest request);
+
+    /** 上传头像；成功后返回相对路径 /avatars/xxx.jpg */
+    @Multipart
+    @POST("/api/user/avatar")
+    Call<ApiResponse<java.util.Map<String, Object>>> uploadAvatar(@Part MultipartBody.Part file);
+
+    /** 注销当前账号：后端级联删除全部私有数据，当前用户由 JWT 决定（不接受请求体 userId） */
+    @DELETE("/api/user/account")
+    Call<ApiResponse<Void>> cancelAccount();
+
+    // ========== 账号绑定 ==========
     // 发送邮箱验证码
     @POST("/api/user/bind/send-email-code")
     Call<ApiResponse<Void>> sendEmailCode(@Body SendCodeRequest request);
-
-    // 验证手机验证码
-    @POST("/api/user/bind/verify-sms-code")
-    Call<ApiResponse<Void>> verifySmsCode(@Body BindRequest request);
 
     // 验证邮箱验证码
     @POST("/api/user/bind/verify-email-code")
     Call<ApiResponse<Void>> verifyEmailCode(@Body BindRequest request);
 
-    // 绑定手机号
-    @POST("/api/user/bind/phone")
-    Call<ApiResponse<Void>> bindPhone(@Body BindRequest request);
-
     // 绑定邮箱
     @POST("/api/user/bind/email")
     Call<ApiResponse<Void>> bindEmail(@Body BindRequest request);
-
-    // 解绑手机号
-    @POST("/api/user/bind/unbind-phone")
-    Call<ApiResponse<Void>> unbindPhone(@Body BindRequest request);
 
     // 解绑邮箱
     @POST("/api/user/bind/unbind-email")
@@ -231,7 +271,7 @@ public interface ApiService {
     // ========== 外站书籍阅读进度 ==========
     @POST("/api/external-reading/save")
     @Headers("Content-Type: application/json")
-    Call<ApiResponse<Void>> saveExternalProgress(@Body okhttp3.RequestBody body);
+    Call<ApiResponse<Void>> saveExternalProgress(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
 
     @GET("/api/external-reading/get")
     Call<ApiResponse<java.util.Map<String, Object>>> getExternalProgress(
@@ -239,5 +279,41 @@ public interface ApiService {
             @Query("sourceType") String sourceType,
             @Query("sourceBookId") String sourceBookId
     );
+
+    // ========== 外站书架同步 ==========
+    @POST("/api/external-bookshelf/add")
+    @Headers("Content-Type: application/json")
+    Call<ApiResponse<Void>> addExternalBookshelf(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+
+    @POST("/api/external-bookshelf/remove")
+    @Headers("Content-Type: application/json")
+    Call<ApiResponse<Void>> removeExternalBookshelf(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+
+    @GET("/api/external-bookshelf/list")
+    Call<ApiResponse<java.util.List<java.util.Map<String, Object>>>> getExternalBookshelfList(
+            @Query("userId") long userId);
+
+    // ========== 外站书签同步 ==========
+    @POST("/api/external-bookmarks/add")
+    @Headers("Content-Type: application/json")
+    Call<ApiResponse<Void>> addExternalBookmark(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+
+    @POST("/api/external-bookmarks/delete")
+    @Headers("Content-Type: application/json")
+    Call<ApiResponse<Void>> deleteExternalBookmark(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+
+    @GET("/api/external-bookmarks/list")
+    Call<ApiResponse<java.util.List<java.util.Map<String, Object>>>> getExternalBookmarkList(
+            @Query("userId") long userId);
+
+    // ========== 外站阅读记录全量拉取（登录时） ==========
+    @GET("/api/external-reading/list")
+    Call<ApiResponse<java.util.List<java.util.Map<String, Object>>>> getExternalReadingList(
+            @Query("userId") long userId);
+
+    // ========== 外站阅读记录删除（阅读记录页删除时同步服务器，避免再次登录被拉回） ==========
+    @POST("/api/external-reading/delete")
+    @Headers("Content-Type: application/json")
+    Call<ApiResponse<Void>> deleteExternalReading(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
 }
 

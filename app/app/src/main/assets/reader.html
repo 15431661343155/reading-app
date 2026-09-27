@@ -86,6 +86,32 @@
     #htmlContent pre, #htmlContent table, #htmlContent blockquote, #htmlContent figure {
         break-inside: avoid; -webkit-column-break-inside: avoid;
     }
+    /* ===== HTML 模式的页眉页脚覆盖层（Canvas 模式由 canvas 自带绘制，这里仅补 HTML 模式）=====
+       用 position:fixed 钉在视口上/下边缘，不随 #htmlColumns 的 translateX 平移，
+       也不随上下滚动模式的内容滚动；pointer-events:none 让点击穿透到正文用于翻页。 */
+    #htmlHeader, #htmlFooter {
+        position: fixed;
+        left: 0; right: 0;
+        pointer-events: none;
+        color: #8E8E93;
+        font-size: 12px;
+        line-height: 1;
+        z-index: 35;
+        box-sizing: border-box;
+        display: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    #htmlHeader { top: 0; text-align: left; }
+    #htmlFooter {
+        bottom: 0;
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+    }
+    #htmlFooter span { white-space: nowrap; }
+    #htmlFooterRight { margin-left: auto; text-align: right; }
     #flipbookContainer {
         position: absolute;
         top: 0;
@@ -180,7 +206,7 @@
 <body data-page-node-id="ZWvZ0yyW1CZtThkm03F5ST">
 <canvas id="readerCanvas" data-page-node-id="XnhRy1Gc1le1vtsN4P6Xwd"></canvas>
 <div id="flipbookContainer" data-page-node-id="2AzO88BUiwPHZV67TXEXDy"><div id="flipbook" data-page-node-id="5IYcBNdrLZ4idvcXqfYH8l"></div></div>
-<div id="htmlContent"><div id="htmlColumns"></div></div>
+<div id="htmlContent"><div id="htmlColumns"></div><div id="htmlHeader"></div><div id="htmlFooter"><span id="htmlFooterLeft"></span><span id="htmlFooterRight"></span></div></div>
 <script>
 // ============ 状态变量 ============
 var canvas = document.getElementById('readerCanvas');
@@ -191,7 +217,10 @@ var chapterTitle = '';
 var currentChapterIndex = -1;
 var pages = [];
 var pageStartOffsets = [];
+var pagesRestoredFromCache = false; // ✅ 排版缓存恢复标记：loadContent 从 Java 缓存载入 pages 后置位，resizeCanvas 据此跳过整章重新分页
 var currentPage = 0;
+var _pendingLoad = null;            // ✅ 复用池修复：视口尺寸未就绪时缓存的 loadContent 渲染意图
+var _resizeScheduled = false;       // ✅ 复用池修复：resizeCanvas 在 0 尺寸时避免重复排队的标记
 
 // 默认字体大小（根据屏幕宽度动态调整）
 var fontSize = Math.max(14, Math.floor(window.innerWidth / 24));
@@ -316,6 +345,10 @@ var animWatchdog = null; // 动画超时保护
 
 // turn.js 仿真翻页状态
 var simulationActive = false;
+// ✅ 仿真页位图的渲染 dpr：drawPage 以 CSS 像素坐标作画（与 dpr 无关），这里单独限制位图像素分辨率。
+//    屏幕真实 dpr 多为 3，若按满屏 3x 渲染每张整页位图 toDataURL 极慢（每次数百毫秒），
+//    是「进入阅读器白屏 3 秒」的主因。限制到 2 已足够清晰，位图体积降到约 44%，显著提速。
+var simRenderDpr = Math.min(window.devicePixelRatio || 1, 2);
 var simPageCache = {};
 // 章节边界（首页向前 / 末页向后）请求跨章的去重标志，由 loadContent 重置
 var _boundaryPending = false;
@@ -382,6 +415,17 @@ function syncSimulationBackground() {
 
 // ============ 初始化 Canvas 尺寸 ============
 function resizeCanvas() {
+    // ✅ 复用池修复：视口尺寸未就绪（window.innerWidth/innerHeight<=0）时绝不分页/绘制，
+    //    否则会得到 0 尺寸画布（整页空白）与畸形 pages；等下一帧尺寸就绪后再执行。
+    if (window.innerWidth <= 0 || window.innerHeight <= 0) {
+        if (!_resizeScheduled) {
+            _resizeScheduled = true;
+            var _rf = function () { _resizeScheduled = false; resizeCanvas(); };
+            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_rf);
+            else setTimeout(_rf, 16);
+        }
+        return;
+    }
     var dpr = window.devicePixelRatio || 1;
     canvas.width = window.innerWidth * dpr;
     canvas.height = window.innerHeight * dpr;
@@ -395,14 +439,24 @@ function resizeCanvas() {
             layoutScroll(currentContent, chapterTitle);
             drawScroll();
         } else {
-            paginate(currentContent, chapterTitle);
+            // ✅ 若本次是从排版缓存恢复（loadContent 已载入 pages），跳过整章重新分页；
+            //    仅重绘并重建仿真层。窗口 resize / 设置变更等场景 pagesRestoredFromCache 已复位为 false，
+            //    仍会走下方 paginate 正常重排。
+            if (!pagesRestoredFromCache) {
+                paginate(currentContent, chapterTitle);
+            }
+            pagesRestoredFromCache = false;
             drawPage(currentPage);
             if (simulationActive) reinitSimulation();
         }
     }
 }
 
-window.addEventListener('resize', resizeCanvas);
+// ✅ 复用池修复：resize 回调重排后，向 Java 回传真实总页数（首屏若曾在 0 宽下分页，总页数会是畸形值，需在此纠正）
+window.addEventListener('resize', function () {
+    resizeCanvas();
+    if (typeof Android !== 'undefined' && Android) notifyJavaPageChange();
+});
 
 // ============ 分页核心 ============
 function paginate(text, title) {
@@ -495,20 +549,27 @@ function paginate(text, title) {
         pages.push(currentPageLines.slice());
         pageStartOffsets.push(globalOffset);
     }
+    console.log('DBG paginate: innerW=' + window.innerWidth + ' innerH=' + window.innerHeight + ' pages=' + pages.length);
 }
 
 function splitTextToLines(text, maxWidth) {
     var lines = [];
     var currentLine = '';
+    // ✅ 性能优化：累计已测宽度，避免每加一个字就把整行重新 measureText（原实现是 O(n^2)，
+    //    长章节首屏分页会阻塞 WebView 主线程数秒，导致进入阅读器后翻页无响应）。
+    //    改为只测单个字宽度并累加，复杂度降为 O(n)；CJK 等宽无字距，结果与原实现一致；
+    //    少量带 kerning 的拉丁文仅在换行边界处可能有亚像素差异，不影响阅读。
+    var currentWidth = 0;
     for (var i = 0; i < text.length; i++) {
         var ch = text.charAt(i);
-        var testLine = currentLine + ch;
-        var metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && currentLine.length > 0) {
+        var chWidth = ctx.measureText(ch).width;
+        if (currentLine.length > 0 && currentWidth + chWidth > maxWidth) {
             lines.push(currentLine);
             currentLine = ch;
+            currentWidth = chWidth;
         } else {
-            currentLine = testLine;
+            currentLine += ch;
+            currentWidth += chWidth;
         }
     }
     if (currentLine.length > 0) {
@@ -619,6 +680,7 @@ function goToPage(page) {
 }
 
 function nextPage() {
+    console.log('DBG nextPage: pages=' + (pages?pages.length:'(none)') + ' anim=' + isAnimating + ' sim=' + simulationActive + ' mode=' + pageTurnMode + ' swipe=' + swipeEnabled + ' dragMode=' + dragMode() + ' cur=' + currentPage);
     if (isAnimating) return;
     if (isHtmlMode()) { htmlNextPage(); return; }
     if (isScrollMode()) { scrollNextScreen(); return; }
@@ -715,6 +777,7 @@ function getCurrentPageText() {
 
 function notifyJavaPageChange() {
     try {
+        if (typeof Android === 'undefined' || !Android) return;
         Android.onPageChanged(virtualCurrentPage(), virtualTotalPages());
     } catch(e) {}
 }
@@ -1218,6 +1281,17 @@ document.addEventListener('touchend', function (e) {
     var ct = e.changedTouches && e.changedTouches[0];
     var dx = ct ? ct.clientX - s.x : 0;
     if (s.moved) {
+        var absDx = Math.abs(dx);
+        var dy = ct ? ct.clientY - s.y : 0;
+        // ✅ 仿真模式边界换章：已在末页/首页且向边界外横向滑动时，turn.js 无法继续翻页，
+        //    这里补一次「换章」。普通翻页仍交给 turn.js（仅边界触发，不冲突）。
+        //    ⚠️ 必须与 turn.js 的 boundary 事件共用 _boundaryPending 守卫：一次手势会被
+        //    「本分支」与「turn.js 的 boundary 事件」各触发一次 onChapterEnd/onChapterStart，
+        //    导致连跳两章（先进入下一章、约 1s 后跳到再下一章）。统一走 simBoundarySwap 保证单次换章。
+        if (absDx >= 30 && absDx > Math.abs(dy)) {
+            if (dx < 0 && currentPage >= (pages ? pages.length - 1 : 0)) { simBoundarySwap(1); return; }
+            if (dx > 0 && currentPage <= 0) { simBoundarySwap(-1); return; }
+        }
         // 中间区滑动：turn.js 已被屏蔽，这里补一次翻页（无跟手动画，但仍能翻）
         if (hold) {
             if (dx < -30) nextPage();
@@ -1238,20 +1312,32 @@ document.addEventListener('touchend', function (e) {
 document.addEventListener('touchcancel', function () { _simTapStart = null; _simCenterHold = false; }, true);
 
 /**
- * ✅ 章节边界事件（由 turn.min.js 的 _eventReleased 在目标页越界时触发）：
- * 本章最后一页继续向后滑 → dir=+1 请求下一章；本章第一页继续向前滑 → dir=-1 请求上一章。
- * 说明：不能用 when 注册——turn.js 的 destroy 只会解绑内置事件，
- * 自定义事件会随每次重建累积，导致一次滑动跳多章。故在脚本层绑定一次。
+ * ✅ 仿真模式章节边界换章（单一权威入口）：
+ * 一次手势（无论是 document 级滑动分支，还是 turn.js 的 boundary 事件）只允许换一章，
+ * 用 _boundaryPending 守卫。dir>0 下一章，dir<0 上一章。
+ * ⚠️ 之所以需要统一：一次章末滑动会被「document 级滑动分支」与「turn.js boundary 事件」
+ * 各触发一次，若各自独立调用 onChapterEnd 就会连跳两章（先进入下一章、约 1s 后跳到再下一章）。
+ * 兜底解锁：跨章失败（如"已经是最后一章"）时不会触发 loadContent，需自行复位。
  */
-$('#flipbook').on('boundary', function(event, dir) {
+function simBoundarySwap(dir) {
     if (_boundaryPending) return;
     _boundaryPending = true;
-    // 兜底解锁：跨章失败（如"已经是最后一章"）时不会触发 loadContent，需自行复位
     setTimeout(function() { _boundaryPending = false; }, 1500);
     try {
         if (dir > 0) Android.onChapterEnd();
         else Android.onChapterStart();
     } catch (e) {}
+}
+
+/**
+ * ✅ 章节边界事件（由 turn.min.js 的 _eventReleased 在目标页越界时触发）：
+ * 本章最后一页继续向后滑 → dir=+1 请求下一章；本章第一页继续向前滑 → dir=-1 请求上一章。
+ * 说明：不能用 when 注册——turn.js 的 destroy 只会解绑内置事件，
+ * 自定义事件会随每次重建累积，导致一次滑动跳多章。故在脚本层绑定一次。
+ * 统一走 simBoundarySwap（与 document 级滑动分支共用 _boundaryPending 守卫），保证单次换章。
+ */
+$('#flipbook').on('boundary', function(event, dir) {
+    simBoundarySwap(dir);
 });
 
 // 翻页结束：
@@ -1287,8 +1373,9 @@ function initSimulation() {
         renderCanvas = document.createElement('canvas');
         renderCtx = renderCanvas.getContext('2d');
     }
-    renderCanvas.width = canvas.width;
-    renderCanvas.height = canvas.height;
+    // ✅ 仿真页位图按 simRenderDpr 渲染（见上方说明），避免满屏 3x 大图 toDataURL 导致进入阅读器长时间白屏。
+    renderCanvas.width = Math.round(window.innerWidth * simRenderDpr);
+    renderCanvas.height = Math.round(window.innerHeight * simRenderDpr);
 
     var flipbook = $('#flipbook');
     flipbook.empty();
@@ -1370,9 +1457,13 @@ function initSimulation() {
         }
     });
 
-    // ✅ 预加载当前页附近的页面为页对象：
-    // turn.js 拖拽折页阶段不会触发 missing，必须提前加入 DOM 才不会露空白
-    ensureSimulationPages(firstPageIdx);
+    // ✅ 预加载当前页附近的页面为页对象：turn.js 拖拽折页阶段不会触发 missing，必须提前加入 DOM 才不会露空白。
+    //    但整章逐页 toDataURL 很重（满屏大图），若同步执行会阻塞首屏出图 → 长时间白屏。
+    //    故把「相邻页预渲染」移出关键路径：当前页已渲染并显示 flipbook 后，下一帧再补相邻页；
+    //    期间若用户抢先翻页，由 turn.js 的 missing 事件兜底补页，不会露空白。
+    setTimeout(function() {
+        if (simulationActive) ensureSimulationPages(firstPageIdx);
+    }, 0);
 
     // 初始化时隐藏 p-temporal（书页背面），避免其背景色遮挡当前页正面内容。
     // p-temporal 仅在翻页动画期间由 simOnFlipStart 显示，翻页结束由 simOnFlipEnd 隐藏。
@@ -1401,7 +1492,7 @@ function destroySimulation() {
 }
 
 function renderPageToCache(pageIndex) {
-    var dpr = window.devicePixelRatio || 1;
+    var dpr = simRenderDpr || Math.min(window.devicePixelRatio || 1, 2);
 
     // Render to off-screen canvas to avoid flickering the main display
     renderCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1475,15 +1566,25 @@ function ensureSimulationPages(centerIdx) {
     }
 }
 
+/**
+ * 立即按当前配色重建仿真书页（不走防抖）。
+ * 供「日夜渐变收尾」这类必须精确定时的场景使用：仿真页的内容是「整页渲染位图」，
+ * 只能靠重建来换色，防抖会把它推迟到调用结束后 80ms 才执行。
+ */
+function restartSimulationNow() {
+    if (_reinitTimer) { clearTimeout(_reinitTimer); _reinitTimer = null; }
+    destroySimulation();
+    simulationActive = false; // ensure clean state
+    initSimulation();
+}
+
 function reinitSimulation() {
     if (!simulationActive) return;
     // Debounce: wait for all pending settings calls before rebuilding
     if (_reinitTimer) clearTimeout(_reinitTimer);
     _reinitTimer = setTimeout(function() {
         _reinitTimer = null;
-        destroySimulation();
-        simulationActive = false; // ensure clean state
-        initSimulation();
+        restartSimulationNow();
     }, 80);
 }
 
@@ -1949,7 +2050,8 @@ canvas.addEventListener('touchstart', function (e) {
     touchStartX = t.clientX;
     // 连续滚动模式：手势交给滚动逻辑（上下拖拽即滚动）
     if (isScrollMode()) { beginScrollTouch(t); return; }
-    if (isAnimating || !pages.length || !dragMode() || !swipeEnabled) { drag = null; return; }
+    console.log('DBG touchstart: anim=' + isAnimating + ' pages=' + (pages?pages.length:0) + ' dragMode=' + dragMode() + ' swipe=' + swipeEnabled);
+    if (isAnimating || !pages.length || !dragMode() || !swipeEnabled) { console.log('DBG touchstart BLOCKED'); drag = null; return; }
     drag = {
         mode: pageTurnMode,
         vertical: pageTurnMode === 'updown',
@@ -2007,10 +2109,11 @@ canvas.addEventListener('touchend', function (e) {
     if (!d || !d.active) {
         // 未形成跟手拖拽（不支持的模式 / 位移过小 / 方向不符）：沿用简单滑动判定
         // 注意要尊重「滑动翻页」开关，否则关闭开关后仍能滑动翻页
+        console.log('DBG touchend simple: anim=' + isAnimating + ' swipe=' + swipeEnabled + ' ct=' + (ct?ct.clientX:'null') + ' startX=' + touchStartX);
         if (isAnimating || !ct || !swipeEnabled) return;
         var dx = ct.clientX - touchStartX;
-        if (dx < -50) nextPage();
-        else if (dx > 50) prevPage();
+        if (dx < -50) { console.log('DBG touchend -> nextPage'); nextPage(); }
+        else if (dx > 50) { console.log('DBG touchend -> prevPage'); prevPage(); }
         return;
     }
     var commit;
@@ -2033,6 +2136,14 @@ canvas.addEventListener('touchcancel', function () {
     drag = null;
     if (d && d.active) finishDrag(d, false);
 }, { passive: true });
+
+// ============ 仿真翻页模式：章节边界翻章检测 ============
+// ✅ 复用池修复：仿真模式下 canvas 触摸处理被禁用（simulationActive 时直接 return），
+//    而 turn.js 在末页/首页无法翻页时没有任何「越界即换章」回调，导致 onChapterEnd/onChapterStart 永不触发，
+//    表现为「最后一页翻页无法进入下一章」。
+// 早期曾在 flipbookContainer 上补充滑动检测，但 turn.js 在 flipbook 上 stopPropagation 阻断了冒泡，
+//    祖先节点的监听永远收不到事件（死代码）。故改在 document 级仿真触摸处理（capture 阶段，必然先到达）
+//    的「滑动收尾」分支里统一处理：仅在「已在首页/末页且向边界外横向滑动」时触发换章，普通翻页仍交给 turn.js。
 
 /**
  * Android 端 GestureDetector 的 onFling 统一交给前端决策：
@@ -2133,11 +2244,33 @@ function handleScrollTouchEnd(e) {
 }
 
 // ============ Java 调用接口 ============
-function loadContent(chapterIndex, title, content, startPage, isLocal, progress) {
+// ✅ 复用池 WebView 关键修复：reader.html 由池子只 loadUrl 一次（首次加载时 WebView 尚未 attach，
+//    window.innerWidth/innerHeight=0）。后续 attach 到布局后，JS 视口宽高滞后于原生布局——
+//    若此时恰好执行 loadContent，会在 0 宽下分页/绘制：画布 0 尺寸→整页空白，且上报给 Java 的
+//    总页数是畸形值，表现为「翻不了页 / 恢复不到页」。故尺寸未就绪时先把渲染意图存起来，
+//    等下一帧 / resize 回调拿到真实尺寸后再真正排版绘制。
+function loadContent(chapterIndex, title, content, startPage, isLocal, progress, cachedPagesJson, cacheKey) {
     _boundaryPending = false;
     currentChapterIndex = chapterIndex;
     chapterTitle = title;
     currentContent = preprocessContent(content);
+
+    // ✅ 排版缓存恢复：若 Java 侧命中了「上次退出本章时的排版」（layout signature 一致），
+    //    直接载入已分页的 pages，跳过整章重新分页 —— 这正是「进入书籍不再每次重排」的关键。
+    //    cachedPagesJson = "{pages:[...],offsets:[...]}" 的 JSON；cacheKey 由 Java 计算并回传。
+    //    占位内容 / HTML 富文本模式 下 Java 不会传 cacheKey，故此处不会误恢复。
+    var _restoreOk = false;
+    if (typeof cachedPagesJson !== 'undefined' && cachedPagesJson && cachedPagesJson.length > 1) {
+        try {
+            var _cp = JSON.parse(cachedPagesJson);
+            if (_cp && _cp.pages && _cp.offsets) {
+                pages = _cp.pages;
+                pageStartOffsets = _cp.offsets;
+                pagesRestoredFromCache = true;
+                _restoreOk = true;
+            }
+        } catch (_e) { pagesRestoredFromCache = false; }
+    }
 
     // ✅ 退出 HTML 富文本模式：还原被 loadHtmlContent 隐藏的 Canvas / 仿真层
     //    否则上一章是 EPUB HTML 时，本页纯文本会绘制在隐藏层之下被遮挡
@@ -2170,6 +2303,33 @@ function loadContent(chapterIndex, title, content, startPage, isLocal, progress)
     }
 
     console.log('loadContent 接收内容长度: ' + content.length);
+
+    // ✅ 尺寸就绪前：缓存渲染意图，延迟到真实视口尺寸就绪后再绘制（避免 0 宽导致空白/畸形分页）
+    if (window.innerWidth <= 0 || window.innerHeight <= 0) {
+        _pendingLoad = {
+            chapterIndex: chapterIndex, title: title, content: currentContent,
+            startPage: startPage, isLocal: isLocal, progress: progress,
+            cacheKey: cacheKey, restoreOk: _restoreOk
+        };
+        _scheduleLayoutRender();
+        return;
+    }
+    _finishLoadContent({ startPage: startPage, cacheKey: cacheKey, restoreOk: _restoreOk });
+}
+
+/** 等待视口尺寸就绪后再执行真实渲染；尺寸就绪前用 rAF 轮询，不依赖 resize 事件是否准时触发 */
+function _scheduleLayoutRender() {
+    if (window.innerWidth > 0 && window.innerHeight > 0) {
+        if (_pendingLoad) { var p = _pendingLoad; _pendingLoad = null; _finishLoadContent(p); }
+    } else {
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_scheduleLayoutRender);
+        else setTimeout(_scheduleLayoutRender, 16);
+    }
+}
+
+/** loadContent 的「尺寸就绪后」渲染逻辑：仅在 window.innerWidth/innerHeight 有效时调用 */
+function _finishLoadContent(p) {
+    var startPage = p.startPage, _restoreOk = p.restoreOk, cacheKey = p.cacheKey;
     resizeCanvas();
 
     if (isScrollMode()) {
@@ -2207,19 +2367,17 @@ function loadContent(chapterIndex, title, content, startPage, isLocal, progress)
         }
     }
 
-    // ✅ 如果还有 pending 的字体/纹理未完成加载（startPendingResources 还在异步中）
-    // 加载完成后会自动调用 paginate+drawPage（由 startPendingResources 处理）
+    // ✅ 排版缓存回写：本次是「纯文本 + 非滚动模式 + 真正重新分页」且 cacheKey 有效时，
+    //    把分页结果交给 Java 落盘，下次进入本书同章同排版即可跳过重新分页。
+    //    占位内容 / 滚动模式(updown) / 已从缓存恢复(_restoreOk) 时不回写。
+    if (!_restoreOk && !isScrollMode()
+            && typeof cacheKey !== 'undefined' && cacheKey && cacheKey.length > 0
+            && typeof Android !== 'undefined' && Android && Android.cacheChapterLayout) {
+        try { Android.cacheChapterLayout(cacheKey, JSON.stringify({pages: pages, offsets: pageStartOffsets})); } catch (_e2) {}
+    }
 
     notifyJavaPageChange();
-    var summary = {
-        chapterIndex: chapterIndex,
-        totalPages: virtualTotalPages(),
-        fontSize: fontSize,
-        width: window.innerWidth,
-        height: window.innerHeight,
-        pageStarts: pageStartOffsets
-    };
-    try { Android.onPaginationComplete(JSON.stringify(summary)); } catch (e) {}
+    console.log('DBG loadContent end: startPage=' + startPage + ' pages=' + pages.length + ' currentPage=' + currentPage + ' scroll=' + isScrollMode() + ' sim=' + simulationActive);
 }
 
 // ============ 内容预处理 ============
@@ -2320,6 +2478,7 @@ function applyHtmlFlow(keepPosition) {
     } else {
         htmlGoToPage(Math.round(ratio * (htmlPageCount - 1)));
     }
+    updateHtmlHeaderFooter();
 }
 
 // 计算页边距 / 列宽 / 列间距，并重新测量总页数（不改动当前位置）。
@@ -2331,8 +2490,12 @@ function layoutHtmlColumns() {
     if (!c || !cols) return;
     var W = c.clientWidth || window.innerWidth || 1;
     var side = padding;                     // 左右页边距
-    var top = topPadding;                   // 顶部留白（避开状态栏 / 页眉）
-    cols.style.padding = top + 'px ' + side + 'px ' + padding + 'px ' + side + 'px';
+    // 为页眉页脚预留空间（与 Canvas 模式一致），避免正文被覆盖：
+    // 页眉占用 headerFooterFontSize + 10 + 半行；页脚占用 headerFooterFontSize + 12。
+    var headerSpace = (showHeaderFooter && chapterTitle) ? (headerFooterFontSize + 10 + Math.floor(fontSize / 2)) : 0;
+    var footerSpace = showHeaderFooter ? (headerFooterFontSize + 12) : 0;
+    var top = topPadding + headerSpace;    // 顶部留白（避开状态栏 / 页眉）+ 页眉高度
+    cols.style.padding = top + 'px ' + side + 'px ' + (padding + footerSpace) + 'px ' + side + 'px';
     htmlClientH = c.clientHeight || window.innerHeight || 1;
     if (htmlFlow === 'scrolled') {
         htmlColW = Math.max(1, W - side * 2);
@@ -2412,15 +2575,6 @@ function loadHtmlContent(chapterIndex, title, html, startPage, isLocal, progress
             htmlGoToPage(0);
         }
         notifyJavaPageChange();
-        var summary = {
-            chapterIndex: chapterIndex,
-            totalPages: htmlTotalPages(),
-            fontSize: fontSize,
-            width: window.innerWidth,
-            height: window.innerHeight,
-            pageStarts: []
-        };
-        try { Android.onPaginationComplete(JSON.stringify(summary)); } catch (e) {}
     });
     console.log('loadHtmlContent 接收 HTML 长度: ' + (html ? html.length : 0) + ' flow=' + htmlFlow);
 }
@@ -2439,6 +2593,60 @@ function htmlCurrentPage() {
     }
     return htmlPage;
 }
+/**
+ * HTML 模式下刷新页眉页脚覆盖层（Canvas 模式由 canvas 自带绘制，这里仅补 HTML 模式）。
+ * 页眉：章节标题（左对齐，顶部 topPadding 处）。
+ * 页脚：左=电量/时间（可选），右=页码/进度（本地书追加百分比）。
+ * 仅在 htmlMode 且 showHeaderFooter 开启时显示；其余情况隐藏。
+ */
+function updateHtmlHeaderFooter() {
+    var hdr = document.getElementById('htmlHeader');
+    var ftr = document.getElementById('htmlFooter');
+    if (!hdr || !ftr) return;
+    if (!htmlMode || !showHeaderFooter) {
+        hdr.style.display = 'none';
+        ftr.style.display = 'none';
+        return;
+    }
+    // 页眉：章节标题
+    if (chapterTitle) {
+        hdr.textContent = chapterTitle;
+        hdr.style.display = 'block';
+        hdr.style.color = headerFooterColor;
+        hdr.style.fontSize = headerFooterFontSize + 'px';
+        hdr.style.paddingLeft = padding + 'px';
+        hdr.style.paddingRight = padding + 'px';
+        hdr.style.top = topPadding + 'px';
+    } else {
+        hdr.style.display = 'none';
+    }
+    // 页脚：左=电量/时间（可选），右=页码/进度
+    var total = virtualTotalPages();
+    var cur = virtualCurrentPage();
+    var rightText = cur + '/' + total;
+    if (isLocalBook && typeof bookProgress !== 'undefined') rightText += ' ' + bookProgress + '%';
+    var leftEl = document.getElementById('htmlFooterLeft');
+    var rightEl = document.getElementById('htmlFooterRight');
+    if (leftEl) {
+        if (showBatteryTime && (batteryText || timeText)) {
+            leftEl.textContent = (batteryText || '') + (batteryText && timeText ? '  ' : '') + (timeText || '');
+            leftEl.style.display = 'inline';
+        } else {
+            leftEl.textContent = '';
+            leftEl.style.display = 'none';
+        }
+    }
+    if (rightEl) {
+        rightEl.textContent = rightText;
+        rightEl.style.display = 'inline';
+    }
+    ftr.style.display = 'flex';
+    ftr.style.color = headerFooterColor;
+    ftr.style.fontSize = headerFooterFontSize + 'px';
+    ftr.style.paddingLeft = padding + 'px';
+    ftr.style.paddingRight = padding + 'px';
+    ftr.style.bottom = '12px';
+}
 /** 无动画跳转到指定页（0 起） */
 function htmlGoToPage(p) {
     var c = document.getElementById('htmlContent');
@@ -2454,6 +2662,7 @@ function htmlGoToPage(p) {
         cols.style.transform = 'translateX(' + (-p * htmlStep) + 'px)';
     }
     notifyJavaPageChange();
+    updateHtmlHeaderFooter();
 }
 /**
  * 带翻页动画地切到指定页。
@@ -2485,6 +2694,7 @@ function htmlTurnTo(p, animate) {
         _htmlAnimTimer = setTimeout(function () { cols.classList.remove('html-anim'); }, 340);
     }
     notifyJavaPageChange();
+    updateHtmlHeaderFooter();
 }
 function htmlNextPage() {
     if (htmlFlow === 'scrolled') {
@@ -2776,11 +2986,39 @@ function lerpColor(a, b, t) {
     return '#' + (0x1000000 + (r << 16) + (g << 8) + bl).toString(16).slice(1);
 }
 
-// 平滑切换日/夜间：由原生侧传入起止颜色与时长（毫秒），逐帧插值并重绘 Canvas
-// enable: 目标是否为夜间；durationMs: 过渡时长；from/to 分别为起始/目标背景与文字色
+/**
+ * 平滑切换日/夜间：由原生侧传入起止颜色与时长（毫秒），逐帧插值。
+ * enable: 目标是否为夜间；durationMs: 过渡时长；from/to 分别为起始/目标背景与文字色
+ *
+ * ⚠️ 三种渲染方式的「可见层」不同，必须分别驱动，否则会出现「导航栏渐变、正文瞬间跳变」：
+ *   1) Canvas（覆盖/滑动/淡入/上下滚动）：redrawCurrent() 画的就是可见层，逐帧重绘即可；
+ *   2) HTML 富文本（本地 EPUB 保留样式）：可见层是 #htmlContent 的 CSS 底色，逐帧改样式即可（不重排）；
+ *   3) 仿真翻页（pageTurnMode === 'simulation'）：可见层是「整页渲染位图」(<img>)，
+ *      位图只能靠重建换色，而重建（destroy + init + 逐页 toDataURL）既贵又带 80ms 防抖 ——
+ *      逐帧调用只会被反复推迟，最终在渐变结束后才执行一次，正文于是整块跳变。
+ *      故过渡期间把可见层临时换成可逐帧重绘的 canvas（与仿真页位图同源、视觉一致），
+ *      动画收尾再按目标配色立即重建位图并交还仿真层。
+ *      仿真的「占位页」只是纯色块（无位图），逐帧改其底色即可。
+ */
 function animateNightMode(enable, durationMs, fromBg, fromText, toBg, toText) {
     isNightMode = enable;
     bgTextureImg = null;
+
+    // 过渡期间由 canvas 接管可见层（仅真仿真需要，且 HTML 模式不走 canvas）
+    var simTakeover = simulationActive && !htmlMode;
+    if (simTakeover) {
+        canvas.style.visibility = 'visible';
+        $('#flipbookContainer').css('display', 'none');
+        redrawCurrent();   // 先把当前页补画到 canvas，接管瞬间不露空白
+    }
+
+    // 逐帧把插值后的配色画到当前可见层上
+    function paintFrame() {
+        if (_deferDraw) return;
+        if (htmlMode) { applyHtmlThemeColors(); return; }  // HTML 模式：只改配色，不重排
+        redrawCurrent();                                   // Canvas / 仿真接管：逐帧重绘
+    }
+
     var start = null;
     function frame(ts) {
         if (start === null) start = ts;
@@ -2790,6 +3028,10 @@ function animateNightMode(enable, durationMs, fromBg, fromText, toBg, toText) {
         textColor = lerpColor(fromText, toText, e);
         // 同步仿真/翻页容器底色
         if (_simulationPlaceholderActive || simulationActive) syncSimulationBackground();
+        // 仿真占位页（纯色块，无位图）：逐帧跟随底色
+        if (_simulationPlaceholderActive) {
+            $('#flipbook .page-div').css('background-color', bgColor);
+        }
         // 更新已布局页面的文字颜色缓存
         if (typeof pages !== 'undefined') {
             for (var i = 0; i < pages.length; i++) {
@@ -2799,27 +3041,34 @@ function animateNightMode(enable, durationMs, fromBg, fromText, toBg, toText) {
                 }
             }
         }
-        if (!_deferDraw) {
-            redrawCurrent();
-            if (simulationActive) reinitSimulation();
-        }
+        paintFrame();
         if (t < 1) {
             requestAnimationFrame(frame);
-        } else {
-            // 终帧落定精确值，消除浮点误差
-            bgColor = toBg; textColor = toText;
-            if (!_deferDraw) {
-                redrawCurrent();
-                if (simulationActive) reinitSimulation();
-            }
+            return;
+        }
+        // ---- 终帧：落定精确值，并把可见层交还给目标渲染方式 ----
+        bgColor = toBg; textColor = toText;
+        paintFrame();
+        if (simTakeover) {
+            // 立即按目标配色重建仿真位图（不走 80ms 防抖），随后 canvas 由 initSimulation 重新隐藏
+            restartSimulationNow();
         }
     }
     requestAnimationFrame(frame);
 }
 
+/** HTML 富文本模式：仅刷新正文配色（不重排、不改阅读位置），供日夜渐变逐帧调用。 */
+function applyHtmlThemeColors() {
+    var c = document.getElementById('htmlContent');
+    if (!c) return;
+    c.style.backgroundColor = bgColor;
+    c.style.color = textColor;
+}
+
 // 设置页眉页脚显示
 function setShowHeaderFooter(show) {
     showHeaderFooter = show;
+    if (htmlMode) { applyHtmlFlow(true); return; }   // HTML 模式：重排版预留空间并刷新覆盖层
     if (!_deferDraw) {
         redrawCurrent();
         if (simulationActive) reinitSimulation();
@@ -2839,6 +3088,7 @@ function setAutoPageCountdown(sec) {
 // 设置页眉页脚字体大小
 function setHeaderFooterFontSize(size) {
     headerFooterFontSize = size;
+    if (htmlMode) { applyHtmlFlow(true); return; }   // HTML 模式：预留空间随字号变化，刷新覆盖层
     if (!_deferDraw) {
         redrawCurrent();
         if (simulationActive) reinitSimulation();
@@ -2848,6 +3098,7 @@ function setHeaderFooterFontSize(size) {
 // 设置电量时间显示开关
 function setShowBatteryTime(show) {
     showBatteryTime = show;
+    if (htmlMode) { updateHtmlHeaderFooter(); return; }
     if (!_deferDraw) {
         redrawCurrent();
         if (simulationActive) reinitSimulation();
@@ -2858,6 +3109,7 @@ function setShowBatteryTime(show) {
 function updateBatteryTime(level, time) {
     batteryText = level;
     timeText = time;
+    if (htmlMode) { updateHtmlHeaderFooter(); return; }
     if (showBatteryTime && !_deferDraw) {
         redrawCurrent();
         if (simulationActive) reinitSimulation();

@@ -3,6 +3,7 @@ package com.example.myapplication.bean;
 public class ReadTimeRequest {
     private long userId;
     private long bookId;
+    /** 本次阅读时长，<b>单位：秒</b>（与后端 total_read_seconds 一致，展示端自行折算分钟/小时）。 */
     private long duration;
 
     public ReadTimeRequest(long userId, long bookId, long duration) {
@@ -41,6 +42,6 @@ public class ReadTimeRequest {
                 "userId=" + userId +
                 ", bookId=" + bookId +
                 ", duration=" + duration +
-                " minutes}";
+                " seconds}";
     }
 }

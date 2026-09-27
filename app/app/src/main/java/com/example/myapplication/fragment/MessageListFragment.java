@@ -6,9 +6,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -26,6 +24,8 @@ import com.example.myapplication.api.SafeCallback;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.Message;
 import com.example.myapplication.bean.PageResponse;
+import com.example.myapplication.utils.Hint;
+import com.example.myapplication.widget.LoadingView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +50,7 @@ public class MessageListFragment extends Fragment {
     private View layoutEmpty;
     private ImageView ivEmptyIcon;
     private TextView tvEmptyText;
-    private ProgressBar progressBar;
+    private LoadingView loadingView;
     private MessageAdapter adapter;
     private final List<Message> messages = new ArrayList<>();
     private String[] typeFilters;
@@ -100,7 +100,7 @@ public class MessageListFragment extends Fragment {
         layoutEmpty = view.findViewById(R.id.layout_empty);
         ivEmptyIcon = view.findViewById(R.id.iv_empty_icon);
         tvEmptyText = view.findViewById(R.id.tv_empty_text);
-        progressBar = view.findViewById(R.id.progress_bar);
+        loadingView = view.findViewById(R.id.loading_view);
 
         // 设置空状态图标和文案
         setupEmptyState();
@@ -176,7 +176,7 @@ public class MessageListFragment extends Fragment {
                     (call, t) -> {
                         showLoading(false);
                         if (isAdded()) {
-                            Toast.makeText(requireContext(), R.string.message_load_fail, Toast.LENGTH_SHORT).show();
+                            Hint.show(requireContext(), R.string.message_load_fail);
                         }
                     }
             ));
@@ -204,7 +204,7 @@ public class MessageListFragment extends Fragment {
                     (call, t) -> {
                         swipeRefresh.setRefreshing(false);
                         if (isAdded()) {
-                            Toast.makeText(requireContext(), R.string.message_load_fail, Toast.LENGTH_SHORT).show();
+                            Hint.show(requireContext(), R.string.message_load_fail);
                         }
                     }
             ));
@@ -268,7 +268,7 @@ public class MessageListFragment extends Fragment {
                             rvMessages.requestLayout();
                             updateEmptyState();
                         } else {
-                            Toast.makeText(requireContext(), R.string.message_load_fail, Toast.LENGTH_SHORT).show();
+                            Hint.show(requireContext(), R.string.message_load_fail);
                         }
                     });
                 }
@@ -290,7 +290,7 @@ public class MessageListFragment extends Fragment {
             adapter.notifyDataSetChanged();
             updateEmptyState();
         } else {
-            Toast.makeText(requireContext(), R.string.message_load_fail, Toast.LENGTH_SHORT).show();
+            Hint.show(requireContext(), R.string.message_load_fail);
         }
     }
 
@@ -337,20 +337,20 @@ public class MessageListFragment extends Fragment {
         api.markAllMessagesRead(userId).enqueue(SafeCallback.from(this,
                 (call, response) -> {
                     if (isAdded()) {
-                        Toast.makeText(requireContext(), "已全部标记为已读", Toast.LENGTH_SHORT).show();
+                        Hint.show(requireContext(), "已全部标记为已读");
                     }
                 },
                 (call, t) -> {
                     if (isAdded()) {
-                        Toast.makeText(requireContext(), "操作失败", Toast.LENGTH_SHORT).show();
+                        Hint.show(requireContext(), "操作失败");
                     }
                 }
         ));
     }
 
     private void showLoading(boolean loading) {
-        if (progressBar == null) return;
-        progressBar.setVisibility(loading ? View.VISIBLE : View.GONE);
+        if (loadingView == null) return;
+        loadingView.setVisibility(loading ? View.VISIBLE : View.GONE);
         if (loading) {
             layoutEmpty.setVisibility(View.GONE);
         }

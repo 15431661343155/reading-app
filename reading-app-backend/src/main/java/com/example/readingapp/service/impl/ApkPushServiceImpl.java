@@ -27,7 +27,7 @@ public class ApkPushServiceImpl implements ApkPushService {
 
     @Override
     @Transactional
-    public ApkPush pushApk(String fileName, String version) {
+    public ApkPush pushApk(String fileName, String version, String updateNotes) {
         apkPushRepository.clearAllPushed();
 
         Optional<ApkPush> existing = apkPushRepository.findAll().stream()
@@ -42,13 +42,29 @@ public class ApkPushServiceImpl implements ApkPushService {
             if (version != null && !version.isEmpty()) {
                 apkPush.setVersion(version);
             }
+            // 推送参数显式携带更新内容时覆盖；否则保留上传时登记的 updateNotes
+            if (updateNotes != null && !updateNotes.trim().isEmpty()) {
+                apkPush.setUpdateNotes(updateNotes.trim());
+            }
         } else {
             apkPush = new ApkPush();
             apkPush.setFileName(fileName);
-            apkPush.setFilePath(apkDir + "/" + fileName);
             apkPush.setVersion(version != null ? version : "1.0.0");
             apkPush.setIsPushed(true);
             apkPush.setPushTime(LocalDateTime.now());
+            if (updateNotes != null && !updateNotes.trim().isEmpty()) {
+                apkPush.setUpdateNotes(updateNotes.trim());
+            }
+        }
+
+        // ⚠️ filePath 统一规范为「公开下载接口」路径（permitAll）：App 端 DownloadManager 匿名下载。
+        // 历史记录曾存 /www/app/apk/...（服务器本地路径）或 /api/admin/apk/download/...（需管理员登录、
+        // 匿名 401，直接导致 App 内「下载失败」），每次推送时在这里自愈纠正。
+        try {
+            apkPush.setFilePath("/api/app/apk/download/"
+                    + java.net.URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception ignore) {
+            apkPush.setFilePath("/api/app/apk/download/" + fileName);
         }
 
         // 计算APK文件大小

@@ -8,7 +8,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,6 +21,9 @@ import com.example.myapplication.adapter.BookmarkAdapter;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.Bookmark;
+import com.example.myapplication.utils.ExternalPrefs;
+import com.example.myapplication.utils.ExternalSyncManager;
+import com.example.myapplication.utils.Hint;
 import android.app.AlertDialog;
 import android.widget.EditText;
 import android.text.format.DateFormat;
@@ -46,6 +48,8 @@ public class PopupBookmarkFragment extends Fragment {
     private TextView tvEmpty;
     private RecyclerView rvBookmarks;
     private boolean isLocalBook = false;
+    private String sourceType;
+    private String sourceBookId;
 
     public interface OnBookmarkSelectedListener {
         void onBookmarkSelected(Bookmark bookmark);
@@ -61,6 +65,14 @@ public class PopupBookmarkFragment extends Fragment {
 
     public void setIsLocalBook(boolean isLocalBook) {
         this.isLocalBook = isLocalBook;
+    }
+
+    public void setSourceType(String sourceType) { this.sourceType = sourceType; }
+    public void setSourceBookId(String sourceBookId) { this.sourceBookId = sourceBookId; }
+
+    private boolean isExternal() {
+        return sourceType != null && !sourceType.isEmpty()
+                && sourceBookId != null && !sourceBookId.isEmpty();
     }
 
     public void setOnBookmarkSelectedListener(OnBookmarkSelectedListener listener) {
@@ -85,7 +97,7 @@ public class PopupBookmarkFragment extends Fragment {
                     try { listener.onBookmarkSelected(bookmark); }
                     catch (Throwable t) {
                         android.util.Log.e("PopupBookmark", "点击书签回调异常", t);
-                        Toast.makeText(getContext(), "书签打开失败：" + t.getMessage(), Toast.LENGTH_SHORT).show();
+                        Hint.show(getContext(), "书签打开失败：" + t.getMessage());
                     }
                 }
             });
@@ -93,7 +105,7 @@ public class PopupBookmarkFragment extends Fragment {
                 try { showBookmarkDetailDialog(bookmark); }
                 catch (Throwable t) {
                     android.util.Log.e("PopupBookmark", "长按书签崩溃", t);
-                    Toast.makeText(getContext(), "书签详情打开失败", Toast.LENGTH_SHORT).show();
+                    Hint.show(getContext(), "书签详情打开失败");
                 }
             });
             rvBookmarks.setAdapter(adapter);
@@ -119,7 +131,7 @@ public class PopupBookmarkFragment extends Fragment {
             fallback.setLayoutParams(new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             try {
-                Toast.makeText(inflater.getContext(), "书签加载失败：" + t.getMessage(), Toast.LENGTH_SHORT).show();
+                Hint.show(inflater.getContext(), "书签加载失败：" + t.getMessage());
             } catch (Throwable ignored) {}
             return fallback;
         }
@@ -217,10 +229,50 @@ public class PopupBookmarkFragment extends Fragment {
 
                     @Override
                     public void onFailure(Call<ApiResponse<List<Bookmark>>> call, Throwable t) {
-                        try { Toast.makeText(getContext(), "加载书签失败", Toast.LENGTH_SHORT).show(); }
+                        try { Hint.show(getContext(), "加载书签失败"); }
                         catch (Throwable ignored) {}
                     }
                 });
+    }
+
+    private void loadExternalBookmarks() {
+        if (getActivity() == null) return;
+        SharedPreferences sp = getActivity().getSharedPreferences(
+                ExternalPrefs.bookmarkName(getActivity()), Context.MODE_PRIVATE);
+        int count = sp.getInt("bookmark_count", 0);
+        bookmarkList.clear();
+        for (int i = 0; i < count; i++) {
+            String p = "bm_" + i + "_";
+            Bookmark bookmark = new Bookmark();
+            bookmark.setChapterIndex(sp.getInt(p + "chapterIndex", 0));
+            bookmark.setChapterTitle(sp.getString(p + "chapterTitle", ""));
+            bookmark.setScrollPosition(sp.getInt(p + "scrollPosition", 1));
+            bookmark.setPreviewText(sp.getString(p + "preview", ""));
+            bookmark.setNote(sp.getString(p + "note", ""));
+            long time = sp.getLong(p + "time", 0);
+            bookmark.setId(time);
+            bookmark.setCreatedAt(formatTimestamp(time));
+            bookmarkList.add(bookmark);
+        }
+        bookmarkList.sort((a, b) -> {
+            long va = (a.getId() == null ? 0L : a.getId());
+            long vb = (b.getId() == null ? 0L : b.getId());
+            return Long.compare(vb, va);
+        });
+        if (getActivity() != null) {
+            getActivity().runOnUiThread(() -> {
+                try {
+                    adapter.notifyDataSetChanged();
+                    if (bookmarkList.isEmpty()) {
+                        tvEmpty.setVisibility(View.VISIBLE);
+                        rvBookmarks.setVisibility(View.GONE);
+                    } else {
+                        tvEmpty.setVisibility(View.GONE);
+                        rvBookmarks.setVisibility(View.VISIBLE);
+                    }
+                } catch (Throwable ignored) {}
+            });
+        }
     }
 
     private String formatTimestamp(long timestamp) {
@@ -321,7 +373,7 @@ public class PopupBookmarkFragment extends Fragment {
 
         bookmarkList.remove(bookmark);
         adapter.notifyDataSetChanged();
-        Toast.makeText(getContext(), "书签已删除", Toast.LENGTH_SHORT).show();
+        Hint.show(getContext(), "书签已删除");
     }
 
     private void deleteNetworkBookmark(Bookmark bookmark) {
@@ -338,7 +390,7 @@ public class PopupBookmarkFragment extends Fragment {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     bookmarkList.remove(bookmark);
                     adapter.notifyDataSetChanged();
-                    Toast.makeText(getContext(), "书签已删除", Toast.LENGTH_SHORT).show();
+                    Hint.show(getContext(), "书签已删除");
                 }
             }
             @Override
@@ -352,11 +404,11 @@ public class PopupBookmarkFragment extends Fragment {
             @Override
             public void onResponse(Call<ApiResponse<Bookmark>> call, Response<ApiResponse<Bookmark>> response) {
                 adapter.notifyDataSetChanged();
-                Toast.makeText(getContext(), "备注已保存", Toast.LENGTH_SHORT).show();
+                Hint.show(getContext(), "备注已保存");
             }
             @Override
             public void onFailure(Call<ApiResponse<Bookmark>> call, Throwable t) {
-                Toast.makeText(getContext(), "保存失败", Toast.LENGTH_SHORT).show();
+                Hint.show(getContext(), "保存失败");
             }
         });
     }

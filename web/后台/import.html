@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head data-page-node-id="r1W5LmolN0cf0E2JwQmuM8">
+  <meta charset="UTF-8" data-page-node-id="GzFCobw11hF29flTsFRrru">
+  <title>数据导入</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" data-page-node-id="3WCc3HmV4wtOpsAkIuxTGZ">
+  <link rel="stylesheet" href="assets/css/admin-theme.css">
+<script src="assets/js/admin-auth.js"></script>
+<script src="assets/js/admin-category-picker.js"></script>
+</head>
+<body data-page-node-id="QtCmnkO7XejsgeDY6ZynVo">
+<nav class="admin-nav">
+  <div class="admin-nav-inner">
+    <a class="admin-nav-brand" href="index.html">
+      <span class="brand-seal" aria-hidden="true"><span>书阁</span></span>
+      <span class="brand-text">
+        <span class="brand-title">管理后台</span>
+        <span class="brand-sub">内容管理平台</span>
+      </span>
+    </a>
+    <div class="admin-nav-links">
+      <a href="index.html" class="">首页</a>
+      <a href="books.html" class="">书籍管理</a>
+      <a href="categories.html" class="">分类管理</a>
+      <a href="import.html" class="is-active">数据导入</a>
+      <a href="online-source.html" class="-source">在线书源</a>
+      <a href="book-source.html" class="-source">书源管理</a>
+      <a href="users.html" class="">用户管理</a>
+      <a href="resource.html" class="">资源管理</a>
+      <a href="feedback.html" class="">意见反馈</a>
+    </div>
+    <div class="admin-nav-auth">
+      <span class="admin-auth-name" id="adminAuthName">管理员</span>
+      <button type="button" class="admin-logout" onclick="adminLogout()">退出登录</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-4 admin-main" data-page-node-id="RIxzQZN5wCRWtZCMUNsUU7">
+  <div class="page-head">
+  <span class="kicker">Ingest</span>
+  <h1 id="pageTitle">数据导入</h1>
+  <p class="desc">整文件夹批量导入书籍，或通过 SQL / 单文件导入</p>
+  <div class="head-rule"></div>
+</div>
+
+  <!-- ============ 批量导入（文件夹 / 多文件 + 进度条） ============ -->
+  <div class="row">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header bg-dark text-white">批量导入（文件夹 / 多文件）</div>
+        <div class="card-body">
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label" for="unifiedPicker">统一分类</label>
+              <div class="d-flex align-items-start gap-2">
+                <div data-cat-picker id="unifiedPicker" class="flex-grow-1"
+                     data-empty-text="不设分类（可只选子分类）"></div>
+                <button class="btn btn-sm btn-outline-secondary" type="button"
+                        onclick="batchApplyCategoryToChecked()">应用到已选</button>
+              </div>
+              <div class="form-text">本次导入的书籍都会归到该「主分类 + 子分类」；单个文件可在下方清单里单独改，以单行为准。分类下拉里可直接「+ 添加新分类」。</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label d-block">导入选项</label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="batchAutoExtract" checked>
+                <span class="form-check-label">自动提取书名/作者/简介</span>
+              </label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="batchSkipExisting" checked>
+                <span class="form-check-label">跳过同名书籍</span>
+              </label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="batchKeepStyle" checked>
+                <span class="form-check-label">EPUB 保留原文样式</span>
+              </label>
+              <div class="form-text">TXT 按「第X章」自动分章；EPUB 自动还原分卷。每个文件独立导入，单个失败不影响其他。
+                选完文件会自动检测重复，库中已有的书会列进下方「重复导入清单」逐本选择；这里的勾选框只对清单外的文件生效。</div>
+            </div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <label class="btn btn-primary mb-0">
+              选择文件夹<input type="file" id="batchDirInput" webkitdirectory directory multiple hidden>
+            </label>
+            <label class="btn btn-outline-primary mb-0">
+              选择多个文件<input type="file" id="batchFilesInput" multiple accept=".txt,.epub" hidden>
+            </label>
+            <button class="btn btn-outline-secondary" type="button" onclick="batchSelectAll(true)">全选</button>
+            <button class="btn btn-outline-secondary" type="button" onclick="batchSelectAll(false)">全不选</button>
+            <button class="btn btn-outline-secondary" type="button" onclick="batchInvert()">反选</button>
+            <button class="btn btn-outline-secondary" type="button" onclick="batchSelectByExt('.txt')">只选 TXT</button>
+            <button class="btn btn-outline-secondary" type="button" onclick="batchSelectByExt('.epub')">只选 EPUB</button>
+            <button class="btn btn-outline-danger" type="button" onclick="batchClearList()">清空清单</button>
+            <span class="ms-auto text-muted" id="batchListSummary">尚未选择文件</span>
+          </div>
+
+          <div id="batchProgressWrap" class="mb-3" style="display:none;">
+            <div class="progress" style="height:22px;">
+              <div id="batchProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                   role="progressbar" style="width:0%;">0%</div>
+            </div>
+            <div class="d-flex flex-wrap gap-3 mt-2 small">
+              <span>总数 <strong id="statTotal">0</strong></span>
+              <span class="text-success">成功 <strong id="statOk">0</strong></span>
+              <span class="text-secondary">跳过 <strong id="statSkip">0</strong></span>
+              <span class="text-danger">失败 <strong id="statFail">0</strong></span>
+              <span class="text-muted">剩余 <strong id="statLeft">0</strong></span>
+              <span>当前：<strong id="statCurrent">-</strong></span>
+              <span class="text-muted" id="statElapsed"></span>
+            </div>
+          </div>
+
+          <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+            <button class="btn btn-success" id="batchStartBtn" type="button" onclick="batchStart()">开始导入</button>
+            <button class="btn btn-warning" id="batchPauseBtn" type="button" style="display:none;" onclick="batchTogglePause()">暂停</button>
+            <button class="btn btn-outline-danger" id="batchCancelBtn" type="button" style="display:none;" onclick="batchCancel()">取消</button>
+            <button class="btn btn-outline-primary" id="batchRetryBtn" type="button" style="display:none;" onclick="batchRetryFailed()">重试失败项</button>
+            <a class="btn btn-outline-secondary" id="batchGotoBooks" style="display:none;" href="books.html">到书籍管理</a>
+            <span id="batchSummary" class="small"></span>
+          </div>
+
+          <div class="table-responsive border rounded" style="max-height:420px; overflow:auto;">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead class="table-light" style="position:sticky; top:0; z-index:2;">
+              <tr>
+                <th style="width:36px;"><input type="checkbox" id="batchSelectAllBox" onchange="batchSelectAll(this.checked)"></th>
+                <th>文件</th>
+                <th style="width:64px;">类型</th>
+                <th style="width:80px;">大小</th>
+                <th>书名（可修改）</th>
+                <th style="width:150px;">作者（可修改）</th>
+                <th style="width:250px;">分类（主分类 + 子分类，可修改）</th>
+                <th style="width:190px;">状态</th>
+              </tr>
+              </thead>
+              <tbody id="batchTableBody"></tbody>
+            </table>
+          </div>
+          <div id="batchEmpty" class="text-muted small mt-2">选择文件夹或文件后，这里会列出可导入的 TXT / EPUB 文件。</div>
+
+          <!-- ============ 重复导入清单（选完文件自动预检，逐本决定留哪本） ============ -->
+          <div id="dupWrap" class="mt-4" style="display:none;">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+              <strong class="text-danger">重复导入清单</strong>
+              <span class="badge bg-danger" id="dupCount">0</span>
+              <span class="text-muted small">这些书库里已经有了。逐本选择怎么处理，也可以先批量设一遍再单独改。</span>
+              <span class="text-muted small ms-auto" id="dupState"></span>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mb-2" id="dupBulk">
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="dupSetAll('skip')">全部保留库中已导入的</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="dupSetAll('replace')">全部用新文件替换</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="dupSetAll('rename')">全部两本都留（加备注）</button>
+              <button class="btn btn-sm btn-outline-primary" type="button" onclick="dupRecheck()">重新检测</button>
+            </div>
+            <div class="table-responsive border rounded" style="max-height:340px; overflow:auto;">
+              <table class="table table-sm align-middle mb-0">
+                <thead class="table-light" style="position:sticky; top:0; z-index:2;">
+                <tr>
+                  <th>待导入</th>
+                  <th style="width:36%;">库中已有</th>
+                  <th style="width:250px;">处理方式</th>
+                  <th style="width:180px;">书名备注（仅「两本都留」生效）</th>
+                </tr>
+                </thead>
+                <tbody id="dupTableBody"></tbody>
+              </table>
+            </div>
+            <div class="form-text">
+              「用新文件替换」会删除旧书及其章节，读者书架与阅读进度一并移除；
+              「两本都留」会把备注拼到新书书名后（如《斗破苍穹（重复导入）》），备注留空则用默认值。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- 批量导入 SQL -->
+    <div class="col-md-6" data-page-node-id="hHeMHpmzt6oN9j2EylxNNK">
+      <div class="card" data-page-node-id="6TVSA2xGxv569AMOttwPm7">
+        <div class="card-header bg-primary text-white" data-page-node-id="zzFmwucZjaDugZATXsy3fl">批量导入 SQL</div>
+        <div class="card-body" data-page-node-id="9CptOEAide3mT8iUeVoV82">
+          <p data-page-node-id="lhmTUJEZOfGGZJXAYPs7Hp">粘贴 INSERT SQL 语句，批量导入书籍和章节</p>
+          <textarea id="sqlInput" class="form-control mb-3" rows="10"
+                    placeholder="INSERT INTO book ...&#10;INSERT INTO chapter ..."></textarea>
+          <button class="btn btn-primary" onclick="importSQL()" data-page-node-id="vC0NY3C80rDxiSOa1GgRmK">执行导入</button>
+          <div id="sqlResult" class="mt-2" data-page-node-id="1k7QHIres6KZJw6C9rLefr"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快速添加测试数据 -->
+    <div class="col-md-6" data-page-node-id="ORiLMoswz9P9vlhboBNlLB">
+      <div class="card" data-page-node-id="K2UBKaMCkIGSwbBSgKuQZh">
+        <div class="card-header bg-success text-white" data-page-node-id="fmbXNhynPsSa7xd8kWCQMg">快速生成测试数据</div>
+        <div class="card-body" data-page-node-id="AOh9HYyLAUsEFAnKAhwzcJ">
+          <div class="mb-3" data-page-node-id="w4C1FDnMQ9ecRQFjzjPRO0">
+            <label class="form-label" data-page-node-id="8L0s47cwnSrKoQsLwjHzA7">书名</label>
+            <input type="text" class="form-control" id="bookTitle" placeholder="输入书名" data-page-node-id="rg4dS8cqG6U8Flc11PQBXC">
+          </div>
+          <div class="mb-3" data-page-node-id="PeEQPSQLZXwiwRhzN0aZpW">
+            <label class="form-label" data-page-node-id="fZdYC1yAkhhkab0szmPd9Y">作者</label>
+            <input type="text" class="form-control" id="bookAuthor" placeholder="输入作者" data-page-node-id="ls9jN5RlhvxBEF7wNBKvNE">
+          </div>
+          <div class="mb-3" data-page-node-id="Bw7Y82VChdGQGP5Uyet9YE">
+            <label class="form-label" data-page-node-id="LYe9OpJLZQSvu7brC5qZoP">分类</label>
+            <div data-cat-picker id="genPicker" data-empty-text="未指定主分类"></div>
+          </div>
+          <div class="mb-3" data-page-node-id="2KAqlpk8S2hVXk9zbqxiYF">
+            <label class="form-label" data-page-node-id="R7agPXIxTXkoUv3B04pD7p">简介</label>
+            <textarea class="form-control" id="bookIntro" rows="3"></textarea>
+          </div>
+          <div class="mb-3" data-page-node-id="CGzgA71k6fZleDV7b7SFyP">
+            <label class="form-label" data-page-node-id="gTB6Vbmh1LTcK23kwD2vVr">章节数</label>
+            <input type="number" class="form-control" id="chapterCount" value="10" data-page-node-id="rzRteAEW4k2MrnHBDWCHTQ">
+          </div>
+          <button class="btn btn-success" onclick="generateData()" data-page-node-id="923IutF4rCHMp6sGPQZOBz">生成测试数据</button>
+          <div id="genResult" class="mt-2" data-page-node-id="bA1288yRUC8uOdpOwG6quh"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 上传 TXT 文件 -->
+  <div class="row mt-4" data-page-node-id="R8LXkwEDsUtniI0wshiY3f">
+    <div class="col-md-12" data-page-node-id="sBW3O45vTVYbkrhoZxSshS">
+      <div class="card" data-page-node-id="RJzanLTTqqyH4BOQR5hcRA">
+        <div class="card-header bg-warning text-dark" data-page-node-id="I0I94MldOC4uuF20hl8byE">上传 TXT 文件自动分章</div>
+        <div class="card-body" data-page-node-id="uamflybC64xGGE6hyherJv">
+          <p data-page-node-id="YzYda5coPMN6Kp4AHitSuz">上传 TXT 文件，自动识别编码、按"第X章"等切分章节，并从文件名/正文中提取书名、作者、简介</p>
+          <div class="mb-3" data-page-node-id="E8wFPEoyFAXX68zWobi5it">
+            <label class="form-label" data-page-node-id="7c3zp5BtRzyuZxY8F0PEy9">书名 <span class="text-muted" data-page-node-id="UAvZA1uoMKDE3SrB76VuDj">(留空则自动提取，优先级：手动 &gt; 正文标注 &gt; 文件名)</span></label>
+            <input type="text" class="form-control" id="txtBookTitle" placeholder="从文件中自动提取" data-page-node-id="uu7RWuVYRrdEERaWvrGa5z">
+          </div>
+          <div class="mb-3" data-page-node-id="GCVJBwuTfLVyWhbjRlZTPR">
+            <label class="form-label" data-page-node-id="05oLAg30rQKb1CiX1YWXAJ">作者 <span class="text-muted" data-page-node-id="mzVORmRBXpNEUONBuUBoFq">(留空则自动提取，识别不到为"佚名")</span></label>
+            <input type="text" class="form-control" id="txtAuthor" placeholder="从文件中自动提取" data-page-node-id="L75TTloAqXdntJI5BwLVKV">
+          </div>
+          <div class="mb-3" data-page-node-id="DjJDJZincIBO2NmT1WKJUB">
+            <label class="form-label" data-page-node-id="nUgVLCCTxs5xhXpwJvN5bM">分类</label>
+            <div data-cat-picker id="txtPicker" data-empty-text="未指定主分类"></div>
+          </div>
+          <div class="mb-3" data-page-node-id="LXIFS2kBjjKZgOxxfuNtXJ">
+            <label class="form-check" data-page-node-id="GJ30gAjUZOj3eNFRnHE7tH">
+              <input type="checkbox" class="form-check-input" id="autoExtract" checked data-page-node-id="351OBcClGoeLjWkUX0sCPy">
+              <span class="form-check-label" data-page-node-id="oOAH7NKiCBCf63vX3FKxMC">启用自动提取（书名、作者、简介）</span>
+            </label>
+          </div>
+          <div class="mb-3" data-page-node-id="syLAMRc2AODyueIZIzhQZf">
+            <label class="form-label" data-page-node-id="K4bN6aGOFZGnOjt7mAZKyI">选择 TXT 文件</label>
+            <input type="file" class="form-control" id="txtFile" accept=".txt" onchange="onTxtFilePicked(this)" data-page-node-id="K6Pd14caFFLiDUzPCXfsfb">
+            <div id="txtFileNameHint" class="form-text text-muted" data-page-node-id="Q8iWSciImsHBmEKtlEwekT"></div>
+          </div>
+          <button class="btn btn-warning" onclick="uploadTxt()" data-page-node-id="XU8A06muSq4Y5ht2oetckL">上传并解析</button>
+          <div id="txtResult" class="mt-2" data-page-node-id="UvAHZSvt4bp6N4s2nDBIaj"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 上传 EPUB 文件 -->
+  <div class="row mt-4" data-page-node-id="lSjsHNDadAk4DaUQzcFlVz">
+    <div class="col-md-12" data-page-node-id="zW3NHaQx4VGrm7ox5kv89C">
+      <div class="card" data-page-node-id="Z3uQloIGx8A2KAi3wEGRTy">
+        <div class="card-header bg-info text-white" data-page-node-id="tLrnTgGGgx1dzaEusEwUZu">上传 EPUB 电子书</div>
+        <div class="card-body" data-page-node-id="QqnQVPOc7y5uuMLTdJk7Z9">
+          <p data-page-node-id="0QvHYgYctylOTsJbJx90lD">上传 EPUB 格式电子书，自动提取书名、作者、简介和所有章节内容</p>
+          <div class="mb-3" data-page-node-id="hyTdcBfrmbvIvUMEwCd9p5">
+            <label class="form-label" data-page-node-id="e1umGzWkrPv1fl4dHdJWTE">书名 <span class="text-muted" data-page-node-id="ld6W9to7hadsHy3RKbZela">(留空则自动提取)</span></label>
+            <input type="text" class="form-control" id="epubBookTitle" placeholder="从EPUB元数据中自动提取" data-page-node-id="D1TkFRzhsXGNJ8ElvZIVQL">
+          </div>
+          <div class="mb-3" data-page-node-id="9zksQWrdq7Ioj87jTLbGZZ">
+            <label class="form-label" data-page-node-id="cRu6YcTRQVg0uA6VUIhVve">作者 <span class="text-muted" data-page-node-id="PAhN7pBncC3umrDtHLPUH6">(留空则自动提取)</span></label>
+            <input type="text" class="form-control" id="epubAuthor" placeholder="从EPUB元数据中自动提取" data-page-node-id="V3KcnEB88ZcwtmNQPlGtY5">
+          </div>
+          <div class="mb-3" data-page-node-id="0jzvtNNEbje4kfes0TxQmG">
+            <label class="form-label" data-page-node-id="abG9Cb4wj5rDMfS6clUnRn">分类</label>
+            <div data-cat-picker id="epubPicker" data-empty-text="未指定主分类"></div>
+          </div>
+          <div class="mb-3 form-check" data-page-node-id="epubKeepStyleWrap">
+            <input type="checkbox" class="form-check-input" id="epubKeepStyle" checked data-page-node-id="epubKeepStyle">
+            <label class="form-check-label" for="epubKeepStyle">保留原文样式（内联 CSS，图片作为独立资源存储）</label>
+          </div>
+          <div class="mb-3" data-page-node-id="SiTMkOdgmk81gFiG9N8l59">
+            <label class="form-label" data-page-node-id="a2ZlxCXC60X8PdLqoaDsFY">选择 EPUB 文件</label>
+            <input type="file" class="form-control" id="epubFile" accept=".epub" data-page-node-id="J7MT42R8GJOZFBWRnpGFWO">
+          </div>
+          <button class="btn btn-info" onclick="uploadEpub()" data-page-node-id="I1C19lP9dZICEnbECLd5Uf">上传并解析</button>
+          <div id="epubResult" class="mt-2" data-page-node-id="Hxzq0nmyH32ZiMynWb5AAf"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="admin-foot">
+  <span>
+    书阁 · 内容管理平台
+    <span class="foot-sep">/</span>
+    <span>阅读 App 运营控制台</span>
+  </span>
+  <span>请勿在公共设备上保持登录状态</span>
+</footer>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // 执行自定义 SQL
+  function importSQL() {
+    const sql = document.getElementById('sqlInput').value.trim();
+    if (!sql) { alert('请输入SQL语句'); return; }
+
+    fetch('/api/admin/import/sql', {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: sql
+    })
+            .then(r => r.json())
+            .then(d => {
+              document.getElementById('sqlResult').innerHTML =
+                      `<div class="alert alert-${d.success ? 'success' : 'danger'}">${d.message}</div>`;
+            });
+  }
+
+  // 快速生成测试数据
+  function generateData() {
+    const picked = CategoryPicker.of('genPicker').getValue();
+    const data = {
+      title: document.getElementById('bookTitle').value,
+      author: document.getElementById('bookAuthor').value,
+      category: picked.main,
+      subCategories: JSON.stringify(picked.subs),
+      intro: document.getElementById('bookIntro').value,
+      chapterCount: parseInt(document.getElementById('chapterCount').value)
+    };
+
+    fetch('/api/admin/import/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    })
+            .then(r => r.json())
+            .then(d => {
+              document.getElementById('genResult').innerHTML =
+                      `<div class="alert alert-${d.success ? 'success' : 'danger'}">${d.message}</div>`;
+            });
+  }
+
+  /** 文件名里的版权/站点/下载序号等垃圾片段（判定口径与后端 TxtBookParser 对齐） */
+  const NAME_JUNK_RE = /(全集|完本|完结|全文|校对|精校|无删减|纯净版|整理|转自|来自|下载|更新|最新|目录|章节|小说网|笔趣|首发|推荐|收藏|阅读|书签|txt|epub|第[〇零一二三四五六七八九十百千万亿两廿0-9]{1,12}[章节回卷部篇集])/i;
+
+  /**
+   * 候选作者是否像个人名。
+   *
+   * <p>文件名里的重复下载序号（如「我的属性修行人生(1).txt」的 1）曾被直接当作者，
+   * 还以「手动输入」的最高优先级传给后端，把正文标注 / EPUB 元数据里解析出的正确作者
+   * 覆盖成了 1。这里按后端 TxtBookParser 的口径兜住：纯数字、数字占比过半、超长、
+   * 命中垃圾词、非中英文开头、含标点的一律不认。
+   */
+  function looksLikeAuthor(s) {
+    if (!s) return false;
+    const t = String(s).trim();
+    if (!t || t.length > 20) return false;
+    if (NAME_JUNK_RE.test(t)) return false;
+    if ((t.match(/\d/g) || []).length > t.length / 2) return false;
+    if (!/^[\u4e00-\u9fffA-Za-z]/.test(t)) return false;
+    if (/[，。！？、；：""'']/.test(t)) return false;
+    return true;
+  }
+
+  /**
+   * 从「》」之后的尾部文本取作者：支持（作者）、作者：醛石、著 醛石、笔名：xxx。
+   *
+   * <p>口径与后端 TxtBookParser.authorFromTail 对齐 —— 合集类文件名常见
+   * 「《书名》作者：某某.txt」，不剥「作者：」前缀会因含全角冒号被 looksLikeAuthor 拒掉，
+   * 清单里的作者列就永远是空的（后端也拿不到 hint，只能退回正文解析）。
+   */
+  function authorFromTailText(tail) {
+    const t = String(tail || '').trim();
+    const m = t.match(/^[（(\[【]\s*([^\s（）()\[\]【】]{1,20})\s*[）)\]】]$/);
+    if (m && looksLikeAuthor(m[1])) return m[1].trim();
+    const t2 = t.replace(/^\s*(?:作\s*者|著\s*者|作者名|写手|笔名|著)\s*[:：\s]\s*/, '')
+                .replace(/\s*(?:著|作品|创作)$/, '')
+                .replace(/^[:：\s]+/, '').trim();
+    return looksLikeAuthor(t2) ? t2 : '';
+  }
+
+  // 选中 TXT 后，用文件名预填书名/作者（仅作提示，后端仍会做完整解析）
+  function parseNameFromFile(name) {
+    let n = (name || '').replace(/\.(txt|epub|umd|azw3|mobi)$/i, '').trim();
+    n = n.replace(/[（(\[【][^）)\]】]{0,40}(小说网|文学网|书屋|笔趣阁|全文阅读|免费下载|txt下载|最新章节|完本|全集|校对|精校|无删减|纯净版|整理|首发)[^）)\]】]{0,40}[）)\]】]/gi, '');
+    n = n.replace(/(?:www\.)?[a-z0-9-]{1,30}\.(?:com|cn|net|org|cc|xyz|co|me)(?:\.[a-z]{2,3})?/gi, '');
+    n = n.replace(/(笔趣阁|八一中文|顶点小说|起点中文网|纵横中文网|番茄小说|小说下载|全文阅读|免费下载|txt下载|最新章节目录|最新章节|全集下载|精校版|无删减版)/gi, '');
+    n = n.replace(/[\s\-—_.]+$/, '').replace(/^[\s\-—_.]+/, '').trim();
+
+    const junk = NAME_JUNK_RE;
+    let title = n, author = '';
+
+    let m = n.match(/^《([^》]{1,60})》\s*(.*)$/);
+    if (m) {
+      title = m[1].trim();
+      author = authorFromTailText(m[2]);
+    } else {
+      m = n.match(/^(.+?)\s*[（(\[【]\s*([^\s（）()\[\]【】]{1,20})\s*[）)\]】]\s*$/);
+      if (m) {
+        title = m[1].trim();
+        if (looksLikeAuthor(m[2])) author = m[2].trim();
+      } else {
+        // 无《》包裹：「书名 作者：某某」「书名-作者：某某」
+        const m2 = n.match(/^(.*?)\s*[-—_\s]?\s*(?:作\s*者|著\s*者|作者名|写手|笔名)\s*[:：\s]\s*([^\s，。、；：（）()\[\]【】]{1,20})\s*$/);
+        if (m2 && looksLikeAuthor(m2[2])) {
+          if (m2[1].trim()) title = m2[1].trim();
+          author = m2[2].trim();
+        } else {
+          // 书名 - 作者（与后端 TxtBookParser 的 m3 同口径）
+          const m3 = n.match(/^(.+?)\s*[-－—_]\s*([^\s\-－—_]{1,12})\s*$/);
+          if (m3 && looksLikeAuthor(m3[2])) {
+            title = m3[1].trim();
+            author = m3[2].trim();
+          }
+        }
+      }
+    }
+    if (author && !looksLikeAuthor(author)) author = '';
+    title = title.replace(/[《》]/g, '').trim();
+    if (junk.test(title)) title = n.replace(/[《》]/g, '').trim();
+    return { title, author };
+  }
+
+  function onTxtFilePicked(input) {
+    const hint = document.getElementById('txtFileNameHint');
+    const file = input.files && input.files[0];
+    if (!file) { hint.textContent = ''; return; }
+    const r = parseNameFromFile(file.name);
+    const tEl = document.getElementById('txtBookTitle');
+    const aEl = document.getElementById('txtAuthor');
+    if (!tEl.value && r.title) tEl.value = r.title;
+    if (!aEl.value && r.author) aEl.value = r.author;
+    hint.textContent = '识别结果：书名「' + (r.title || '未识别') + '」'
+            + (r.author ? '，作者「' + r.author + '」' : '，未识别到作者')
+            + '（可手动修改，最终以后端解析为准）';
+  }
+
+  // 上传 TXT
+  function uploadTxt() {
+    const file = document.getElementById('txtFile').files[0];
+    const title = document.getElementById('txtBookTitle').value;
+    const author = document.getElementById('txtAuthor').value;
+    const picked = CategoryPicker.of('txtPicker').getValue();
+    const autoExtract = document.getElementById('autoExtract').checked;
+
+    if (!file) { alert('请选择文件'); return; }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    if (title) formData.append('title', title);
+    if (author) formData.append('author', author);
+    if (picked.main) formData.append('category', picked.main);
+    if (picked.subs.length) formData.append('subCategories', JSON.stringify(picked.subs));
+    formData.append('autoExtract', autoExtract);
+
+    fetch('/api/admin/import/txt', {
+      method: 'POST',
+      body: formData
+    })
+            .then(r => r.json())
+            .then(d => {
+              document.getElementById('txtResult').innerHTML =
+                      `<div class="alert alert-${d.success ? 'success' : 'danger'}">${d.message}</div>`;
+            });
+  }
+
+  // 上传 EPUB
+  function uploadEpub() {
+    const file = document.getElementById('epubFile').files[0];
+    const title = document.getElementById('epubBookTitle').value;
+    const author = document.getElementById('epubAuthor').value;
+    const picked = CategoryPicker.of('epubPicker').getValue();
+    const keepStyle = document.getElementById('epubKeepStyle').checked;
+
+    if (!file) { alert('请选择EPUB文件'); return; }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (title) formData.append('title', title);
+    if (author) formData.append('author', author);
+    if (picked.main) formData.append('category', picked.main);
+    if (picked.subs.length) formData.append('subCategories', JSON.stringify(picked.subs));
+    formData.append('keepStyle', keepStyle);
+
+    fetch('/api/admin/import/epub', {
+      method: 'POST',
+      body: formData
+    })
+            .then(r => r.json())
+            .then(d => {
+              document.getElementById('epubResult').innerHTML =
+                      `<div class="alert alert-${d.success ? 'success' : 'danger'}">${d.message}</div>`;
+            });
+  }
+
+  /* ===================== 批量导入（文件夹 / 多文件） =====================
+     设计：文件清单由浏览器侧维护（<input webkitdirectory> 可一次取回整个目录），
+     用户勾选后逐个串行上传到已有的 /api/admin/import/txt|epub。
+     逐文件独立事务 => 单个文件失败不影响其他文件，且能拿到字节级上传进度。 */
+  const BATCH_EXTS = ['.txt', '.epub'];
+  const batchState = {
+    items: [],        // 清单项：{id,file,relPath,ext,title,author,category,checked,status,message,bookId,chapters,uploadPct}
+    seq: 0,
+    queue: [],        // 本次导入的 item id 列表
+    running: false,
+    paused: false,
+    cancelled: false,
+    currentXhr: null,
+    startedAt: 0,
+    timer: null
+  };
+
+  function batchEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  function batchSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+  }
+
+  function batchShort(s, n) {
+    s = String(s || '');
+    return s.length > n ? '…' + s.slice(s.length - n) : s;
+  }
+
+  function batchExtOf(name) {
+    const i = String(name || '').lastIndexOf('.');
+    return i < 0 ? '' : String(name).slice(i).toLowerCase();
+  }
+
+  function batchFind(id) {
+    return batchState.items.find(i => i.id === id);
+  }
+
+  // 把选择的文件加入清单（文件夹会递归带出所有文件，非 TXT/EPUB 自动忽略）
+  function batchAddFiles(fileList) {
+    const seen = new Set(batchState.items.map(i => i.file.name + '|' + i.file.size + '|' + i.file.lastModified));
+    let added = 0, ignored = 0, dup = 0;
+    for (const f of fileList) {
+      const ext = batchExtOf(f.name);
+      if (BATCH_EXTS.indexOf(ext) < 0) { ignored++; continue; }
+      const dedupKey = f.name + '|' + f.size + '|' + f.lastModified;
+      if (seen.has(dedupKey)) { dup++; continue; }
+      seen.add(dedupKey);
+      const guessed = parseNameFromFile(f.name);
+      batchState.items.push({
+        id: ++batchState.seq,
+        file: f,
+        relPath: f.webkitRelativePath || f.name,
+        ext: ext,
+        title: guessed.title || '',
+        author: guessed.author || '',
+        category: '',
+        subs: [],
+        checked: true,
+        status: 'pending',
+        message: '',
+        bookId: null,
+        chapters: null,
+        uploadPct: 0,
+        // 重复导入相关：dup = 库中同名书（预检结果），dupAction = 用户选的处理方式
+        dup: null,
+        dupAction: '',
+        dupRemark: '',
+        effectiveTitle: '',
+        onDuplicate: '',
+        replacedBookId: null
+      });
+      added++;
+    }
+    const tips = [];
+    if (added) tips.push('新增 ' + added + ' 个');
+    if (ignored) tips.push('忽略非 TXT/EPUB ' + ignored + ' 个');
+    if (dup) tips.push('重复已忽略 ' + dup + ' 个');
+    document.getElementById('batchListSummary').textContent = batchState.items.length
+      ? (tips.join('，') + '；清单共 ' + batchState.items.length + ' 个文件')
+      : '尚未选择文件';
+    batchRenderTable();
+    batchUpdateProgressStats();
+    scheduleDupCheck();
+  }
+
+  function batchStatusHtml(it) {
+    if (it.status === 'uploading') {
+      return '<div class="progress" style="height:6px;"><div class="progress-bar" style="width:' + it.uploadPct + '%"></div></div>'
+        + '<span class="text-primary">上传中 ' + it.uploadPct + '%</span>';
+    }
+    if (it.status === 'success') {
+      let s = '✓ 成功' + (it.chapters != null ? ' · ' + it.chapters + ' 章' : '');
+      if (it.replacedBookId) {
+        s += ' · 已替换旧书';
+      } else if (it.effectiveTitle && it.title && it.effectiveTitle !== it.title) {
+        s += ' · ' + batchEsc(batchShort(it.effectiveTitle, 26));
+      }
+      return '<span class="text-success">' + s + '</span>';
+    }
+    if (it.status === 'skipped') return '<span class="text-secondary">已跳过（保留库中已导入的）</span>';
+    if (it.status === 'failed') return '<span class="text-danger">✗ ' + batchEsc(batchShort(it.message || '导入失败', 60)) + '</span>';
+    return '<span class="text-muted">待导入</span>';
+  }
+
+  function batchRenderTable() {
+    const tbody = document.getElementById('batchTableBody');
+    const empty = document.getElementById('batchEmpty');
+    if (!batchState.items.length) {
+      tbody.innerHTML = '';
+      empty.style.display = '';
+      batchRenderDup();
+      return;
+    }
+    empty.style.display = 'none';
+    const lock = batchState.running ? 'disabled' : '';
+    tbody.innerHTML = batchState.items.map(it => `
+      <tr data-id="${it.id}">
+        <td><input type="checkbox" ${it.checked ? 'checked' : ''} ${lock} onchange="batchToggleItem(${it.id}, this.checked)"></td>
+        <td class="text-truncate" style="max-width:260px;" title="${batchEsc(it.relPath)}">${batchEsc(batchShort(it.relPath, 48))}</td>
+        <td>${it.ext === '.epub' ? '<span class="badge bg-info">EPUB</span>' : '<span class="badge bg-warning text-dark">TXT</span>'}</td>
+        <td class="small text-muted">${batchSize(it.file.size)}</td>
+        <td><input type="text" class="form-control form-control-sm" value="${batchEsc(it.title)}" ${lock}
+                   onchange="batchSetField(${it.id}, 'title', this.value)">
+            ${batchDupBadge(it)}</td>
+        <td><input type="text" class="form-control form-control-sm" value="${batchEsc(it.author)}" ${lock}
+                   placeholder="留空则自动解析" title="留空则由后端从正文标注 / EPUB 元数据 / 文件名解析"
+                   onchange="batchSetField(${it.id}, 'author', this.value)"></td>
+        <td>
+          <div data-cat-picker data-row-id="${it.id}" data-compact="1"
+               data-empty-text="继承统一分类" data-disabled="${batchState.running ? '1' : '0'}"
+               data-main="${batchEsc(it.category)}" data-subs='${batchEsc(JSON.stringify(it.subs || []))}'></div>
+        </td>
+        <td class="small" id="batchSt-${it.id}">${batchStatusHtml(it)}</td>
+      </tr>`).join('');
+    batchInitRowPickers();
+    batchRenderDup();
+  }
+
+  /** 主清单里给重复文件打个标记，指向下方「重复导入清单」 */
+  function batchDupBadge(it) {
+    if (!it.dup || !(it.dup.books || []).length) return '';
+    const label = it.dupAction === 'replace' ? '重复 · 将替换'
+      : it.dupAction === 'rename' ? '重复 · 两本都留' : '重复 · 将跳过';
+    return '<span class="badge bg-danger mt-1">' + label + '</span>';
+  }
+
+  /**
+   * 清单每行的分类选择器：整表重渲染后需要重新挂载，并把行内改动写回 batchState.items。
+   * 组件实例由 CategoryPicker 缓存（el.__catPicker），故必须重渲染后再 initAll。
+   */
+  function batchInitRowPickers() {
+    const tbody = document.getElementById('batchTableBody');
+    CategoryPicker.initAll(tbody).forEach(inst => {
+      const id = parseInt(inst.el.dataset.rowId, 10);
+      inst.option.onChange = function (main, subs) { batchSetRowCategory(id, main, subs); };
+    });
+  }
+
+  function batchSetRowCategory(id, main, subs) {
+    const it = batchFind(id);
+    if (!it) return;
+    it.category = main || '';
+    it.subs = (subs || []).slice();
+  }
+
+  function batchUpdateRowStatus(it) {
+    const cell = document.getElementById('batchSt-' + it.id);
+    if (cell) cell.innerHTML = batchStatusHtml(it);
+    const row = document.querySelector('#batchTableBody tr[data-id="' + it.id + '"]');
+    if (row) {
+      row.className = it.status === 'failed' ? 'table-danger'
+        : it.status === 'success' ? 'table-success'
+          : it.status === 'skipped' ? 'table-warning' : '';
+    }
+  }
+
+  function batchToggleItem(id, checked) {
+    const it = batchFind(id);
+    if (it) { it.checked = checked; batchUpdateProgressStats(); }
+  }
+
+  function batchSetField(id, field, value) {
+    const it = batchFind(id);
+    if (it) it[field] = value;
+  }
+
+  function batchSelectAll(checked) {
+    batchState.items.forEach(it => it.checked = checked);
+    document.getElementById('batchSelectAllBox').checked = checked;
+    batchRenderTable();
+    batchUpdateProgressStats();
+  }
+
+  function batchInvert() {
+    batchState.items.forEach(it => it.checked = !it.checked);
+    batchRenderTable();
+    batchUpdateProgressStats();
+  }
+
+  function batchSelectByExt(ext) {
+    batchState.items.forEach(it => it.checked = (it.ext === ext));
+    batchRenderTable();
+    batchUpdateProgressStats();
+  }
+
+  function batchApplyCategoryToChecked() {
+    const picked = CategoryPicker.of('unifiedPicker').getValue();
+    if (!picked.main && !picked.subs.length) { alert('请先选择统一分类（主分类或子分类）'); return; }
+    let n = 0;
+    batchState.items.forEach(it => {
+      if (!it.checked) return;
+      // 子分类为空时连同主分类一起覆盖；否则只覆盖子分类，保留各行已设的主分类
+      if (picked.main) it.category = picked.main;
+      it.subs = picked.subs.slice();
+      n++;
+    });
+    batchRenderTable();
+    const label = (picked.main ? picked.main : '主分类不变')
+      + (picked.subs.length ? ' / ' + picked.subs.join('、') : ' / 子分类清空');
+    document.getElementById('batchListSummary').textContent =
+      n ? '已把分类「' + label + '」应用到 ' + n + ' 个已选文件' : '没有勾选任何文件';
+  }
+
+  /* ===================== 重复导入清单 =====================
+     选完文件后自动按书名预检库中是否已有同名书，命中的列进清单逐本决定：
+       skip    保留库中已导入的（默认，等同老的「跳过同名书籍」）
+       replace 用新文件替换 —— 后端连旧书的章节 / 读者书架 / 阅读进度一起删掉
+       rename  两本都留，新书书名后加备注（备注留空用「重复导入」）
+     没进清单的文件沿用「跳过同名书籍」勾选框的老逻辑。 */
+
+  let dupTimer = null;
+  let dupChecking = false;
+
+  function dupItems() {
+    return batchState.items.filter(it => it.dup && (it.dup.books || []).length);
+  }
+
+  function scheduleDupCheck() {
+    if (dupTimer) clearTimeout(dupTimer);
+    dupTimer = setTimeout(dupCheck, 400);
+  }
+
+  /** 同名处理的最终策略：进清单的按清单选，其余回落「跳过同名书籍」勾选框 */
+  function dupActionOf(it) {
+    if (it.dup && (it.dup.books || []).length) return it.dupAction || 'skip';
+    return document.getElementById('batchSkipExisting').checked ? 'skip' : 'import';
+  }
+
+  async function dupCheck() {
+    if (batchState.running || dupChecking) return;
+    const titles = [];
+    batchState.items.forEach(it => {
+      const t = (it.title || '').trim();
+      if (t && titles.indexOf(t) < 0) titles.push(t);
+    });
+    const stateEl = document.getElementById('dupState');
+    if (!titles.length) {
+      batchState.items.forEach(it => { it.dup = null; it.dupAction = ''; });
+      if (stateEl) stateEl.textContent = '';
+      batchRenderTable();
+      return;
+    }
+    dupChecking = true;
+    if (stateEl) stateEl.textContent = '检测重复中…';
+    try {
+      const existing = {};
+      for (let i = 0; i < titles.length; i += 200) {
+        const r = await fetch('/api/admin/import/check-duplicates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ titles: titles.slice(i, i + 200) })
+        });
+        if (r.status === 401) { window.location.replace('login.html'); return; }
+        const d = await r.json();
+        const ex = (d && d.success && d.data && d.data.existing) || {};
+        Object.keys(ex).forEach(k => { existing[k] = ex[k]; });
+      }
+      batchState.items.forEach(it => {
+        const t = (it.title || '').trim();
+        const books = t ? existing[t] : null;
+        it.dup = books && books.length ? { books: books } : null;
+        // 默认「保留库中已导入的」；用户已经选过的保持不动
+        if (it.dup) {
+          if (!it.dupAction) it.dupAction = 'skip';
+        } else {
+          it.dupAction = '';
+          it.dupRemark = '';
+        }
+      });
+      if (stateEl) {
+        const n = dupItems().length;
+        stateEl.textContent = n ? '检测到 ' + n + ' 个重复' : '未检测到重复';
+      }
+    } catch (e) {
+      // 预检失败不影响导入：这些文件退回「跳过同名书籍」勾选框的老逻辑
+      if (stateEl) stateEl.textContent = '重复检测失败（不影响导入）';
+    } finally {
+      dupChecking = false;
+      batchRenderTable();
+    }
+  }
+
+  function dupRecheck() {
+    if (batchState.running) return;
+    const stateEl = document.getElementById('dupState');
+    if (stateEl) stateEl.textContent = '';
+    dupCheck();
+  }
+
+  function batchRenderDup() {
+    const wrap = document.getElementById('dupWrap');
+    const list = dupItems();
+    document.getElementById('dupCount').textContent = list.length;
+    const bulk = document.getElementById('dupBulk');
+    if (bulk) bulk.querySelectorAll('button').forEach(b => { b.disabled = !!batchState.running; });
+    if (!list.length) {
+      wrap.style.display = 'none';
+      document.getElementById('dupTableBody').innerHTML = '';
+      return;
+    }
+    wrap.style.display = '';
+    document.getElementById('dupTableBody').innerHTML = list.map(it => {
+      const books = it.dup.books || [];
+      const detail = books.map(b => {
+        const when = b.createdAt ? String(b.createdAt).replace('T', ' ').slice(0, 16) : '—';
+        return '<div>' + batchEsc(b.title)
+          + ' <span class="text-muted">· ' + batchEsc(b.author || '佚名')
+          + ' · ' + (b.chapterCount == null ? '?' : b.chapterCount) + ' 章 · 导入于 ' + batchEsc(when)
+          + (b.category ? ' · ' + batchEsc(b.category) : '') + '</span>'
+          + ' <a href="books.html?keyword=' + encodeURIComponent(b.title)
+          + '" target="_blank" class="ms-1">查看</a></div>';
+      }).join('');
+      const rowLock = batchState.running ? 'disabled' : '';
+      const remarkLock = (batchState.running || it.dupAction !== 'rename') ? 'disabled' : '';
+      return '<tr data-id="' + it.id + '">'
+        + '<td class="small" title="' + batchEsc(it.relPath) + '">'
+        + batchEsc(batchShort(it.title || it.file.name, 32))
+        + '<span class="badge bg-danger ms-1">已有 ' + books.length + ' 本</span></td>'
+        + '<td class="small">' + detail + '</td>'
+        + '<td><select class="form-select form-select-sm" ' + rowLock + ' onchange="dupSetAction(' + it.id + ', this.value)">'
+        + '<option value="skip"' + (it.dupAction === 'skip' ? ' selected' : '') + '>保留库中已导入的（跳过本文件）</option>'
+        + '<option value="replace"' + (it.dupAction === 'replace' ? ' selected' : '') + '>用新文件替换（删旧书再导入）</option>'
+        + '<option value="rename"' + (it.dupAction === 'rename' ? ' selected' : '') + '>两本都留，书名后加备注</option>'
+        + '</select></td>'
+        + '<td><input type="text" class="form-control form-control-sm" ' + remarkLock
+        + ' value="' + batchEsc(it.dupRemark || '') + '" placeholder="留空用「重复导入」" maxlength="30"'
+        + ' onchange="dupSetRemark(' + it.id + ', this.value)"></td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  function dupSetAction(id, action) {
+    const it = batchFind(id);
+    if (!it || !it.dup) return;
+    it.dupAction = action;
+    if (action !== 'rename') it.dupRemark = '';
+    batchRenderTable();
+  }
+
+  function dupSetRemark(id, value) {
+    const it = batchFind(id);
+    if (it) it.dupRemark = value;
+  }
+
+  function dupSetAll(action) {
+    if (batchState.running) return;
+    dupItems().forEach(it => {
+      it.dupAction = action;
+      if (action !== 'rename') it.dupRemark = '';
+    });
+    batchRenderTable();
+  }
+
+  function batchClearList() {
+    if (batchState.running) { alert('导入进行中，请先取消或等待完成'); return; }
+    batchState.items = [];
+    batchState.queue = [];
+    batchState.seq = 0;
+    document.getElementById('batchListSummary').textContent = '尚未选择文件';
+    document.getElementById('batchSummary').innerHTML = '';
+    document.getElementById('batchProgressWrap').style.display = 'none';
+    document.getElementById('batchRetryBtn').style.display = 'none';
+    document.getElementById('batchGotoBooks').style.display = 'none';
+    document.getElementById('batchDirInput').value = '';
+    document.getElementById('batchFilesInput').value = '';
+    batchRenderTable();
+    batchUpdateProgressStats();
+  }
+
+  function batchUpdateProgressStats() {
+    const total = batchState.queue.length;
+    let ok = 0, skip = 0, fail = 0, done = 0;
+    batchState.queue.forEach(id => {
+      const it = batchFind(id);
+      if (!it) return;
+      if (it.status === 'success') { ok++; done++; }
+      else if (it.status === 'skipped') { skip++; done++; }
+      else if (it.status === 'failed') { fail++; done++; }
+    });
+    document.getElementById('statTotal').textContent = total;
+    document.getElementById('statOk').textContent = ok;
+    document.getElementById('statSkip').textContent = skip;
+    document.getElementById('statFail').textContent = fail;
+    document.getElementById('statLeft').textContent = Math.max(0, total - done);
+    const pct = total ? Math.round(done * 100 / total) : 0;
+    const bar = document.getElementById('batchProgressBar');
+    bar.style.width = pct + '%';
+    bar.textContent = pct + '%';
+  }
+
+  function batchTickElapsed() {
+    if (!batchState.startedAt) return;
+    const s = Math.round((Date.now() - batchState.startedAt) / 1000);
+    document.getElementById('statElapsed').textContent =
+      '已用 ' + (s < 60 ? s + ' 秒' : Math.floor(s / 60) + ' 分 ' + (s % 60) + ' 秒');
+  }
+
+  // 单个文件上传（XHR 才能拿到上传进度）
+  function batchUploadOne(it) {
+    return new Promise(resolve => {
+      const fd = new FormData();
+      fd.append('file', it.file, it.file.name);
+      if (it.title) fd.append('title', it.title);
+      if (it.author) fd.append('author', it.author);
+      // 分类：行内设置优先，未设置则继承「统一分类」（以单行为准）
+      const unified = CategoryPicker.of('unifiedPicker').getValue();
+      const rowMain = (it.category || '').trim();
+      const main = rowMain || unified.main;
+      const subs = (it.subs && it.subs.length) ? it.subs : (rowMain ? [] : unified.subs);
+      if (main) fd.append('category', main);
+      if (subs && subs.length) fd.append('subCategories', JSON.stringify(subs));
+      if (it.ext === '.epub') {
+        fd.append('keepStyle', document.getElementById('batchKeepStyle').checked ? 'true' : 'false');
+      } else {
+        fd.append('autoExtract', document.getElementById('batchAutoExtract').checked ? 'true' : 'false');
+      }
+      // 同名书籍处理：进「重复导入清单」的按清单里选的处理，其余回落「跳过同名书籍」勾选框
+      const act = dupActionOf(it);
+      fd.append('onDuplicate', act);
+      if (act === 'rename' && (it.dupRemark || '').trim()) {
+        fd.append('titleSuffix', it.dupRemark.trim());
+      }
+
+      const url = it.ext === '.epub' ? '/api/admin/import/epub' : '/api/admin/import/txt';
+      const xhr = new XMLHttpRequest();
+      batchState.currentXhr = xhr;
+      xhr.open('POST', url, true);
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) {
+          it.uploadPct = Math.round(e.loaded * 100 / e.total);
+          batchUpdateRowStatus(it);
+        }
+      };
+      xhr.onload = function () {
+        batchState.currentXhr = null;
+        if (xhr.status === 401) { window.location.replace('login.html'); resolve(); return; }
+        let d = null;
+        try { d = JSON.parse(xhr.responseText); } catch (e) { d = null; }
+        if (!d) {
+          it.status = 'failed';
+          it.message = '响应解析失败（HTTP ' + xhr.status + '）';
+        } else if (d.success) {
+          const data = d.data || {};
+          it.status = data.skipped ? 'skipped' : 'success';
+          it.message = d.message || '';
+          it.bookId = data.bookId != null ? data.bookId : null;
+          it.chapters = data.chapterCount != null ? data.chapterCount : null;
+          // 后端实际用掉的书名（「两本都留」时带备注）与旧书替换情况，回填到清单里看得见
+          it.effectiveTitle = data.title || '';
+          it.onDuplicate = data.onDuplicate || '';
+          it.replacedBookId = data.replacedBookId != null ? data.replacedBookId : null;
+        } else {
+          it.status = 'failed';
+          it.message = d.message || '导入失败';
+        }
+        resolve();
+      };
+      xhr.onerror = function () { batchState.currentXhr = null; it.status = 'failed'; it.message = '网络错误'; resolve(); };
+      xhr.onabort = function () { batchState.currentXhr = null; it.status = 'failed'; it.message = '已取消'; resolve(); };
+      xhr.send(fd);
+    });
+  }
+
+  async function batchStart() {
+    if (batchState.running) return;
+    const picked = batchState.items.filter(it => it.checked);
+    if (!picked.length) { alert('请先勾选要导入的文件'); return; }
+    const alreadyDone = picked.filter(it => it.status === 'success' || it.status === 'skipped');
+
+    const seen = {};
+    let dupNames = 0;
+    picked.forEach(it => {
+      const t = (it.title || it.file.name).trim();
+      if (seen[t]) dupNames++; else seen[t] = 1;
+    });
+    let msg = '即将导入 ' + picked.length + ' 个文件，每个文件会生成一本独立书籍。';
+    const dups = picked.filter(it => it.dup && (it.dup.books || []).length);
+    if (alreadyDone.length) {
+      msg += '\n\n其中 ' + alreadyDone.length + ' 个已经导入过，将重新导入'
+        + '（若该文件的书名已存在，按「重复导入清单」里选的处理方式执行）。';
+    }
+    if (dups.length) {
+      const nSkip = dups.filter(it => (it.dupAction || 'skip') === 'skip').length;
+      const nReplace = dups.filter(it => it.dupAction === 'replace').length;
+      const nRename = dups.filter(it => it.dupAction === 'rename').length;
+      msg += '\n\n重复导入清单 ' + dups.length + ' 个：保留库中已导入 ' + nSkip
+        + '、用新文件替换 ' + nReplace + '、两本都留 ' + nRename + '。';
+    }
+    if (dupNames) msg += '\n\n注意：清单中有 ' + dupNames + ' 个重名，未勾选「跳过同名书籍」时会产生重复书籍。';
+    if (!confirm(msg)) return;
+
+    // 重新导入时清掉旧结果，避免进度统计把上一轮的成功数算进来
+    alreadyDone.forEach(it => { it.status = 'pending'; it.uploadPct = 0; it.message = ''; });
+
+    batchState.queue = picked.map(it => it.id);
+    batchState.cancelled = false;
+    batchState.paused = false;
+    batchState.running = true;
+    batchState.startedAt = Date.now();
+    batchState.timer = setInterval(batchTickElapsed, 1000);
+
+    document.getElementById('batchProgressWrap').style.display = '';
+    document.getElementById('batchStartBtn').style.display = 'none';
+    document.getElementById('batchPauseBtn').style.display = '';
+    document.getElementById('batchPauseBtn').textContent = '暂停';
+    document.getElementById('batchCancelBtn').style.display = '';
+    document.getElementById('batchRetryBtn').style.display = 'none';
+    document.getElementById('batchSummary').innerHTML = '';
+    batchRenderTable();
+    batchUpdateProgressStats();
+
+    for (const id of batchState.queue) {
+      if (batchState.cancelled) break;
+      while (batchState.paused && !batchState.cancelled) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+      if (batchState.cancelled) break;
+      const it = batchFind(id);
+      if (!it) continue;
+      it.status = 'uploading';
+      it.uploadPct = 0;
+      batchUpdateRowStatus(it);
+      document.getElementById('statCurrent').textContent = it.file.name;
+      await batchUploadOne(it);
+      batchUpdateRowStatus(it);
+      batchUpdateProgressStats();
+    }
+
+    batchState.running = false;
+    batchState.currentXhr = null;
+    if (batchState.timer) { clearInterval(batchState.timer); batchState.timer = null; }
+    batchTickElapsed();
+    document.getElementById('statCurrent').textContent = '-';
+    document.getElementById('batchPauseBtn').style.display = 'none';
+    document.getElementById('batchCancelBtn').style.display = 'none';
+    document.getElementById('batchStartBtn').style.display = '';
+    batchRenderTable();
+    batchUpdateProgressStats();
+    batchFinish();
+  }
+
+  function batchFinish() {
+    let ok = 0, skip = 0, fail = 0;
+    batchState.queue.forEach(id => {
+      const it = batchFind(id);
+      if (!it) return;
+      if (it.status === 'success') ok++;
+      else if (it.status === 'skipped') skip++;
+      else if (it.status === 'failed') fail++;
+    });
+    document.getElementById('batchSummary').innerHTML = (batchState.cancelled
+      ? '<span class="text-warning">已取消。</span> ' : '<span class="text-success">导入结束。</span> ')
+      + '成功 <strong>' + ok + '</strong>，跳过 <strong>' + skip + '</strong>，失败 <strong>' + fail + '</strong>。';
+    document.getElementById('batchRetryBtn').style.display = fail > 0 ? '' : 'none';
+
+    const goto = document.getElementById('batchGotoBooks');
+    const unified = CategoryPicker.of('unifiedPicker').getValue();
+    if (ok > 0) {
+      goto.style.display = '';
+      const params = new URLSearchParams();
+      if (unified.main) params.set('category', unified.main);
+      unified.subs.forEach(s => params.append('sub', s));
+      const qs = params.toString();
+      goto.href = 'books.html' + (qs ? '?' + qs : '');
+      goto.textContent = unified.main ? '到书籍管理（按「' + unified.main + '」筛选）' : '到书籍管理';
+    } else {
+      goto.style.display = 'none';
+    }
+  }
+
+  function batchTogglePause() {
+    batchState.paused = !batchState.paused;
+    document.getElementById('batchPauseBtn').textContent = batchState.paused ? '继续' : '暂停';
+    if (batchState.paused) {
+      document.getElementById('statCurrent').textContent = '已暂停（当前文件上传完成后停下）';
+    }
+  }
+
+  function batchCancel() {
+    if (!confirm('确定取消导入？已完成的书籍会保留，未开始的不再导入。')) return;
+    batchState.cancelled = true;
+    batchState.paused = false;
+    if (batchState.currentXhr) { try { batchState.currentXhr.abort(); } catch (e) { /* 忽略 */ } }
+  }
+
+  function batchRetryFailed() {
+    const failed = batchState.items.filter(it => it.status === 'failed');
+    if (!failed.length) return;
+    batchState.items.forEach(it => { it.checked = false; });
+    failed.forEach(it => { it.status = 'pending'; it.message = ''; it.uploadPct = 0; it.checked = true; });
+    batchRenderTable();
+    batchUpdateProgressStats();
+    batchStart();
+  }
+
+  document.addEventListener('DOMContentLoaded', async function () {
+    // 分类选择器（统一分类 / 清单行 / 三个单文件表单）依赖分类树，先取到再初始化
+    await CategoryPicker.load();
+    CategoryPicker.initAll(document);
+    document.getElementById('batchDirInput').addEventListener('change', function (e) {
+      batchAddFiles(e.target.files);
+      e.target.value = '';
+    });
+    document.getElementById('batchFilesInput').addEventListener('change', function (e) {
+      batchAddFiles(e.target.files);
+      e.target.value = '';
+    });
+  });
+
+  // 导入过程中关闭/刷新页面给出提醒
+  window.addEventListener('beforeunload', function (e) {
+    if (batchState.running) { e.preventDefault(); e.returnValue = ''; }
+  });
+</script>
+</body>
+</html>

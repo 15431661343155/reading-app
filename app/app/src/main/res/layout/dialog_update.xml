@@ -1,120 +1,235 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="280dp"
+<!--
+  更新提示弹窗（国风探出版）—— 与登录提示弹窗（dialog_login_prompt）同一套视觉语言：
+  · 结构：根 FrameLayout 预留 64dp 顶部空间给 App 图标；图标底部 20dp 压进卡片上沿，
+    形成「图标从卡片探出」的效果；图标右上角朱砂「新」印章。
+  · 卡片复用登录弹窗素材：bg_login_prompt_card / ic_login_prompt_divider /
+    ic_login_prompt_wave / ic_login_prompt_cloud / bg_login_prompt_btn_ghost / _primary。
+  · 与 LoginHelper.showLoginPrompt 相同的窗口约定：卡片固定宽 280dp，
+    窗口宽由 UpdateManager 里 setLayout(312dp) 显式指定（inflate(layout,null) 会丢根 layout_*）。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:background="@drawable/bg_dialog"
-    android:padding="24dp">
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:paddingHorizontal="16dp">
 
-    <TextView
-        android:id="@+id/tv_update_title"
-        android:layout_width="wrap_content"
+    <!-- App 图标（完整启动图标，禁用 ic_launcher_foreground——其自带透明安全区会显小） -->
+    <FrameLayout
+        android:layout_width="84dp"
+        android:layout_height="84dp"
+        android:layout_gravity="top|center_horizontal"
+        android:contentDescription="@null"
+        android:elevation="20dp"
+        android:outlineProvider="none">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:layout_width="84dp"
+            android:layout_height="84dp"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:src="@mipmap/ic_launcher"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.AboutAppIcon" />
+
+        <!-- 朱砂「新」印章：translation 负偏移出容器右肩（负 margin 不可靠） -->
+        <TextView
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_gravity="top|end"
+            android:background="@drawable/bg_update_seal"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:text="新"
+            android:textColor="#FFF7EA"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:translationX="10dp"
+            android:translationY="-9dp" />
+    </FrameLayout>
+
+    <!-- 卡片：宽度必须写死 280dp（窗口宽 312dp 在 UpdateManager 显式指定） -->
+    <FrameLayout
+        android:layout_width="280dp"
         android:layout_height="wrap_content"
-        android:text="发现新版本"
-        android:textColor="@color/ios_text_primary"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:layout_gravity="center_horizontal"/>
-
-    <TextView
-        android:id="@+id/tv_version"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="v1.5.4"
-        android:textColor="@color/ios_text_secondary"
-        android:textSize="14sp"
-        android:layout_gravity="center_horizontal"/>
-
-    <TextView
-        android:id="@+id/tv_update_content"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="新版本更新内容"
-        android:textColor="@color/ios_text_primary"
-        android:textSize="15sp"
-        android:lineSpacingExtra="4dp"/>
-
-    <TextView
-        android:id="@+id/tv_file_size"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="大小：0 MB"
-        android:textColor="@color/ios_text_secondary"
-        android:textSize="13sp"/>
-
-    <!-- 下载进度区域 -->
-    <LinearLayout
-        android:id="@+id/layout_progress"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:orientation="vertical"
-        android:visibility="gone">
-
-        <ProgressBar
-            android:id="@+id/progress_bar"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="8dp"
-            android:max="100"
-            android:progress="0"
-            android:progressDrawable="@drawable/progress_update"/>
+        android:layout_gravity="top"
+        android:layout_marginTop="64dp"
+        android:background="@drawable/bg_login_prompt_card"
+        android:elevation="14dp"
+        android:outlineAmbientShadowColor="#402E1E0A"
+        android:outlineSpotShadowColor="#402E1E0A">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
+            android:orientation="vertical"
+            android:paddingStart="22dp"
+            android:paddingTop="34dp"
+            android:paddingEnd="22dp"
+            android:paddingBottom="22dp">
 
             <TextView
-                android:id="@+id/tv_download_status"
-                android:layout_width="0dp"
+                android:id="@+id/tv_update_title"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="准备下载..."
-                android:textColor="@color/ios_text_secondary"
-                android:textSize="12sp"/>
+                android:fontFamily="serif"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.2"
+                android:text="发现新版本"
+                android:textColor="#33261A"
+                android:textSize="22sp"
+                android:textStyle="bold" />
 
+            <ImageView
+                android:layout_width="130dp"
+                android:layout_height="10dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_login_prompt_divider" />
+
+            <!-- 版本号 + 包大小合并胶囊 -->
             <TextView
-                android:id="@+id/tv_download_percent"
+                android:id="@+id/tv_version"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="0%"
-                android:textColor="@color/ios_text_secondary"
-                android:textSize="12sp"/>
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_update_capsule"
+                android:fontFamily="serif"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="4dp"
+                android:textColor="#8C8177"
+                android:textSize="12sp" />
+
+            <!-- 更新内容（后台填写；空则显示「修复已知问题」）。下载时隐藏、由进度条顶替 -->
+            <TextView
+                android:id="@+id/tv_update_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_update_notes"
+                android:fontFamily="serif"
+                android:lineSpacingExtra="4dp"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="12dp"
+                android:textColor="#7A6F63"
+                android:textSize="13sp" />
+
+            <!-- 下载进度区域（与更新内容互斥显示） -->
+            <LinearLayout
+                android:id="@+id/layout_progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:id="@+id/progress_bar"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="8dp"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressDrawable="@drawable/progress_update" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tv_download_status"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="serif"
+                        android:text="准备下载..."
+                        android:textColor="#8C8177"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tv_download_percent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="serif"
+                        android:text="0%"
+                        android:textColor="#8C8177"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="10dp"
+                android:layout_marginTop="14dp"
+                android:contentDescription="@null"
+                android:scaleType="fitXY"
+                android:src="@drawable/ic_login_prompt_wave" />
+
+            <LinearLayout
+                android:id="@+id/layout_buttons"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="18dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btn_cancel"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_login_prompt_btn_ghost"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="serif"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="稍后再说"
+                    android:textColor="#5A4A32"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/btn_update"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_login_prompt_btn_primary"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="serif"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="立即更新"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/layout_buttons"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:orientation="horizontal">
+        <!-- 卡片左上角云纹 -->
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="16dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="6dp"
+            android:layout_marginTop="8dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_login_prompt_cloud" />
 
-        <Button
-            android:id="@+id/btn_cancel"
-            android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_weight="1"
-            android:text="稍后再说"
-            android:textColor="@color/ios_text_secondary"
-            android:textSize="15sp"
-            android:background="@drawable/btn_dialog_cancel"
-            android:layout_marginEnd="8dp"/>
-
-        <Button
-            android:id="@+id/btn_update"
-            android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_weight="1"
-            android:text="立即更新"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:background="@drawable/btn_dialog_update"/>
-    </LinearLayout>
-
-</LinearLayout>
+        <!-- 卡片右上角云纹 -->
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="16dp"
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="6dp"
+            android:layout_marginTop="8dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_login_prompt_cloud" />
+    </FrameLayout>
+</FrameLayout>

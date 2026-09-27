@@ -6,7 +6,7 @@
     android:background="?android:attr/windowBackground">
 
     <!-- 顶部工具栏 -->
-    <androidx.appcompat.widget.Toolbar
+    <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
@@ -14,6 +14,7 @@
         android:background="@color/ios_bg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="书籍详情"
+        app:titleCentered="true"
         app:titleTextColor="@color/ios_text_primary" />
 
     <!-- 内容区域 -->
@@ -237,8 +238,8 @@
 
             <ImageView
                 android:id="@+id/iv_shelf_icon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:src="@drawable/icon_bookshelf_add"
                 android:contentDescription="加入书架" />
 
@@ -247,9 +248,9 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="加入书架"
-                android:textSize="14sp"
+                android:textSize="9sp"
                 android:textColor="?android:attr/textColorPrimary"
-                android:layout_marginTop="4dp" />
+                android:layout_marginTop="2dp" />
 
         </LinearLayout>
 

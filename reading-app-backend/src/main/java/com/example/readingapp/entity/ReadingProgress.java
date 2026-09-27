@@ -6,6 +6,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Data
 @Entity
@@ -68,4 +69,16 @@ public class ReadingProgress {
 
     public String getTextAnchor() { return textAnchor; }
     public void setTextAnchor(String textAnchor) { this.textAnchor = textAnchor; }
+
+    /**
+     * 供客户端比较「最后阅读时间」用的绝对时间戳（epoch 毫秒）。
+     *
+     * <p>{@link #updatedAt} 是「服务器本地时间、不带时区」，客户端若按自己设备时区解析，
+     * 在设备时区 ≠ 服务器时区时比较会失真（模拟器常见 GMT，差 8 小时）。
+     * 这里直接下发与设备时区无关的 epoch 毫秒；老客户端仍可继续用 updatedAt 字符串。
+     */
+    @Transient
+    public Long getUpdatedAtEpoch() {
+        return updatedAt == null ? null : updatedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
 }

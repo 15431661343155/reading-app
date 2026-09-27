@@ -16,6 +16,8 @@ public class Book  implements Serializable{
     private Long viewCount;
     private Long likeCount;
     private String category;
+    /** 子分类（多选），后端以 JSON 数组串下发，如 ["玄幻","都市"]；与外站书籍无关 */
+    private String subCategories;
     private Integer wordCount;
     private Boolean isInShelf;   // 是否已在书架（由服务端返回）
     private String sourceType;   // 书源类型
@@ -71,6 +73,9 @@ public class Book  implements Serializable{
 
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }
+
+    public String getSubCategories() { return subCategories; }
+    public void setSubCategories(String subCategories) { this.subCategories = subCategories; }
 
     public Integer getWordCount() { return wordCount; }
     public void setWordCount(Integer wordCount) { this.wordCount = wordCount; }

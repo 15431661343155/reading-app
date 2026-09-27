@@ -30,9 +30,9 @@
         app:frostTint="@color/nav_frost_tint"
         app:frostBaseColor="@color/nav_frost_base"
         app:frostSheen="@color/nav_frost_sheen"
-        app:frostBlurRadius="16dp"
+        app:frostBlurRadius="24dp"
         app:frostDownscale="3"
-        app:frostNoiseAlpha="55"
+        app:frostNoiseAlpha="0"
         app:frostEnabled="true"
         app:frostCornerRadius="28dp">
 
@@ -49,13 +49,37 @@
             app:itemIconTint="@color/nav_item_color"
             app:itemTextColor="@color/nav_item_text_color"
             app:itemIconSize="18dp"
-            app:itemTextAppearance="@style/NavTextAppearance"
+            app:itemTextAppearanceActive="@style/NavTextAppearance"
+            app:itemTextAppearanceInactive="@style/NavTextAppearance"
             app:itemHorizontalTranslationEnabled="false"
             app:itemBackground="@drawable/nav_item_pill_bg"
             app:itemActiveIndicatorStyle="@null"
-            app:itemRippleColor="@color/nav_item_ripple"
+            app:itemRippleColor="@null"
             app:elevation="0dp" />
 
     </com.example.myapplication.widget.FrostedNavCardView>
+
+    <!-- ═══ 开屏浮层（单窗口开屏）：
+         冷启动时盖住整个主页，展示 ≥2.5s 且书架数据就绪后淡出揭示书架。
+         与 MainActivity 窗口背景同图，替代原独立 SplashActivity，
+         彻底消除系统转场/starting window 造成的白屏与「第二张开屏图」。
+         默认 GONE：仅冷启动（savedInstanceState==null）由代码置 VISIBLE。 ═══ -->
+    <FrameLayout
+        android:id="@+id/splash_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"
+        android:elevation="16dp">
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitXY"
+            android:src="@drawable/splash_window_bg"
+            android:importantForAccessibility="no" />
+
+    </FrameLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

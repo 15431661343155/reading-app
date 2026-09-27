@@ -7,6 +7,17 @@
         <domain includeSubdomains="true">192.168.31.230</domain>
         <domain includeSubdomains="true">192.168.217.1</domain>
         <!--    宝塔Linux面板IP地址    -->
-        <domain includeSubdomains="true">47.99.126.75</domain>
+        <domain includeSubdomains="true">8.148.8.146</domain>
     </domain-config>
+
+    <!--    仅 debug 包生效（release 构建直接忽略）：额外信任用户安装的 CA，
+            供 mitmproxy / Charles 等抓 HTTPS 包使用。
+            注意 trust-anchors 是整体替换，必须同时保留 system，否则 debug 包
+            访问正常 HTTPS 站点会全部握手失败。    -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
 </network-security-config>

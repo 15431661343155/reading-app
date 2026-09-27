@@ -12,24 +12,30 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+import androidx.viewpager2.widget.ViewPager2;
+
+import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.tabs.TabLayoutMediator;
 
 import com.example.myapplication.R;
 import com.example.myapplication.activity.BookDetailActivity;
 import com.example.myapplication.activity.SearchActivity;
 import com.example.myapplication.adapter.BookAdapter;
+import com.example.myapplication.adapter.LocalStorePageAdapter;
 import com.example.myapplication.adapter.SourceSelectAdapter;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.Book;
+import com.example.myapplication.bean.CategoryTree;
 import com.example.myapplication.bean.PageResponse;
 import com.example.myapplication.bean.SourceInfo;
+import com.example.myapplication.utils.Hint;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,21 +45,18 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 /**
- * 书城主页 Fragment（功能改版）。
+ * 书城主页 Fragment。
  *
- * <p>新功能：
- * <ol>
- *   <li>搜索框为"纯展示+可点击"，点击进入独立搜索页 {@link SearchActivity}</li>
- *   <li>搜索框右侧添加「分类图标框」，点击弹出面板含两个大选项：
- *     <ul>
- *       <li>📚 本站藏书（默认）：加载本站数据库内书籍（分类 Tab：小说 / 文学）</li>
- *       <li>🌐 外站书城：点击后弹窗显示全部可用书源，选中某书源后切换到该网站
- *         「分类 + 榜单/推荐」书籍</li>
- *     </ul>
- *   </li>
- *   <li>标题行显示当前模式（📚 本站藏书 / 🌐 七猫小说网 等）与副标题说明</li>
- *   <li>二级分类 Tab 针对不同模式显示对应分类（本站：本地接口返回 / 外站：静态预设分类）</li>
- * </ol>
+ * <p>两个模式共用同一份书籍列表（顶部只有搜索框一行 + 右侧分类图标）：
+ * <ul>
+ *   <li>📚 <b>本站藏书</b>（默认）：本站数据库内的书籍，按阅读量/热度排序。
+ *       分类浏览已交给独立的「分类」页（底部导航第三个 tab），
+ *       所以这里不再显示模式标题行，也没有一级分类 Tab。</li>
+ *   <li>🌐 <b>外站书城</b>：某个具体书源的「分类 + 榜单/推荐」书籍，
+ *       顶部显示模式标题行 + 横滚二级分类。</li>
+ * </ul>
+ *
+ * <p>点击搜索框进 {@link SearchActivity}；点击搜索框右侧分类图标弹出模式/书源面板。
  */
 public class BookStoreFragment extends Fragment {
 
@@ -68,6 +71,8 @@ public class BookStoreFragment extends Fragment {
     private SwipeRefreshLayout swipeRefresh;
     private BookAdapter adapter;
     private final List<Book> storeBookList = new ArrayList<>();
+    /** 外站书城模式的整页「加载失败」层（本站子页面各有自己的失败层，见 LocalStorePageAdapter） */
+    private com.example.myapplication.widget.LoadFailView loadFailView;
 
     private LinearLayout layoutSearchBar;
     private LinearLayout layoutCategoryIcon;
@@ -76,6 +81,15 @@ public class BookStoreFragment extends Fragment {
 
     private HorizontalScrollView hsvSubCategory;
     private LinearLayout layoutSubCategory;
+    /** 当前书城模式标题行（仅外站模式显示） */
+    private LinearLayout layoutModeTitle;
+
+    /* ===== 本站藏书：主分类子页面（新书 / 男生 / 女生 / 后台新增主分类），支持点 Tab 与左右滑动 ===== */
+    private TabLayout tabLocalMain;
+    private ViewPager2 vpLocalStore;
+    private LocalStorePageAdapter localPageAdapter;
+    private TabLayoutMediator localTabMediator;
+    private boolean localPagesReady = false;
 
     /* ================= 状态 ================= */
     private int mainMode = MODE_LOCAL;           // MODE_LOCAL or MODE_EXTERNAL
@@ -97,6 +111,7 @@ public class BookStoreFragment extends Fragment {
         bindViews(view);
         setupRecyclerView(view);
         setupSwipeRefresh(view);
+        setupLocalPages();
         setupClickListeners(view);
 
         // 恢复上次书城模式（本站/外站），首次启动默认 本站藏书-小说
@@ -109,10 +124,13 @@ public class BookStoreFragment extends Fragment {
     private void bindViews(View v) {
         layoutSearchBar = v.findViewById(R.id.layout_search_bar);
         layoutCategoryIcon = v.findViewById(R.id.layout_category_icon);
+        layoutModeTitle = v.findViewById(R.id.layout_mode_title);
         tvModeTitle = v.findViewById(R.id.tv_mode_title);
         tvModeSubtitle = v.findViewById(R.id.tv_mode_subtitle);
         hsvSubCategory = v.findViewById(R.id.hsv_sub_category);
         layoutSubCategory = v.findViewById(R.id.layout_sub_category);
+        tabLocalMain = v.findViewById(R.id.tab_local_main);
+        vpLocalStore = v.findViewById(R.id.vp_local_store);
     }
 
     private void setupRecyclerView(View v) {
@@ -132,6 +150,13 @@ public class BookStoreFragment extends Fragment {
         swipeRefresh.setColorSchemeResources(
                 R.color.purple_500, R.color.cyan_400, R.color.teal_200);
         swipeRefresh.setOnRefreshListener(this::reloadCurrentMode);
+
+        // 外站书城模式的整页失败层
+        loadFailView = v.findViewById(R.id.load_fail_view);
+        loadFailView.setOnRetryClick(v2 -> {
+            loadFailView.hide();
+            reloadCurrentMode();
+        });
     }
 
     private void setupClickListeners(View v) {
@@ -177,8 +202,7 @@ public class BookStoreFragment extends Fragment {
             if (externalSourceType != null && !externalSourceType.isEmpty()) {
                 switchToExternal(externalSourceType, externalSourceName);
             } else {
-                Toast.makeText(getContext(),
-                        "请先点击「选择书源」选一个外站书源", Toast.LENGTH_SHORT).show();
+                Hint.show(getContext(), "请先点击「选择书源」选一个外站书源");
             }
         });
 
@@ -262,13 +286,13 @@ public class BookStoreFragment extends Fragment {
                             adapter.setData(r.body().getData(),
                                     mainMode == MODE_EXTERNAL ? externalSourceType : "");
                         } else {
-                            Toast.makeText(getContext(), "获取书源列表失败", Toast.LENGTH_SHORT).show();
+                            Hint.show(getContext(), "获取书源列表失败");
                         }
                     }
                     @Override
                     public void onFailure(Call<ApiResponse<List<SourceInfo>>> c, Throwable t) {
                         swipeRefresh.setRefreshing(false);
-                        Toast.makeText(getContext(), "网络错误: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                        Hint.show(getContext(), "网络错误: " + t.getMessage());
                     }
                 });
 
@@ -282,7 +306,7 @@ public class BookStoreFragment extends Fragment {
             if (s != null) {
                 switchToExternal(s.getType(), s.getName());
             } else {
-                Toast.makeText(getContext(), "请选择一个书源", Toast.LENGTH_SHORT).show();
+                Hint.show(getContext(), "请选择一个书源");
             }
         });
         dialog.setButton(AlertDialog.BUTTON_NEGATIVE, "取消", (d, w) -> dialog.dismiss());
@@ -383,9 +407,90 @@ public class BookStoreFragment extends Fragment {
         currentSubCategory = "";
         saveState();
         tvModeTitle.setText("本站藏书");
-        tvModeSubtitle.setText("本地书城");
-        hsvSubCategory.setVisibility(View.VISIBLE);
-        loadSubCategoriesAndData();
+        tvModeSubtitle.setText("本地书城 · 按热度排序");
+        applyModeViews();
+        if (loadFailView != null) loadFailView.hide();   // 切回本站 → 外站整页失败层退场
+        loadLocalPages();
+    }
+
+    /**
+     * 本站模式与外站模式的视图切换：
+     *   本站 → 主分类 Tab（新书 / 男生 / 女生 / 后台新增主分类）+ ViewPager2 子页面，
+     *          点 Tab 或左右滑动切换；无模式标题行
+     *   外站 → 模式标题行 + 二级分类横滚 + 单个书籍列表
+     */
+    private void applyModeViews() {
+        boolean local = (mainMode == MODE_LOCAL);
+        layoutModeTitle.setVisibility(local ? View.GONE : View.VISIBLE);
+        tabLocalMain.setVisibility(local ? View.VISIBLE : View.GONE);
+        vpLocalStore.setVisibility(local ? View.VISIBLE : View.GONE);
+        hsvSubCategory.setVisibility(local ? View.GONE : View.VISIBLE);
+        swipeRefresh.setVisibility(local ? View.GONE : View.VISIBLE);
+    }
+
+    /* ================= 模式 A：本站藏书（主分类子页面） ================= */
+
+    /** 初始化本站藏书的 ViewPager2 + TabLayout（只做一次；页面数据在 loadLocalPages 里灌）。 */
+    private void setupLocalPages() {
+        localPageAdapter = new LocalStorePageAdapter();
+        localPageAdapter.setOnBookClickListener(book -> {
+            Intent i = new Intent(getActivity(), BookDetailActivity.class);
+            i.putExtra("book", book);
+            startActivity(i);
+        });
+        vpLocalStore.setAdapter(localPageAdapter);
+        // 只预加载相邻一页，避免一次并发太多请求
+        vpLocalStore.setOffscreenPageLimit(1);
+
+        localTabMediator = new TabLayoutMediator(tabLocalMain, vpLocalStore,
+                (tab, position) -> tab.setText(localPageAdapter.getPageTitle(position)));
+        localTabMediator.attach();
+    }
+
+    /**
+     * 拉取分类树并重建本站藏书的子页面：固定第一个「新书」页（按导入时间倒序），
+     * 其余按后端主分类顺序（后台新增主分类后，书城会自动多出一页）。
+     */
+    private void loadLocalPages() {
+        RetrofitClient.getApiService().getCategoryTree()
+                .enqueue(new Callback<ApiResponse<CategoryTree>>() {
+                    @Override
+                    public void onResponse(Call<ApiResponse<CategoryTree>> c,
+                                           Response<ApiResponse<CategoryTree>> r) {
+                        List<LocalStorePageAdapter.PageSpec> specs = new ArrayList<>();
+                        specs.add(new LocalStorePageAdapter.PageSpec("新书", null, null));
+                        if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
+                                && r.body().getData() != null) {
+                            for (CategoryTree.MainCategory m : r.body().getData().getMains()) {
+                                if (m == null || m.getName() == null || m.getName().isEmpty()) continue;
+                                specs.add(new LocalStorePageAdapter.PageSpec(
+                                        m.getName(), m.getName(), m.getSubs()));
+                            }
+                        }
+                        applyLocalPages(specs);
+                    }
+
+                    @Override
+                    public void onFailure(Call<ApiResponse<CategoryTree>> c, Throwable t) {
+                        // 分类树拿不到时，至少保证「新书」页可用
+                        List<LocalStorePageAdapter.PageSpec> specs = new ArrayList<>();
+                        specs.add(new LocalStorePageAdapter.PageSpec("新书", null, null));
+                        applyLocalPages(specs);
+                        Hint.show(getContext(), "分类加载失败，已按新书显示");
+                    }
+                });
+    }
+
+    private void applyLocalPages(List<LocalStorePageAdapter.PageSpec> specs) {
+        localPageAdapter.setPages(specs);
+        if (vpLocalStore.getCurrentItem() >= specs.size()) {
+            vpLocalStore.setCurrentItem(0, false);
+        }
+        if (localPagesReady) {
+            // 已初始化过：分类可能有变动，强制刷新当前页
+            localPageAdapter.requestReload(vpLocalStore.getCurrentItem());
+        }
+        localPagesReady = true;
     }
 
     private void switchToExternal(String sourceType, String sourceName) {
@@ -404,6 +509,7 @@ public class BookStoreFragment extends Fragment {
     /* ================= 外站动态分类加载 ================= */
 
     private void loadExternalCategories() {
+        applyModeViews();
         externalCategories.clear();
         swipeRefresh.setRefreshing(true);
         RetrofitClient.getApiService().getExploreCategories(externalSourceType)
@@ -416,19 +522,28 @@ public class BookStoreFragment extends Fragment {
                         if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
                                 && r.body().getData() != null && !r.body().getData().isEmpty()) {
                             externalCategories.addAll(r.body().getData());
-                            // 有分类：显示分类 Tab
-                            subCategoryList.add("全部");
+                            // 书源自带分类：直接以真实分类名构建 Tab，不再强行插入 synthetic "全部"。
+                            // 仅当书源自身含名为"全部"的分类时才显示"全部"；否则默认选中第一个真实分类，
+                            // 避免之前"全部"被映射成 null → 后端取首个分类 → 与首分类内容重复的问题。
+                            String defaultCat = null;
                             for (String[] cat : externalCategories) {
                                 if (cat[0] != null && !cat[0].isEmpty()) {
                                     subCategoryList.add(cat[0]);
+                                    if (defaultCat == null) defaultCat = cat[0];
+                                    if ("全部".equals(cat[0].trim())) {
+                                        // 书源自带"全部"分类：默认选中它（命中其真实 URL，而非首分类）
+                                        defaultCat = cat[0];
+                                    }
                                 }
                             }
-                            hsvSubCategory.setVisibility(View.VISIBLE);
+                            currentSubCategory = (defaultCat == null) ? "" : defaultCat;
+                            hsvSubCategory.setVisibility(
+                                    subCategoryList.isEmpty() ? View.GONE : View.VISIBLE);
                         } else {
                             // 书源无分类信息：隐藏分类 Tab，直接加载 explore 数据
                             hsvSubCategory.setVisibility(View.GONE);
+                            currentSubCategory = "";
                         }
-                        currentSubCategory = "";
                         refreshSubCategoryViews();
                         loadDataForCurrentMode();
                     }
@@ -445,30 +560,7 @@ public class BookStoreFragment extends Fragment {
                 });
     }
 
-    /* ================= 本地子分类加载 & 渲染 ================= */
-
-    private void loadSubCategoriesAndData() {
-        Call<ApiResponse<List<String>>> call = RetrofitClient.getApiService().getFictionCategories();
-
-        call.enqueue(new Callback<ApiResponse<List<String>>>() {
-            @Override
-            public void onResponse(Call<ApiResponse<List<String>>> c, Response<ApiResponse<List<String>>> r) {
-                subCategoryList.clear();
-                subCategoryList.add("全部");
-                if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
-                        && r.body().getData() != null) {
-                    subCategoryList.addAll(r.body().getData());
-                }
-                refreshSubCategoryViews();
-                loadDataForCurrentMode();
-            }
-            @Override
-            public void onFailure(Call<ApiResponse<List<String>>> c, Throwable t) {
-                refreshSubCategoryViews();
-                loadDataForCurrentMode();
-            }
-        });
-    }
+    /* ================= 外站：横滚二级分类 ================= */
 
     private void refreshSubCategoryViews() {
         layoutSubCategory.removeAllViews();
@@ -479,8 +571,7 @@ public class BookStoreFragment extends Fragment {
             tv.setTextSize(13);
             tv.setPadding(18, 8, 18, 8);
 
-            boolean isSelected = (i == 0 && currentSubCategory.isEmpty())
-                    || category.equals(currentSubCategory);
+            boolean isSelected = category.equals(currentSubCategory);
 
             if (isSelected) {
                 tv.setTextColor(Color.parseColor("#007AFF")); // iOS 蓝
@@ -501,7 +592,8 @@ public class BookStoreFragment extends Fragment {
 
             final int index = i;
             tv.setOnClickListener(v -> {
-                currentSubCategory = (index == 0) ? "" : category;
+                // 每个 Tab 都是书源的真实分类名，直接作为查询分类（无 synthetic "全部" → 空串）
+                currentSubCategory = category;
                 refreshSubCategoryViews();
                 loadDataForCurrentMode();
             });
@@ -515,42 +607,33 @@ public class BookStoreFragment extends Fragment {
         loadDataForCurrentMode();
     }
 
-    private void loadDataForCurrentMode() {
+    /**
+     * 双击底部「书城」tab 的回调：刷新当前模式数据 + 列表滚动回顶部。
+     * 由 {@link MainActivity} 在检测到书城 tab 双击时调用。
+     */
+    public void onDoubleTapStore() {
         if (mainMode == MODE_LOCAL) {
-            loadLocalBooks();
+            // 本地模式：只刷新「当前主分类子页」并回顶。
+            // 注意：不要走 reloadCurrentMode() -> loadLocalPages() 整批重建分页。
+            // 适配器未设稳定 item ID，整批 notifyDataSetChanged() 会让 ViewPager2 在重新布局瞬间
+            // 先回弹到首屏「新书」(第 0 页) 再弹回当前页，造成“先显示新书再跳对应界面”的闪烁。
+            int pos = vpLocalStore.getCurrentItem();
+            localPageAdapter.scrollToTop(pos);
+            localPageAdapter.requestReload(pos);
         } else {
-            loadExternalBooks();
+            // 外站模式：单列表，直接回顶 + 重新拉榜单
+            rvBookstore.scrollToPosition(0);
+            reloadCurrentMode();
         }
     }
 
-    /* ================= 模式 A：本站藏书（本地数据库） ================= */
-
-    private void loadLocalBooks() {
-        String category = (currentSubCategory == null || currentSubCategory.isEmpty())
-                ? null : currentSubCategory;
-        Call<ApiResponse<PageResponse<Book>>> call = RetrofitClient.getApiService().getFictionBooks(0, 50, category);
-
-        swipeRefresh.setRefreshing(true);
-        call.enqueue(new Callback<ApiResponse<PageResponse<Book>>>() {
-            @Override
-            public void onResponse(Call<ApiResponse<PageResponse<Book>>> c,
-                                   Response<ApiResponse<PageResponse<Book>>> r) {
-                swipeRefresh.setRefreshing(false);
-                storeBookList.clear();
-                if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
-                        && r.body().getData() != null) {
-                    storeBookList.addAll(r.body().getData().getContent());
-                } else {
-                    Toast.makeText(getContext(), "加载失败", Toast.LENGTH_SHORT).show();
-                }
-                adapter.notifyDataSetChanged();
-            }
-            @Override
-            public void onFailure(Call<ApiResponse<PageResponse<Book>>> c, Throwable t) {
-                swipeRefresh.setRefreshing(false);
-                Toast.makeText(getContext(), "网络错误: " + t.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        });
+    private void loadDataForCurrentMode() {
+        if (mainMode == MODE_LOCAL) {
+            loadFailView.hide();   // 切回本站模式 → 外站整页失败层退场（本站子页面有自己的失败层）
+            loadLocalPages();
+        } else {
+            loadExternalBooks();
+        }
     }
 
     /* ================= 模式 B：外站书城（具体书源 explore 接口） ================= */
@@ -558,9 +641,11 @@ public class BookStoreFragment extends Fragment {
     private void loadExternalBooks() {
         if (externalSourceType == null || externalSourceType.isEmpty()) return;
         swipeRefresh.setRefreshing(true);
-        // "全部"分类传 null（后端走第一个分类）；其他分类传分类名
-        String category = (currentSubCategory == null || currentSubCategory.isEmpty()
-                || currentSubCategory.equals("全部")) ? null : currentSubCategory;
+        loadFailView.hide();   // 重试/刷新开始 → 失败层退场
+        // currentSubCategory 现在恒为书源真实分类名；为空表示书源无分类（后端走默认 exploreUrl）。
+        // 若书源自带"全部"分类，则"全部"会作为真实分类名传入并命中其真实 URL，不再与首分类重复。
+        String category = (currentSubCategory == null || currentSubCategory.isEmpty())
+                ? null : currentSubCategory;
         RetrofitClient.getApiService().exploreOnlineBooks(externalSourceType, 0, 50, category)
                 .enqueue(new Callback<ApiResponse<List<Book>>>() {
                     @Override
@@ -571,15 +656,16 @@ public class BookStoreFragment extends Fragment {
                         if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
                                 && r.body().getData() != null) {
                             storeBookList.addAll(r.body().getData());
+                            loadFailView.hide();
                         } else {
-                            Toast.makeText(getContext(), "加载榜单失败，请确认书源可用", Toast.LENGTH_SHORT).show();
+                            loadFailView.show("加载榜单失败，请确认书源可用");
                         }
                         adapter.notifyDataSetChanged();
                     }
                     @Override
                     public void onFailure(Call<ApiResponse<List<Book>>> c, Throwable t) {
                         swipeRefresh.setRefreshing(false);
-                        Toast.makeText(getContext(), "网络错误: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                        loadFailView.show("网络异常，请检查网络后重试");
                     }
                 });
     }

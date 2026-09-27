@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 登录页毛玻璃卡片：半透明白填充 + 1dp 高光描边 + 24dp 圆角
+     （minSdk 24 无 RenderEffect 背景模糊，用高透白 + 描边模拟玻璃质感） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/login_card_fill" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/login_card_stroke" />
+    <corners android:radius="24dp" />
+</shape>

@@ -5,7 +5,7 @@
     android:viewportHeight="108"
     android:viewportWidth="108"
     xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 宣纸底色 · 阁檐墨韵 -->
-    <path android:fillColor="#F5F0E6"
+    <!-- 宣纸底色（取自新书阁图标背景） -->
+    <path android:fillColor="#CDAB8F"
           android:pathData="M0,0h108v108h-108z"/>
 </vector>

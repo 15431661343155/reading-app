@@ -8,13 +8,14 @@
     android:background="?android:attr/windowBackground">
 
     <!-- 标题栏 -->
-    <androidx.appcompat.widget.Toolbar
+    <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="@color/ios_bg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="@string/message_center"
+        app:titleCentered="true"
         app:titleTextColor="@color/ios_text_primary">
 
         <!-- 全部已读按钮 -->
@@ -31,7 +32,7 @@
             android:focusable="true"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:padding="8dp" />
-    </androidx.appcompat.widget.Toolbar>
+    </com.google.android.material.appbar.MaterialToolbar>
 
     <!-- 滑动导航标签栏 -->
     <com.google.android.material.tabs.TabLayout

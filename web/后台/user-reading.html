@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>用户阅读数据</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/admin-theme.css">
+<script src="assets/js/admin-auth.js"></script>
+</head>
+<body>
+<nav class="admin-nav">
+  <div class="admin-nav-inner">
+    <a class="admin-nav-brand" href="index.html">
+      <span class="brand-seal" aria-hidden="true"><span>书阁</span></span>
+      <span class="brand-text">
+        <span class="brand-title">管理后台</span>
+        <span class="brand-sub">内容管理平台</span>
+      </span>
+    </a>
+    <div class="admin-nav-links">
+      <a href="index.html" class="">首页</a>
+      <a href="books.html" class="">书籍管理</a>
+      <a href="categories.html" class="">分类管理</a>
+      <a href="import.html" class="">数据导入</a>
+      <a href="online-source.html" class="-source">在线书源</a>
+      <a href="book-source.html" class="-source">书源管理</a>
+      <a href="users.html" class="is-active">用户管理</a>
+      <a href="resource.html" class="">资源管理</a>
+      <a href="feedback.html" class="">意见反馈</a>
+    </div>
+    <div class="admin-nav-auth">
+      <span class="admin-auth-name" id="adminAuthName">管理员</span>
+      <button type="button" class="admin-logout" onclick="adminLogout()">退出登录</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-3 admin-main">
+  <a class="admin-crumb" href="users.html">返回用户管理</a>
+  <div class="page-head">
+  <span class="kicker">Reading Data</span>
+  <h1 id="pageTitle">用户阅读数据</h1>
+  <p class="desc">该用户的书架、阅读进度与书签记录</p>
+  <div class="head-rule"></div>
+</div>
+
+  <div id="loadError" class="alert alert-warning d-none" role="alert"></div>
+
+  <!-- 书架 -->
+  <h5>书架</h5>
+  <table class="table table-striped">
+    <thead><tr><th>书名</th><th>加入时间</th><th>最后阅读</th></tr></thead>
+    <tbody id="bookshelfTable"></tbody>
+  </table>
+
+  <!-- 阅读进度 -->
+  <h5 class="mt-4">最近阅读</h5>
+  <table class="table table-striped">
+    <thead><tr><th>书名</th><th>当前章节</th><th>更新时间</th></tr></thead>
+    <tbody id="progressTable"></tbody>
+  </table>
+
+  <!-- 书签 -->
+  <h5 class="mt-4">书签</h5>
+  <table class="table table-striped">
+    <thead><tr><th>书名</th><th>章节</th><th>预览</th><th>创建时间</th></tr></thead>
+    <tbody id="bookmarkTable"></tbody>
+  </table>
+</div>
+
+<footer class="admin-foot">
+  <span>
+    书阁 · 内容管理平台
+    <span class="foot-sep">/</span>
+    <span>阅读 App 运营控制台</span>
+  </span>
+  <span>请勿在公共设备上保持登录状态</span>
+</footer>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  var params = new URLSearchParams(window.location.search);
+  var userId = params.get('userId');
+  var username = params.get('username');
+  document.getElementById('pageTitle').textContent = (username || '用户') + ' · 阅读数据';
+
+  function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function shortDate(value) {
+    return value ? escapeHtml(String(value).substring(0, 10)) : '-';
+  }
+
+  function fill(tbodyId, colspan, rows, emptyText) {
+    var tbody = document.getElementById(tbodyId);
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="' + colspan + '">' + emptyText + '</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.join('');
+  }
+
+  function showError(message) {
+    var box = document.getElementById('loadError');
+    box.textContent = message;
+    box.classList.remove('d-none');
+  }
+
+  if (!userId) {
+    showError('缺少 userId 参数，请从「用户管理」页的「阅读数据」按钮进入。');
+    fill('bookshelfTable', 3, [], '暂无数据');
+    fill('progressTable', 3, [], '暂无数据');
+    fill('bookmarkTable', 4, [], '暂无数据');
+  } else {
+    // 管理员专用的只读聚合接口（/api/user/** 那批接口做了「只能读自己」的归属校验，
+    // 管理员用它查别人一律 403，页面会误显示「暂无数据」，故改走这里）。
+    fetch('/api/admin/users/' + encodeURIComponent(userId) + '/reading')
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res || res.success !== true || !res.data) {
+          showError('读取失败：' + ((res && res.message) || '未知错误'));
+          fill('bookshelfTable', 3, [], '暂无数据');
+          fill('progressTable', 3, [], '暂无数据');
+          fill('bookmarkTable', 4, [], '暂无数据');
+          return;
+        }
+        var d = res.data;
+        var titles = d.bookTitles || {};
+
+        function bookName(bookId) {
+          return escapeHtml(titles[bookId] || ('书籍 ' + bookId));
+        }
+
+        fill('bookshelfTable', 3, (d.bookshelf || []).map(function (b) {
+          return '<tr><td>' + bookName(b.bookId) + '</td><td>' + shortDate(b.addedAt)
+            + '</td><td>' + (b.lastReadAt ? shortDate(b.lastReadAt) : '未阅读') + '</td></tr>';
+        }), '暂无数据');
+
+        fill('progressTable', 3, (d.recentProgress || []).map(function (p) {
+          return '<tr><td>' + bookName(p.bookId) + '</td><td>第 ' + escapeHtml(p.chapterIndex)
+            + ' 章</td><td>' + shortDate(p.updatedAt) + '</td></tr>';
+        }), '暂无数据');
+
+        fill('bookmarkTable', 4, (d.bookmarks || []).map(function (bm) {
+          var preview = bm.previewText ? escapeHtml(String(bm.previewText).substring(0, 30)) + '...' : '-';
+          return '<tr><td>' + bookName(bm.bookId) + '</td><td>' + escapeHtml(bm.chapterTitle || '-')
+            + '</td><td>' + preview + '</td><td>' + shortDate(bm.createdAt) + '</td></tr>';
+        }), '暂无数据');
+      })
+      .catch(function () {
+        showError('读取失败：网络异常或登录态已失效。');
+        fill('bookshelfTable', 3, [], '暂无数据');
+        fill('progressTable', 3, [], '暂无数据');
+        fill('bookmarkTable', 4, [], '暂无数据');
+      });
+  }
+</script>
+</body>
+</html>

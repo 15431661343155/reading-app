@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 分类页的子分类卡片底色：极浅灰 + 10dp 圆角（与 iOS 卡片体系一致） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#FFF7F7FA"/>
+    <corners android:radius="10dp"/>
+</shape>

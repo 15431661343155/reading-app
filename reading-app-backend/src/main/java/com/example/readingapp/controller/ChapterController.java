@@ -10,7 +10,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,10 +29,15 @@ public class ChapterController {
     private final OperationLogService operationLogService;
 
     // 获取某本书的所有章节
+    // 目录/列表场景只需要元数据（id/标题/序号/字数）。全书 1300+ 章的正文 content/contentHtml
+    // 有 10MB+，是 App 目录弹窗每次加载 30 秒的根因；正文由 /api/chapters/{id} 按章获取。
     @GetMapping("/book/{bookId}")
     public ApiResponse<List<Chapter>> getChaptersByBook(@PathVariable Long bookId) {
         List<Chapter> chapters = chapterRepository.findByBookIdOrderBySortOrderAsc(bookId);
-        //chapters.forEach(c -> c.setContent(null));
+        chapters.forEach(c -> {
+            c.setContent(null);
+            c.setContentHtml(null);
+        });
         return ApiResponse.success(chapters);
     }
 
@@ -89,18 +98,30 @@ public class ChapterController {
         List<Chapter> chapters = chapterRepository.findByBookIdOrderBySortOrderAsc(chapter.getBookId());
         String bookTitle = bookRepository.findById(chapter.getBookId()).map(b -> b.getTitle()).orElse("未知书籍");
 
-        // 根据标题自动匹配序号
-        int targetOrder = chapters.size() + 1;
+        // 插入位置解析，两条优先级从高到低的路：
+        //   ① 标题里能解析出章号 → 按章号找第一个「比它大」的章节，插到它前面。
+        //      这是普通补章最准的判定（漏掉第 25 章，就插到第 26 章之前）。
+        //   ② 标题解析不出章号（「番外：xxx」「第2.5章」等）→ 用调用方给的 sortOrder 当插入位。
+        //      前端「在此章之后补章」正是靠这条路：它把 sortOrder 传成「锚点章节序号 + 1」。
+        //      此前这里忽略入参、一律追加到末尾，导致行内补章总是跑到最后一章后面。
+        int targetOrder;
         int extractedNumber = extractChapterNumber(chapter.getTitle());
+        Integer requestedOrder = chapter.getSortOrder();
+
+        int insertIndex = chapters.size();
         if (extractedNumber > 0) {
-            // 查找应该插入的位置
-            int insertIndex = chapters.size();
             for (int i = 0; i < chapters.size(); i++) {
                 if (getTitleNumber(chapters.get(i).getTitle()) > extractedNumber) {
                     insertIndex = i;
                     break;
                 }
             }
+        } else if (requestedOrder != null && requestedOrder > 0 && requestedOrder <= chapters.size()) {
+            // 请求的序号落在合法区间内 → 插到这个位置（0 基下标 = 序号 - 1）
+            insertIndex = requestedOrder - 1;
+        }
+
+        if (insertIndex < chapters.size()) {
             // 从插入位置开始，所有后续章节序号 +1
             for (int i = insertIndex; i < chapters.size(); i++) {
                 Chapter c = chapters.get(i);
@@ -108,12 +129,17 @@ public class ChapterController {
                 c.setSortKey("1-" + String.format("%04d", c.getSortOrder()));
                 chapterRepository.save(c);
             }
-
             targetOrder = insertIndex + 1;
+        } else {
+            // 插到末尾
+            targetOrder = chapters.size() + 1;
         }
         String sortKey = "1-" + String.format("%04d", targetOrder);
         chapter.setSortOrder(targetOrder);
         chapter.setSortKey(sortKey);
+        // 新插入章节按正文计算单章字数（与 recount 口径一致），否则前端会把它判成「空章」
+        String addContent = chapter.getContent();
+        chapter.setWordCount(addContent != null ? addContent.replaceAll("\\s+", "").length() : 0);
         Chapter saved = chapterRepository.save(chapter);
 
         // 更新书籍字数和章节数统计
@@ -154,6 +180,9 @@ public class ChapterController {
         // 先更新基本字段
         existing.setTitle(chapter.getTitle());
         existing.setContent(chapter.getContent());
+        // 编辑章节时同步重算单章字数（与 recount 口径一致），否则前端仍判空章
+        String updContent = existing.getContent();
+        existing.setWordCount(updContent != null ? updContent.replaceAll("\\s+", "").length() : 0);
         existing.setSortOrder(newOrder);
         existing.setSortKey("1-" + String.format("%04d", newOrder));
         existing.setBookId(bookId);
@@ -254,7 +283,140 @@ public class ChapterController {
         }
         return ApiResponse.success("删除成功", null);
     }
-    
+
+    /* ===================== 批量删除 ===================== */
+
+    /**
+     * 批量删除章节。
+     *
+     * <p>请求体：{@code {"bookId":123,"ids":[1,2,3],"mode":"ids"|"range"|"all",
+     * "keepFirst":n,"keepLast":n,"renumber":true}}
+     *
+     * <p>三种选择模式：
+     * <ul>
+     *   <li>{@code ids} —— 前端勾选的章节，按 id 逐个删（跨书 id 会被 bookId 过滤掉）</li>
+     *   <li>{@code range} —— 按「保留前 N 章 / 保留后 M 章」删中间段，用于清掉中间的大段错误章节</li>
+     *   <li>{@code all} —— 清空本书全部章节</li>
+     * </ul>
+     *
+     * <p>删除后可选调 {@code renumberContiguous} 把 sortKey 重排回连续编号 —— 否则章节序号
+     * 会留着空档，App 目录上跳转会出现「第 100 章 → 第 130 章」这种断口。
+     */
+    @PostMapping("/batch-delete")
+    @Transactional
+    public ApiResponse<Map<String, Object>> batchDeleteChapters(@RequestBody Map<String, Object> request,
+                                                               HttpServletRequest httpRequest) {
+        Long bookId = toLong(request.get("bookId"));
+        if (bookId == null) {
+            return ApiResponse.error(400, "缺少 bookId");
+        }
+        String bookTitle = bookRepository.findById(bookId).map(b -> b.getTitle()).orElse("未知书籍");
+
+        String mode = request.get("mode") == null ? "ids" : String.valueOf(request.get("mode")).trim();
+        if (mode.isEmpty()) { mode = "ids"; }
+
+        List<Chapter> all = chapterRepository.findByBookIdOrderBySortOrderAsc(bookId);
+        List<Chapter> doomed;
+
+        if ("all".equalsIgnoreCase(mode)) {
+            doomed = new ArrayList<>(all);
+        } else if ("range".equalsIgnoreCase(mode)) {
+            int keepFirst = Math.max(0, toInt(request.get("keepFirst")));
+            int keepLast = Math.max(0, toInt(request.get("keepLast")));
+            if (keepFirst + keepLast >= all.size()) {
+                // 前后保留下来的已经覆盖全书 → 没有任何中间段可删
+                return ApiResponse.error(400,
+                        "保留的前 " + keepFirst + " 章 + 后 " + keepLast + " 章已覆盖本书全部 "
+                                + all.size() + " 章，没有可删除的中间章节");
+            }
+            doomed = new ArrayList<>(all.subList(keepFirst, all.size() - keepLast));
+        } else {
+            List<Long> ids = new ArrayList<>();
+            Object raw = request.get("ids");
+            if (raw instanceof Collection<?> col) {
+                for (Object o : col) {
+                    Long v = toLong(o);
+                    if (v != null) { ids.add(v); }
+                }
+            }
+            if (ids.isEmpty()) {
+                return ApiResponse.error(400, "没有选中任何章节");
+            }
+            // 以「库中该书的章节」为准做交集：既防跨书误删，也忽略已被别人删掉的 id
+            doomed = chapterRepository.findByBookIdAndIdIn(bookId, ids);
+            if (doomed.isEmpty()) {
+                return ApiResponse.error(400, "选中的章节都不属于本书（可能已被删除）");
+            }
+        }
+
+        int deleted = doomed.size();
+        if (deleted > 0) {
+            // 先取一批标题样本，删除后拼进操作日志，便于事后追溯到底删了什么
+            List<String> samples = doomed.size() <= 3
+                    ? doomed.stream().map(c -> "第" + c.getSortOrder() + "章 " + c.getTitle()).toList()
+                    : List.of("第" + doomed.get(0).getSortOrder() + "章 " + doomed.get(0).getTitle()
+                            + " … 第" + doomed.get(deleted - 1).getSortOrder() + "章 "
+                            + doomed.get(deleted - 1).getTitle());
+
+            chapterRepository.deleteAll(doomed);
+            chapterRepository.flush();
+
+            boolean renumber = !Boolean.FALSE.equals(request.get("renumber"));
+            String renumberNote = "";
+            if (renumber) {
+                renumberContiguous(bookId);
+                renumberNote = "，序号已重排连续";
+            }
+
+            updateBookStats(bookId);
+            operationLogService.logBook(OperationLogService.TYPE_CHAPTER_DELETE,
+                    "批量删除《" + bookTitle + "》" + deleted + " 章（" + String.join("；", samples) + "）" + renumberNote,
+                    bookId, getClientIp(httpRequest));
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("deleted", deleted);
+            data.put("remaining", all.size() - deleted);
+            data.put("renumbered", renumber);
+            data.put("mode", mode);
+            return ApiResponse.success("已删除 " + deleted + " 章" + renumberNote, data);
+        }
+        return ApiResponse.success("没有需要删除的章节", new LinkedHashMap<>(Map.of("deleted", 0)));
+    }
+
+    /**
+     * 删除后的安全网：按当前顺序把章节 sortOrder/sortKey 重排成连续编号。
+     *
+     * <p>刻意不用 bulk UPDATE —— 同一事务里刚被 {@code deleteAll} 处理过的持久化上下文
+     * 与本方法加载的实体是同一批对象，bulk 语句绕过上下文会造成脏写入覆盖。
+     */
+    private void renumberContiguous(Long bookId) {
+        List<Chapter> chapters = chapterRepository.findByBookIdOrderBySortOrderAsc(bookId);
+        for (int i = 0; i < chapters.size(); i++) {
+            Chapter c = chapters.get(i);
+            c.setSortOrder(i + 1);
+            c.setSortKey("1-" + String.format("%04d", i + 1));
+        }
+        chapterRepository.saveAll(chapters);
+    }
+
+    /** 宽松的数值转换：前端传 Integer/Long/String 都能吃下，非法值回 null */
+    private Long toLong(Object o) {
+        if (o == null) return null;
+        if (o instanceof Number n) return n.longValue();
+        try {
+            String s = String.valueOf(o).trim();
+            return s.isEmpty() ? null : Long.parseLong(s);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** 同上，转 int；空值 / 非法值回 0 */
+    private int toInt(Object o) {
+        Long v = toLong(o);
+        return v == null ? 0 : v.intValue();
+    }
+
     // 获取客户端IP
     private String getClientIp(HttpServletRequest request) {
         String ip = request.getHeader("X-Forwarded-For");

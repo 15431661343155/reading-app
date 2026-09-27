@@ -7,17 +7,11 @@
     android:background="@color/ios_bg">
 
     <!-- 阅读内容区域（嵌套 FrameLayout 防止导航栏显隐导致 WebView 高度变化） -->
+    <!-- ✅ 不再放置占位 WebView：改由 ReadActivity 把复用池里的 WebView 动态插入，避免每次开书都 inflate 一个 WebView -->
     <FrameLayout
         android:id="@+id/webview_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
-
-        <WebView
-            android:id="@+id/webview_reader"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scrollbars="none"
-            android:background="@color/ios_bg" />
 
         <!-- 左右点击翻页区域 -->
         <View
@@ -38,37 +32,56 @@
             android:focusable="true"
             android:contentDescription="下一页"/>
 
-        <!-- 外站章节加载失败重试覆盖层（iOS 卡片风） -->
+        <!-- 章节加载中：与全站共用的加载动画（奔跑 GIF +「加载中」+ 三个点）。
+             透明底 → 显示阅读页自己的背景/纹理，日夜与各种底色都不用额外适配；
+             本控件不可点击 → 触摸照旧穿透到下面的左右翻页热区。 -->
+        <com.example.myapplication.widget.LoadingView
+            android:id="@+id/loading_chapter"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"
+            app:lvGifSize="140dp" />
+
+        <!-- 章节加载失败覆盖层（本站书）：透明底 → 显示阅读页自己的背景/纹理，日夜与各种底色都不用额外适配。
+             内容块整体略高于几何中心（paddingBottom 抬升），与「加载失败」效果图一致。
+             容器不拦截点击 → 触摸照旧穿透到下面的左右翻页热区；「再试一次」按钮自身可点击。 -->
         <LinearLayout
-            android:id="@+id/layout_external_retry"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
+            android:id="@+id/layout_load_fail"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:orientation="vertical"
             android:gravity="center"
-            android:padding="24dp"
-            android:background="@drawable/bg_dialog_rounded"
-            android:elevation="8dp"
+            android:paddingBottom="150dp"
             android:visibility="gone">
 
-            <TextView
-                android:id="@+id/tv_external_retry_msg"
-                android:layout_width="wrap_content"
+            <ImageView
+                android:id="@+id/img_load_fail_illust"
+                android:layout_width="250dp"
                 android:layout_height="wrap_content"
-                android:text="章节加载失败"
-                android:textSize="15sp"
-                android:textColor="@color/ios_text_secondary"
-                android:gravity="center"
-                android:lineSpacingExtra="4dp" />
+                android:adjustViewBounds="true"
+                android:src="@drawable/img_load_fail"
+                android:contentDescription="加载失败插画" />
 
-            <Button
-                android:id="@+id/btn_external_retry"
+            <TextView
+                android:id="@+id/tv_load_fail_msg"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="重试"
+                android:text="加载出错，请稍后再试"
+                android:textSize="14sp"
+                android:textColor="@color/ios_text_secondary" />
+
+            <TextView
+                android:id="@+id/btn_load_fail_retry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:paddingHorizontal="30dp"
+                android:paddingVertical="10dp"
+                android:text="再试一次"
+                android:textSize="15sp"
                 android:textColor="@color/white"
-                android:backgroundTint="@color/ios_blue" />
+                android:background="@drawable/bg_load_fail_retry" />
         </LinearLayout>
 
     </FrameLayout>
@@ -82,8 +95,7 @@
         android:orientation="horizontal"
         android:background="@color/ios_tab_bar"
         android:elevation="10dp"
-        android:visibility="gone"
-        android:fitsSystemWindows="true">
+        android:visibility="gone">
 
         <ImageView
             android:id="@+id/iv_back"

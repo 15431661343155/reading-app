@@ -29,4 +29,10 @@
         <!-- 关闭实时模糊时退化为纯半透明色块 -->
         <attr name="frostEnabled" format="boolean" />
     </declare-styleable>
+
+    <!-- 全站统一加载动画 LoadingView -->
+    <declare-styleable name="LoadingView">
+        <!-- 奔跑插画的边长（默认 160dp；放在窄栏里时可调小） -->
+        <attr name="lvGifSize" format="dimension" />
+    </declare-styleable>
 </resources>

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   底部导航 item 背景：
-  选中态 = 主题色胶囊（inset 出内边距，圆角取高度一半形成胶囊）
+  选中态 = 立体胶囊（竖向渐变上亮下暗 + 外投影），inset 出内边距，圆角取高度一半形成胶囊
   未选中 = 透明
+  注：去掉了原先的顶部白色内高光层——它的圆角与本体同为 22dp，白渐变被裹到顶部两角，
+      在真机上表现为两个白色“耳朵”。立体感改由渐变（上亮下暗）+ 底部阴影表达。
 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -12,10 +14,27 @@
             android:insetLeft="12dp"
             android:insetRight="12dp"
             android:insetTop="6dp">
-            <shape android:shape="rectangle">
-                <corners android:radius="22dp" />
-                <solid android:color="?attr/navSelectedColor" />
-            </shape>
+            <layer-list>
+                <!-- 外投影：偏移向下的半透明深色圆角矩形，模拟抬起的柔和阴影 -->
+                <item android:top="3dp">
+                    <shape android:shape="rectangle">
+                        <corners android:radius="22dp" />
+                        <solid android:color="#2A000000" />
+                    </shape>
+                </item>
+                <!-- 主体：竖向渐变（上亮下暗），形成凸起立体感 -->
+                <item>
+                    <shape android:shape="rectangle">
+                        <corners android:radius="22dp" />
+                        <gradient
+                            android:angle="270"
+                            android:startColor="#5BB0FF"
+                            android:centerColor="#007AFF"
+                            android:endColor="#0062D6"
+                            android:type="linear" />
+                    </shape>
+                </item>
+            </layer-list>
         </inset>
     </item>
 

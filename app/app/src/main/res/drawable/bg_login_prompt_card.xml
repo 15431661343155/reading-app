@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--登录提示弹窗卡片底：米白竖向渐变 + 20dp 圆角（国风探出版）-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="20dp" />
+    <gradient
+        android:angle="270"
+        android:endColor="#F8F2E4"
+        android:startColor="#FFFCF4" />
+</shape>

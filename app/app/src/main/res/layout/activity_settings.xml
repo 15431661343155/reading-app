@@ -6,13 +6,14 @@
     android:orientation="vertical"
     android:background="@color/ios_bg">
 
-    <androidx.appcompat.widget.Toolbar
+    <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="@color/ios_bg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="@string/settings"
+        app:titleCentered="true"
         app:titleTextColor="@color/ios_text_primary" />
 
     <LinearLayout
@@ -21,68 +22,6 @@
         android:layout_weight="1"
         android:orientation="vertical"
         android:padding="15dp">
-
-        <LinearLayout
-            android:id="@+id/btn_profile"
-            android:layout_width="match_parent"
-            android:layout_height="55dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/profile"
-                android:textColor="@color/ios_text_primary"
-                android:textSize="16sp"/>
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_arrow_right"
-                android:contentDescription="@null"/>
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/ios_separator"/>
-
-        <LinearLayout
-            android:id="@+id/btn_security"
-            android:layout_width="match_parent"
-            android:layout_height="55dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/account_security"
-                android:textColor="@color/ios_text_primary"
-                android:textSize="16sp"/>
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_arrow_right"
-                android:contentDescription="@null"/>
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/ios_separator"/>
 
         <LinearLayout
             android:id="@+id/btn_theme"
@@ -139,69 +78,6 @@
                 android:layout_height="20dp"
                 android:src="@drawable/ic_arrow_right"
                 android:contentDescription="@null"/>
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/ios_separator"/>
-
-        <LinearLayout
-            android:id="@+id/btn_about"
-            android:layout_width="match_parent"
-            android:layout_height="55dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/about_app"
-                android:textColor="@color/ios_text_primary"
-                android:textSize="16sp"/>
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_arrow_right"
-                android:contentDescription="@null"/>
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/ios_separator"/>
-
-        <LinearLayout
-            android:id="@+id/btn_logout"
-            android:layout_width="match_parent"
-            android:layout_height="55dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground"
-            android:layout_marginTop="15dp">
-
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_exit_black"
-                android:contentDescription="@null"/>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/logout_and_clear"
-                android:textColor="@color/ios_text_primary"
-                android:textSize="16sp"
-                android:layout_marginStart="15dp"/>
         </LinearLayout>
 
     </LinearLayout>

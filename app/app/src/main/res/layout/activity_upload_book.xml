@@ -8,13 +8,14 @@
     android:background="?android:attr/windowBackground">
 
     <!--返回标题栏 -->
-    <androidx.appcompat.widget.Toolbar
+    <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="@color/ios_bg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="@string/btn_upload_book"
+        app:titleCentered="true"
         app:titleTextColor="@color/ios_text_primary"/>
     <LinearLayout
         android:layout_width="match_parent"

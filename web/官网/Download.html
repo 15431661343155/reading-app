@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>书阁阅读 · 下载</title>
+<meta name="description" content="下载书阁阅读 Android 客户端安装包（官方唯一下载渠道，自动获取最新版本）。支持 Android 7.0+。">
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
+<link rel="preconnect" href="https://miaoda.feishu.cn">
+<link href="https://miaoda.feishu.cn/fonts/css2?family=Noto+Serif+SC:wght@600;700;900&amp;family=Noto+Sans+SC:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F6F1E7;--paper-deep:#EDE5D4;--white:#FDFBF6;
+  --ink:#1E1A13;--ink-2:#57503F;--ink-3:#8C8170;
+  --cinnabar:#A8422E;--cinnabar-deep:#8A3321;--line:#E0D6C2;
+  --serif:'Noto Serif SC','Songti SC','SimSun',serif;
+  --sans:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='180' height='180' filter='url(%23n)' opacity='0.045'/></svg>")}
+img{max-width:100%;display:block}
+a{color:inherit}
+[id]{scroll-margin-top:80px}
+:focus-visible{outline:2px solid var(--cinnabar);outline-offset:2px}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+
+header{position:sticky;top:0;z-index:50;background:transparent;border-bottom:1px solid transparent;transition:background .35s,border-color .35s}
+header.scrolled{background:rgba(246,241,231,.94);border-bottom-color:var(--line)}
+.nav-inner{display:flex;align-items:center;height:70px}
+.back-btn{display:inline-flex;align-items:center;gap:6px;margin-right:18px;text-decoration:none;color:var(--ink-2);font-size:14px;font-family:var(--sans);padding:8px 12px;border-radius:9px;transition:background .2s,color .2s;white-space:nowrap}
+.back-btn svg{width:18px;height:18px;flex:none}
+.back-btn:hover{background:rgba(168,66,46,.08);color:var(--cinnabar)}
+.brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:var(--ink)}
+.brand-seal{width:38px;height:38px;border-radius:9px;overflow:hidden;flex:none;display:block;box-shadow:0 2px 10px rgba(30,26,19,.12)}
+.brand-icon{display:block;width:100%;height:100%;object-fit:cover}
+.brand-name{font-family:var(--serif);font-weight:700;font-size:19px;letter-spacing:.08em}
+.brand-name .tag{font-family:var(--sans);font-size:12px;color:var(--cinnabar);letter-spacing:.1em;margin-left:10px;font-weight:500}
+
+main{padding:64px 0 40px}
+.page-title{font-family:var(--serif);font-weight:900;font-size:clamp(26px,3.4vw,40px);letter-spacing:.02em}
+.page-title span{color:var(--cinnabar)}
+.page-desc{color:var(--ink-2);font-size:14.5px;margin:12px 0 30px;max-width:560px}
+
+.dl-panel{
+  background:var(--white);border:1px solid var(--line);border-radius:18px;
+  padding:38px 36px;position:relative;overflow:hidden;box-shadow:0 2px 8px rgba(30,26,19,.04);
+}
+.dl-panel::before{content:"";position:absolute;top:-80px;right:-80px;width:220px;height:220px;border-radius:50%;background:radial-gradient(closest-side,rgba(168,66,46,.07),transparent 72%)}
+.dl-panel .apk-name{font-family:var(--serif);font-weight:700;font-size:19px;word-break:break-all;margin-bottom:22px}
+.specs{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;position:relative}
+.spec .m{font-size:12px;color:var(--ink-3)}
+.spec .v{font-family:var(--serif);font-size:17px;font-weight:700;margin-top:4px}
+.spec .v small{font-size:11px;color:var(--ink-3);font-weight:400;margin-left:3px}
+.dl-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:30px;position:relative}
+.dl-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;height:58px;padding:0 36px;border-radius:10px;
+  background:var(--cinnabar);color:var(--white);font-size:16.5px;font-weight:600;text-decoration:none;
+  box-shadow:0 8px 20px rgba(168,66,46,.26);transition:transform .25s,background .25s;
+}
+.dl-btn svg{width:19px;height:19px}
+.dl-btn:hover{background:var(--cinnabar-deep);transform:translateY(-2px);box-shadow:0 12px 26px rgba(168,66,46,.32)}
+.dl-note{font-size:12.5px;color:var(--ink-3);margin-top:14px;display:flex;align-items:center;gap:8px}
+.dl-note svg{width:14px;height:14px;color:var(--cinnabar);flex:none}
+.dl-err{font-size:12.5px;color:var(--cinnabar);margin-top:10px;display:none}
+
+.section{margin-top:56px}
+.sec-kicker{font-size:12.5px;letter-spacing:.16em;color:var(--cinnabar);font-weight:600}
+.sec-title{font-family:var(--serif);font-weight:900;font-size:24px;margin-top:8px;margin-bottom:22px}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.step{background:var(--white);border:1px solid var(--line);border-radius:var(--radius,14px);padding:26px 22px;transition:transform .3s cubic-bezier(.22,1,.36,1),box-shadow .3s}
+.step:hover{transform:translateY(-4px);box-shadow:0 12px 26px rgba(30,26,19,.08)}
+.step-num{width:40px;height:40px;border-radius:10px;background:rgba(168,66,46,.09);color:var(--cinnabar);display:grid;place-items:center;font-family:var(--serif);font-weight:900;font-size:17px;margin-bottom:16px}
+.step h3{font-family:var(--serif);font-weight:700;font-size:16px;margin-bottom:8px}
+.step p{font-size:13px;color:var(--ink-2);line-height:1.85}
+
+.faq-list{max-width:820px}
+.faq-item{background:var(--white);border:1px solid var(--line);border-radius:14px;margin-bottom:13px;overflow:hidden}
+.faq-q{width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:19px 24px;background:none;border:none;cursor:pointer;text-align:left;font-family:var(--serif);font-weight:700;font-size:15px;color:var(--ink)}
+.faq-q .arr{width:18px;height:18px;flex:none;color:var(--cinnabar);transition:transform .3s}
+.faq-item.open .arr{transform:rotate(45deg)}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .4s cubic-bezier(.22,1,.36,1)}
+.faq-a-inner{padding:0 24px 20px;font-size:13.5px;color:var(--ink-2);line-height:1.9}
+
+footer{border-top:1px solid var(--line);background:var(--paper-deep);margin-top:56px;padding:40px 0 34px}
+.foot-bottom{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-3)}
+.foot-links a{color:var(--ink-3);text-decoration:none;margin-left:18px;transition:color .2s}
+.foot-links a:hover{color:var(--cinnabar)}
+
+@media(max-width:1020px){.specs{grid-template-columns:repeat(2,1fr)}.steps{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:720px){.specs{grid-template-columns:repeat(2,1fr)}.steps{grid-template-columns:1fr}main{padding:44px 0 28px}.back-btn span{display:none}}
+</style>
+</head>
+<body>
+
+<header id="top">
+  <div class="wrap nav-inner">
+    <a class="back-btn" href="index.html" aria-label="返回官网首页">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      <span>返回官网</span>
+    </a>
+    <a class="brand" href="index.html" aria-label="书阁阅读">
+      <span class="brand-seal"><img class="brand-icon" src="assets/brand-icon.png" alt="书阁阅读" width="512" height="512"></span>
+      <span class="brand-name">书阁阅读<span class="tag">下载</span></span>
+    </a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <h1 class="page-title">书阁阅读 <span>Android 客户端</span> 下载</h1>
+    <p class="page-desc">本页为书阁阅读唯一官方下载渠道。下方安装包信息由后端接口实时获取，始终为最新版本。</p>
+
+    <div class="dl-panel">
+      <div class="apk-name" id="apkName">书阁阅读_v2.0.21_20260925.apk</div>
+      <div class="specs">
+        <div class="spec"><div class="m">版本</div><div class="v" id="specVersion">v2.0.21 <small>versionCode 4</small></div></div>
+        <div class="spec"><div class="m">大小</div><div class="v" id="specSize">约 11.8 MB</div></div>
+        <div class="spec"><div class="m">更新时间</div><div class="v" id="specDate">2026-09-25</div></div>
+        <div class="spec"><div class="m">最低系统</div><div class="v">Android 7.0 <small>API 24</small></div></div>
+      </div>
+      <div class="dl-row">
+        <a class="dl-btn" id="dlBtn" href="/api/app/apk/download/%E4%B9%A6%E9%98%81%E9%98%85%E8%AF%BB_v2.0.21_20260925.apk" download="书阁阅读_v2.0.21_20260925.apk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 17v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+          <span class="dl-label">下载 APK（11.8 MB）</span>
+        </a>
+      </div>
+      <p class="dl-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5m0 3h.01"/></svg>
+        安装时如提示未知来源，按系统引导允许后即可继续
+      </p>
+      <p class="dl-err" id="dlErr">接口获取失败，已显示最近已知版本；如需最新安装包请联系管理员。</p>
+    </div>
+
+    <div class="section" id="install">
+      <div class="sec-kicker">INSTALL</div>
+      <h2 class="sec-title">安装说明</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">一</div>
+          <h3>下载 APK</h3>
+          <p>点击上方「下载 APK」，将安装包保存到手机。</p>
+        </div>
+        <div class="step">
+          <div class="step-num">二</div>
+          <h3>允许未知来源</h3>
+          <p>打开安装包时若系统提示，允许「安装未知来源应用」；也可在 设置 → 安全 中提前开启。</p>
+        </div>
+        <div class="step">
+          <div class="step-num">三</div>
+          <h3>完成安装</h3>
+          <p>点击「安装」并等待完成，桌面出现「书阁阅读」图标即安装成功。</p>
+        </div>
+        <div class="step">
+          <div class="step-num">四</div>
+          <h3>授权文件访问</h3>
+          <p>Android 11+ 首次导入本地书籍前，需在 设置 → 应用 → 书阁阅读 中开启「所有文件访问」。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="faq">
+      <div class="sec-kicker">FAQ</div>
+      <h2 class="sec-title">下载常见问题</h2>
+      <div class="faq-list">
+        <div class="faq-item">
+          <button class="faq-q" type="button">安装时提示「未知来源」怎么办？
+            <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m0 0l-6-6m6 6l6-6"/></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">在安装包打开时的系统弹窗中点击「允许」即可；如未弹出，可前往 手机设置 → 安全 / 隐私 → 更多安全设置，开启「允许安装未知来源应用」，然后重新点击 APK 安装。</div></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button">提示「解析包错误 / 安装失败」怎么办？
+            <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m0 0l-6-6m6 6l6-6"/></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">多为下载不完整或存储空间不足导致。建议：删除原安装包后从本页重新下载完整 APK，确认手机剩余空间大于 100 MB 后再安装；若仍失败，请确认系统版本为 Android 7.0（API 24）及以上。</div></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button">支持哪些 Android 版本？
+            <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m0 0l-6-6m6 6l6-6"/></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">支持 Android 7.0（API 24）及以上版本的系统，低于该版本的设备无法安装。</div></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button">Android 11+ 读不到本地书籍？
+            <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m0 0l-6-6m6 6l6-6"/></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">Android 11 及以上系统需要「所有文件访问」权限才能读取本地 TXT / EPUB：进入 手机设置 → 应用 → 书阁阅读 → 权限，开启「所有文件访问」即可。</div></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button">这个 APK 安全吗？
+            <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m0 0l-6-6m6 6l6-6"/></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">本页是唯一官方下载渠道，APK 由项目自建构建产物，版本信息由后端接口实时获取。请勿从其他渠道获取安装包；下载后可在安装前的系统校验页核对签名来源。</div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-bottom">
+      <span>©2026 书阁阅读 · 保留所有权利 · Android 客户端 · 个人项目</span>
+      <span class="foot-links">
+        <a href="index.html">官方网站</a>
+        <a href="https://book.书阁阅读.xyz/文档资料/privacy.html" target="_blank" rel="noopener">隐私政策</a>
+        <a href="https://book.书阁阅读.xyz/文档资料/terms.html" target="_blank" rel="noopener">用户条款</a>
+      </span>
+    </div>
+  </div>
+</footer>
+
+<script>
+const header=document.querySelector('header');
+const onScroll=()=>{header.classList.toggle('scrolled',window.scrollY>10)};
+window.addEventListener('scroll',onScroll,{passive:true});onScroll();
+
+document.querySelectorAll('.faq-q').forEach(q=>{
+  q.addEventListener('click',()=>{
+    const item=q.parentElement, a=item.querySelector('.faq-a'), open=item.classList.contains('open');
+    document.querySelectorAll('.faq-item.open').forEach(o=>{
+      o.classList.remove('open');
+      o.querySelector('.faq-a').style.maxHeight=null;
+    });
+    if(!open){
+      item.classList.add('open');
+      a.style.maxHeight=a.scrollHeight+'px';
+    }
+  });
+});
+
+// 实时从后端公开接口获取最新安装包信息与下载地址（失败则保留页面硬编码兜底值）
+(async function loadApk(){
+  const API='/api/app/apk/latest';
+  try{
+    const r=await fetch(API,{headers:{'Accept':'application/json'}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    if(!j.success||!j.data) throw new Error('empty');
+    const d=j.data;
+    if(d.fileName)        document.getElementById('apkName').textContent=d.fileName;
+    if(d.versionDisplay)  document.getElementById('specVersion').textContent=d.versionDisplay;
+    if(d.fileSize)        document.getElementById('specSize').textContent=d.fileSize;
+    if(d.date)            document.getElementById('specDate').textContent=d.date;
+    if(d.downloadUrl){
+      const btn=document.getElementById('dlBtn');
+      btn.href=d.downloadUrl;
+      btn.setAttribute('download', d.fileName||'app.apk');
+      const sizeTxt=d.fileSize?('（'+d.fileSize.replace(/^约\s*/,'')+'）'):'';
+      btn.querySelector('.dl-label').textContent='下载 APK'+sizeTxt;
+    }
+    document.getElementById('dlErr').style.display='none';
+  }catch(e){
+    document.getElementById('dlErr').style.display='';
+  }
+})();
+</script>
+</body>
+</html>

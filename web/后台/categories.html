@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>分类管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/admin-theme.css">
+  <script src="assets/js/admin-auth.js"></script>
+</head>
+<body>
+<nav class="admin-nav">
+  <div class="admin-nav-inner">
+    <a class="admin-nav-brand" href="index.html">
+      <span class="brand-seal" aria-hidden="true"><span>书阁</span></span>
+      <span class="brand-text">
+        <span class="brand-title">管理后台</span>
+        <span class="brand-sub">内容管理平台</span>
+      </span>
+    </a>
+    <div class="admin-nav-links">
+      <a href="index.html" class="">首页</a>
+      <a href="books.html" class="">书籍管理</a>
+      <a href="categories.html" class="is-active">分类管理</a>
+      <a href="import.html" class="">数据导入</a>
+      <a href="online-source.html" class="-source">在线书源</a>
+      <a href="book-source.html" class="-source">书源管理</a>
+      <a href="users.html" class="">用户管理</a>
+      <a href="resource.html" class="">资源管理</a>
+      <a href="feedback.html" class="">意见反馈</a>
+    </div>
+    <div class="admin-nav-auth">
+      <span class="admin-auth-name" id="adminAuthName">管理员</span>
+      <button type="button" class="admin-logout" onclick="adminLogout()">退出登录</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-4 admin-main">
+  <div class="page-head">
+  <span class="kicker">Taxonomy</span>
+  <h1 id="pageTitle">分类管理</h1>
+  <p class="desc">维护书籍分类：主分类与子分类均可新增、重命名、删除</p>
+  <div class="head-rule"></div>
+</div>
+
+  <div class="alert alert-warning py-2 small">
+    主分类决定书城「本站藏书」里有哪些子页面；子分类用于书城内更细的筛选。
+    <strong>重命名</strong>会同步更新已归类书籍的分类（书不会丢）；
+    <strong>删除</strong>会解除书籍上的该分类（书籍本身保留，主分类被删后这些书只出现在书城「新书」子页）。
+  </div>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="text-muted small" id="catSummary">加载中…</div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="loadCategories()">刷新</button>
+      <button class="btn btn-primary btn-sm" type="button" onclick="addMain()">+ 新增主分类</button>
+    </div>
+  </div>
+
+  <div id="catMsg"></div>
+  <div id="catList"></div>
+
+  <div id="unregisteredWrap" class="card mt-4" style="display:none;">
+    <div class="card-header">库中出现过、但未登记的子分类</div>
+    <div class="card-body">
+      <p class="form-text mb-2">
+        这些名字来自书籍现有数据（多半是老数据迁移遗留的自由文本）。登记到某个主分类下之后，
+        就能像其他子分类一样在书城与分类选择框里统一管理。
+      </p>
+      <div id="unregisteredList" class="d-flex flex-column gap-2"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ==========================================================================
+     分类管理页：主分类 / 子分类的新增、重命名、删除
+     --------------------------------------------------------------------------
+     · 数据源 GET  /api/admin/categories/overview   （主/子分类 + 使用量 + 未登记子分类）
+     · 新增   POST /api/admin/categories            {name, parentId?}
+     · 重命名 PUT  /api/admin/categories/{id}       {name}
+     · 删除   DELETE /api/admin/categories/{id}?force=true
+       删除前先查 /{id}/impact 拿到影响面（几本书在用），用 confirm 说清后果再提交。
+     刻意不用 bootstrap 的 Modal：后台主题依赖 CDN，弹窗脚本一挂整页就不可用。
+     ========================================================================== */
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function msg(text, kind) {
+    document.getElementById('catMsg').innerHTML = text
+      ? '<div class="alert alert-' + (kind || 'success') + ' py-2">' + esc(text) + '</div>' : '';
+  }
+
+  async function api(method, url, body) {
+    const opt = { method: method, headers: { 'Accept': 'application/json' } };
+    if (body !== undefined) {
+      opt.headers['Content-Type'] = 'application/json';
+      opt.body = JSON.stringify(body);
+    }
+    const r = await fetch(url, opt);
+    if (r.status === 401 || r.status === 403) { window.location.replace('login.html'); return null; }
+    try { return await r.json(); } catch (e) { return { success: false, message: '响应解析失败（HTTP ' + r.status + '）' }; }
+  }
+
+  async function loadCategories() {
+    const d = await api('GET', '/api/admin/categories/overview');
+    if (!d) return;
+    if (!d.success) { msg(d.message, 'danger'); return; }
+    render(d.data);
+  }
+
+  // 分类数据缓存：onclick 只传 id，名字从缓存里取。
+  // 不把分类名拼进 onclick：名字里的引号会在 HTML 属性解码后破坏 JS 字符串。
+  let CATS = { mains: [], subs: [], mainOfSub: {} };
+  let UNREG = [];
+
+  function render(data) {
+    const mains = data.mains || [];
+    CATS = { mains: mains, subs: [], mainOfSub: {} };
+    let subTotal = 0;
+    mains.forEach(function (m) {
+      (m.subs || []).forEach(function (s) {
+        CATS.subs.push(s);
+        CATS.mainOfSub[s.id] = m;
+        subTotal++;
+      });
+    });
+    document.getElementById('catSummary').innerHTML =
+      '共 <strong>' + mains.length + '</strong> 个主分类 / <strong>' + subTotal + '</strong> 个子分类；'
+      + '书库 <strong>' + data.totalBooks + '</strong> 本'
+      + (data.uncategorizedBooks > 0
+        ? '，其中 <strong class="text-danger">' + data.uncategorizedBooks + '</strong> 本尚未指认主分类'
+        : '');
+
+    document.getElementById('catList').innerHTML = mains.length
+      ? mains.map(mainCard).join('')
+      : '<div class="text-muted">还没有任何主分类，先「+ 新增主分类」。</div>';
+    renderUnregistered(data.unregisteredSubs || [], mains);
+  }
+
+  function findMain(id) {
+    let hit = null;
+    CATS.mains.forEach(function (m) { if (m.id === id) hit = m; });
+    return hit;
+  }
+
+  /** 按 id 找分类（主/子都能找），返回 {id, name, main, parentName} */
+  function catById(id) {
+    const m = findMain(id);
+    if (m) return { id: m.id, name: m.name, main: true, parentName: '' };
+    let hit = null;
+    CATS.subs.forEach(function (s) {
+      if (s.id === id) {
+        const parent = CATS.mainOfSub[id];
+        hit = { id: s.id, name: s.name, main: false, parentName: parent ? parent.name : '' };
+      }
+    });
+    return hit;
+  }
+
+  function mainCard(m) {
+    const subs = m.subs || [];
+    return ''
+      + '<div class="card mb-3">'
+      + '  <div class="card-header d-flex flex-wrap align-items-center gap-2">'
+      + '    <strong>' + esc(m.name) + '</strong>'
+      + '    <span class="badge bg-secondary">' + m.bookCount + ' 本</span>'
+      + '    <div class="ms-auto d-flex gap-2">'
+      + '      <button class="btn btn-sm btn-outline-primary" type="button" onclick="renameCat(' + m.id + ')">重命名</button>'
+      + '      <button class="btn btn-sm btn-outline-success" type="button" onclick="addSub(' + m.id + ')">+ 子分类</button>'
+      + '      <button class="btn btn-sm btn-outline-danger" type="button" onclick="delCat(' + m.id + ')">删除</button>'
+      + '    </div>'
+      + '  </div>'
+      + '  <div class="card-body py-2">'
+      + (subs.length
+        ? '<div class="d-flex flex-wrap gap-2">' + subs.map(subChip).join('') + '</div>'
+        : '<span class="text-muted small">该主分类下还没有子分类。子分类为空时，书城侧栏不会出现子分类筛选项。</span>')
+      + '  </div>'
+      + '</div>';
+  }
+
+  function subChip(s) {
+    return ''
+      + '<span class="border rounded px-2 py-1 d-inline-flex align-items-center gap-2 bg-light">'
+      + '  <span>' + esc(s.name) + '</span>'
+      + '  <span class="text-muted small">' + s.bookCount + ' 本</span>'
+      + '  <button class="btn btn-sm btn-link p-0 text-decoration-none" type="button" onclick="renameCat(' + s.id + ')">改名</button>'
+      + '  <button class="btn btn-sm btn-link p-0 text-decoration-none text-danger" type="button" onclick="delCat(' + s.id + ')">删除</button>'
+      + '</span>';
+  }
+
+  function renderUnregistered(subs, mains) {
+    UNREG = subs;
+    const wrap = document.getElementById('unregisteredWrap');
+    if (!subs.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    const options = mains.map(function (m) {
+      return '<option value="' + m.id + '">' + esc(m.name) + '</option>';
+    }).join('');
+    document.getElementById('unregisteredList').innerHTML = subs.map(function (s, i) {
+      return ''
+        + '<div class="d-flex flex-wrap align-items-center gap-2">'
+        + '  <span class="badge bg-warning text-dark">' + esc(s.name) + '</span>'
+        + '  <span class="text-muted small">' + s.bookCount + ' 本在用</span>'
+        + (mains.length
+          ? '  <select class="form-select form-select-sm" style="width:auto;" data-reg="' + i + '">' + options + '</select>'
+            + '  <button class="btn btn-sm btn-outline-primary" type="button" data-reg-btn="' + i + '">登记为该主分类的子分类</button>'
+          : '  <span class="text-muted small">（先建一个主分类才能登记）</span>')
+        + '</div>';
+    }).join('');
+    // 事件用 addEventListener 挂，分类名同样不进 onclick
+    document.querySelectorAll('#unregisteredList [data-reg-btn]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const i = parseInt(btn.dataset.regBtn, 10);
+        const sel = document.querySelector('#unregisteredList [data-reg="' + i + '"]');
+        if (!sel || !UNREG[i]) return;
+        registerSub(UNREG[i].name, sel.value, sel.options[sel.selectedIndex].textContent);
+      });
+    });
+  }
+
+  async function addMain() {
+    const name = prompt('新主分类名称（会同步成为书城「本站藏书」的一个子页面）：');
+    if (name === null || name.trim() === '') return;
+    const d = await api('POST', '/api/admin/categories', { name: name });
+    if (!d) return;
+    msg(d.success ? '已新增主分类「' + name.trim() + '」' : d.message, d.success ? 'success' : 'danger');
+    loadCategories();
+  }
+
+  async function addSub(parentId) {
+    const m = findMain(parentId);
+    if (!m) return;
+    const name = prompt('在「' + m.name + '」下新增子分类，名称：');
+    if (name === null || name.trim() === '') return;
+    const d = await api('POST', '/api/admin/categories', { name: name, parentId: parentId });
+    if (!d) return;
+    msg(d.success ? '已在「' + m.name + '」下新增子分类「' + name.trim() + '」' : d.message, d.success ? 'success' : 'danger');
+    loadCategories();
+  }
+
+  async function registerSub(name, parentId, parentName) {
+    const d = await api('POST', '/api/admin/categories', { name: name, parentId: parentId });
+    if (!d) return;
+    msg(d.success ? '已把「' + name + '」登记到「' + parentName + '」下' : d.message, d.success ? 'success' : 'danger');
+    loadCategories();
+  }
+
+  async function renameCat(id) {
+    const c = catById(id);
+    if (!c) return;
+    const name = prompt('把「' + c.name + '」重命名为：', c.name);
+    if (name === null || name.trim() === '' || name.trim() === c.name) return;
+    const d = await api('PUT', '/api/admin/categories/' + id, { name: name.trim() });
+    if (!d) return;
+    msg(d.message, d.success ? 'success' : 'danger');
+    loadCategories();
+  }
+
+  async function delCat(id) {
+    const c = catById(id);
+    if (!c) return;
+    const impact = await api('GET', '/api/admin/categories/' + id + '/impact');
+    if (!impact) return;
+    if (!impact.success) { msg(impact.message, 'danger'); return; }
+    const info = impact.data;
+    let text = '确定删除' + (info.main ? '主分类' : '子分类') + '「' + c.name + '」？';
+    if (!info.main && c.parentName) text += '（属于主分类「' + c.parentName + '」）';
+    if (info.subCount > 0) text += '\n\n其下 ' + info.subCount + ' 个子分类（' + (info.subNames || []).join('、') + '）会一并删除。';
+    text += '\n\n' + (info.bookCount > 0
+      ? '有 ' + info.bookCount + ' 本书正在使用该分类：删除后这些书会失去该分类归属（书籍与章节内容都保留，只是不再出现在对应书城子页）。'
+      : '目前没有书籍使用该分类。');
+    text += '\n\n删除后不可撤销，确定继续？';
+    if (!confirm(text)) return;
+
+    const d = await api('DELETE', '/api/admin/categories/' + id + '?force=true');
+    if (!d) return;
+    msg(d.message, d.success ? 'success' : 'danger');
+    loadCategories();
+  }
+
+  loadCategories();
+</script>
+</body>
+</html>

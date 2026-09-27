@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 单格验证码输入框：聚焦时紫描边高亮，其余浅灰 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:state_focused="true"
+        android:drawable="@drawable/bg_code_tile_active" />
+    <item android:drawable="@drawable/bg_code_tile_normal" />
+</selector>

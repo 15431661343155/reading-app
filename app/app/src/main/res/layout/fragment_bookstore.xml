@@ -74,7 +74,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- 当前书城模式标题行（显示：📚 本站藏书 / 🌐 七猫小说网） -->
+        <!-- 当前书城模式标题行（仅外站书城显示；本站藏书不再需要标题行，已在代码中置为 GONE） -->
         <LinearLayout
             android:id="@+id/layout_mode_title"
             android:layout_width="match_parent"
@@ -103,6 +103,23 @@
                 android:textColor="@color/ios_text_secondary"/>
         </LinearLayout>
 
+        <!-- 🗂 本站藏书：主分类子页面 Tab（新书 / 男生 / 女生 / 后台新增主分类），点击或左右滑动切换 -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tab_local_main"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="@color/ios_bg_grouped"
+            android:visibility="gone"
+            app:tabMode="scrollable"
+            app:tabGravity="center"
+            app:tabIndicatorColor="#007AFF"
+            app:tabIndicatorHeight="2dp"
+            app:tabSelectedTextColor="#007AFF"
+            app:tabTextColor="#8E8E93"
+            app:tabRippleColor="@android:color/transparent"
+            app:tabPaddingStart="14dp"
+            app:tabPaddingEnd="14dp" />
+
         <!-- 🏷️ 二级分类（横向滚动，仅部分模式显示） -->
         <HorizontalScrollView
             android:id="@+id/hsv_sub_category"
@@ -127,19 +144,40 @@
         android:layout_height="0.5dp"
         android:background="@color/ios_separator"/>
 
-    <!-- 下拉刷新 + 书籍列表 -->
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/swipe_refresh_bookstore"
+    <!-- 下拉刷新 + 书籍列表（本站藏书与外站书城共用同一个列表） -->
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/ios_bg_grouped">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rv_bookstore"
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipe_refresh_bookstore"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:paddingBottom="72dp"
-            android:clipToPadding="false" />
+            android:background="@color/ios_bg_grouped">
 
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_bookstore"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingBottom="72dp"
+                android:clipToPadding="false" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <!-- 🗂 本站藏书：主分类子页面容器（每页自带二级分类 + 书单），与外站列表互斥显示 -->
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/vp_local_store"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <!-- 加载失败覆盖层（外站书城模式）：插画 + 文案 + 「再试一次」（全站统一 LoadFailView）。
+             本站子页面各自的失败层在 item_bookstore_local_page 内，互不影响。 -->
+        <com.example.myapplication.widget.LoadFailView
+            android:id="@+id/load_fail_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+    </FrameLayout>
 </LinearLayout>

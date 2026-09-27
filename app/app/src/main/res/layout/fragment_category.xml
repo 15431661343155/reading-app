@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  分类页：左侧主分类竖排（选中项白底 + 左侧蓝色指示条），右侧该主分类下的子分类卡片。
+  顶部状态栏由 activity_main 的 fitsSystemWindows 自动避让，底部给悬浮导航栏留出安全高度。
+  最外层套一层 FrameLayout，只为让「加载中」动画铺满整页、屏幕居中显示
+  （原先塞在右栏里，视觉偏右且左侧留一条空灰栏）。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ios_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <!-- 左：主分类 -->
+        <ScrollView
+            android:layout_width="96dp"
+            android:layout_height="match_parent"
+            android:background="@color/ios_bg_grouped"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/layout_main"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="76dp"/>
+        </ScrollView>
+
+        <!-- 右：子分类卡片 -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@color/ios_bg">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_sub"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="76dp"
+                android:clipToPadding="false"
+                android:overScrollMode="never"/>
+
+            <TextView
+                android:id="@+id/tv_sub_empty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:textColor="@color/ios_text_secondary"
+                android:textSize="14sp"
+                android:gravity="center"
+                android:visibility="gone"
+                android:text="该分类下暂无子分类"/>
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- 加载动画：首次拉取分类树期间显示（原来是右栏里的纯文字「正在加载…」）。
+         透明整页铺开，不吃触摸（不可点击的子项不会消费事件），左栏保持可见。 -->
+    <com.example.myapplication.widget.LoadingView
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/loading_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        app:lvGifSize="140dp" />
+
+    <!-- 加载失败覆盖层：插画 + 文案 + 「再试一次」按钮（全站统一 LoadFailView） -->
+    <com.example.myapplication.widget.LoadFailView
+        android:id="@+id/load_fail_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>

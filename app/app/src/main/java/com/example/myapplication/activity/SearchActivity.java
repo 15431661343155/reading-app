@@ -16,7 +16,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -30,6 +29,7 @@ import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.PageResponse;
+import com.example.myapplication.utils.Hint;
 import com.google.android.material.tabs.TabLayout;
 
 import java.util.ArrayList;
@@ -297,7 +297,7 @@ public class SearchActivity extends AppCompatActivity {
 
     private void doSearch(String keyword) {
         if (keyword == null || keyword.isEmpty()) {
-            Toast.makeText(this, "请输入搜索关键词", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "请输入搜索关键词");
             return;
         }
         hideKeyboard();
@@ -326,7 +326,7 @@ public class SearchActivity extends AppCompatActivity {
                         if (pending.decrementAndGet() == 0) {
                             swipeRefresh.setRefreshing(false);
                             if (allResultBooks.isEmpty()) {
-                                Toast.makeText(SearchActivity.this, "未找到相关书籍", Toast.LENGTH_SHORT).show();
+                                Hint.show(SearchActivity.this, "未找到相关书籍");
                             }
                         }
                     }
@@ -353,7 +353,7 @@ public class SearchActivity extends AppCompatActivity {
                         if (pending.decrementAndGet() == 0) {
                             swipeRefresh.setRefreshing(false);
                             if (allResultBooks.isEmpty()) {
-                                Toast.makeText(SearchActivity.this, "未找到相关书籍", Toast.LENGTH_SHORT).show();
+                                Hint.show(SearchActivity.this, "未找到相关书籍");
                             }
                         }
                     }

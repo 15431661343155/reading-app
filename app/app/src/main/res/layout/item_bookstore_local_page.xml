@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「本站藏书」的单个主分类子页面（ViewPager2 的一页）。
+  由 LocalStorePageAdapter.PageHolder 绑定：
+    顶部 hsv_sub / layout_sub —— 该主分类下的二级分类筛选（「新书」页隐藏）
+    下方 swipe_page / rv_page —— 该页的书单
+  最外层套 FrameLayout 以承载「加载失败」覆盖层（每页独立显示/重试）。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ios_bg_grouped">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- 🏷️ 二级分类（横向滚动） -->
+        <HorizontalScrollView
+            android:id="@+id/hsv_sub"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="@color/ios_bg_grouped"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/layout_sub"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp"
+                android:gravity="center_vertical"/>
+        </HorizontalScrollView>
+
+        <!-- 下拉刷新 + 书单 -->
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipe_page"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/ios_bg_grouped">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_page"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingBottom="72dp"
+                android:clipToPadding="false" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+    </LinearLayout>
+
+    <!-- 本页书单加载失败覆盖层（全站统一 LoadFailView），只盖住本页 -->
+    <com.example.myapplication.widget.LoadFailView
+        android:id="@+id/load_fail_page"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>

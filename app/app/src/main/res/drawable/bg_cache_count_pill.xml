@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「已选 n / m 项」小胶囊：淡蓝底 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#1A007AFF" />
+    <corners android:radius="8dp" />
+</shape>

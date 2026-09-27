@@ -1,6 +1,7 @@
 package com.example.readingapp.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -24,6 +25,11 @@ public class User {
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
+    /**
+     * 密码（BCrypt 哈希）。仅允许写入，序列化到 JSON 时一律剔除，
+     * 防止注册/绑定/用户列表等接口响应体回显密码哈希。
+     */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(nullable = false, length = 255)
     private String password;
 
@@ -44,6 +50,13 @@ public class User {
 
     @Column(columnDefinition = "TINYINT DEFAULT 1")
     private Integer status = 1; // 0禁用 1正常
+
+    /**
+     * 角色：USER=普通用户（App 端），ADMIN=管理员（仅管理后台可登录）。
+     * 历史数据该列为 NULL，读取时统一按 USER 处理。
+     */
+    @Column(length = 20)
+    private String role = "USER";
 
     @Column(name = "last_login_time")
     private LocalDateTime lastLoginTime;

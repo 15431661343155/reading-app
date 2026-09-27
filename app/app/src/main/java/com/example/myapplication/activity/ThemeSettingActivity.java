@@ -1,7 +1,6 @@
 package com.example.myapplication.activity;
 
 import android.os.Bundle;
-import android.widget.Toast;
 
 import com.google.android.material.card.MaterialCardView;
 import com.example.myapplication.R;
@@ -9,6 +8,7 @@ import com.example.myapplication.utils.ThemeManager;
 import android.content.Intent;
 import androidx.appcompat.widget.Toolbar;
 import com.example.myapplication.activity.MainActivity;
+import com.example.myapplication.utils.Hint;
 
 public class ThemeSettingActivity extends BaseActivity {
 
@@ -59,7 +59,7 @@ public class ThemeSettingActivity extends BaseActivity {
 
     // 重启界面，让主题生效
     private void restartToApply() {
-        Toast.makeText(this, "主题已应用", Toast.LENGTH_SHORT).show();
+        Hint.show(this, "主题已应用");
 
         // 刷新当前页面，停留在设置页
         finish();

@@ -5,7 +5,6 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.Toolbar;
@@ -17,6 +16,8 @@ import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.BookSource;
 import com.example.myapplication.bean.ImportResult;
 import com.example.myapplication.utils.ThemeManager;
+import com.example.myapplication.utils.Hint;
+import com.example.myapplication.widget.LoadingView;
 
 import java.util.HashMap;
 import java.util.List;
@@ -30,6 +31,7 @@ public class BookSourceActivity extends BaseActivity {
 
     private LinearLayout sourceListLayout;
     private ApiService apiService;
+    private LoadingView loadingView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,6 +55,7 @@ public class BookSourceActivity extends BaseActivity {
 
         sourceListLayout = findViewById(R.id.sourceListLayout);
         apiService = RetrofitClient.getApiService();
+        loadingView = findViewById(R.id.loading_view);
 
         findViewById(R.id.btnAdd).setOnClickListener(v -> showAddDialog());
         findViewById(R.id.btnImportUrl).setOnClickListener(v -> showImportUrlDialog());
@@ -61,6 +64,8 @@ public class BookSourceActivity extends BaseActivity {
     }
 
     private void loadSources() {
+        // 拉取在线书源期间先把整页加载动画顶上来（列表此时为空，避免空白期）
+        setLoading(true);
         apiService.getOnlineSources().enqueue(new Callback<ApiResponse<List<com.example.myapplication.bean.SourceInfo>>>() {
             @Override
             public void onResponse(Call<ApiResponse<List<com.example.myapplication.bean.SourceInfo>>> call,
@@ -95,9 +100,12 @@ public class BookSourceActivity extends BaseActivity {
             tvType.setText(s.getType());
             sourceListLayout.addView(item);
         }
+        setLoading(false);
     }
 
     private void showEmpty() {
+        // 失败 / 空列表：收起加载动画并展示空态
+        setLoading(false);
         sourceListLayout.removeAllViews();
         TextView emptyTv = new TextView(this);
         emptyTv.setText("暂无书源\n点击「网络导入」添加书源");
@@ -105,6 +113,11 @@ public class BookSourceActivity extends BaseActivity {
         emptyTv.setPadding(0, 100, 0, 0);
         emptyTv.setTextColor(0xFF8E8E93); // iOS 次文字
         sourceListLayout.addView(emptyTv);
+    }
+
+    private void setLoading(boolean loading) {
+        if (loadingView == null) return;
+        loadingView.setVisibility(loading ? View.VISIBLE : View.GONE);
     }
 
     private void showAddDialog() {
@@ -126,10 +139,10 @@ public class BookSourceActivity extends BaseActivity {
             String type = etType.getText().toString().trim();
             String config = etConfig.getText().toString().trim();
             if (name.isEmpty() || type.isEmpty()) {
-                Toast.makeText(this, "请填写完整", Toast.LENGTH_SHORT).show();
+                Hint.show(this, "请填写完整");
                 return;
             }
-            Toast.makeText(this, "请在管理后台配置书源", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "请在管理后台配置书源");
             dialog.dismiss();
         });
     }
@@ -149,7 +162,7 @@ public class BookSourceActivity extends BaseActivity {
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String url = etUrl.getText().toString().trim();
             if (url.isEmpty()) {
-                Toast.makeText(this, "请输入书源链接", Toast.LENGTH_SHORT).show();
+                Hint.show(this, "请输入书源链接");
                 return;
             }
             doImportUrl(url, dialog);
@@ -191,7 +204,7 @@ public class BookSourceActivity extends BaseActivity {
                     loadSources();
                 } else {
                     String errMsg = response.body() != null ? response.body().getMessage() : "导入失败";
-                    Toast.makeText(BookSourceActivity.this, errMsg, Toast.LENGTH_SHORT).show();
+                    Hint.show(BookSourceActivity.this, errMsg);
                 }
             }
 
@@ -199,7 +212,7 @@ public class BookSourceActivity extends BaseActivity {
             public void onFailure(Call<ApiResponse<ImportResult>> call, Throwable t) {
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("开始导入");
-                Toast.makeText(BookSourceActivity.this, "网络错误: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                Hint.show(BookSourceActivity.this, "网络错误: " + t.getMessage());
             }
         });
     }

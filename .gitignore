@@ -17,6 +17,8 @@ app/local.properties
 local.properties
 
 # ============ 开发过程产物 ============
+# 历史产物归档区（2026-09-17 整理：kaiti_ppt / ppt-build / ppt_work / verify_kaiti / preview / screenshots）
+_archive/
 screenshots/
 preview/
 ppt_work/*.jpg
@@ -42,3 +44,41 @@ tmp_*.json
 ui*.xml
 tmp_*.json
 test_*.json
+
+# ============ 根目录 QA / 设计 / 构建临时产物（2026-09-27 补充，避免误提交到 GitHub） ============
+# QA / 自动化测试临时产物
+_qa_tmp/
+_qa_tmp_done.txt
+_qa_tmp_ls.txt
+# 构建 / 验证临时输出（根目录 target 与历史归档）
+/target/
+_backup_frosted_20260920/
+.trae-html-share-packages/
+# 设计稿与本地预览（Ardot 效果图等）
+*.design
+# 根目录散落的效果图 / 预览 / 截图（非项目源码，app/res 内资源不受影响）
+/*.png
+/*.jpg
+/*.jpeg
+/*.html
+# 根目录零散调试脚本与数据
+/_*.txt
+/_*.py
+/_*.js
+/_*.xml
+/_*.log
+/nul
+emu_cfg.txt
+debug.log
+# 根目录散落的配置 / 数据（非项目源码）
+maoyan_chapters.json
+qimao_config.json
+qimao_jslib.js
+remote_81_new.json
+remote_81.json
+yb_config.json
+_reading_records.xml
+_reading_records_test.xml
+_ui.xml
+# AI 工具产物目录
+文档/

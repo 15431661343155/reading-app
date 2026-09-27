@@ -32,4 +32,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // 根据字符串 userId 查找用户
     Optional<User> findByUserId(String userId);
+
+    // 是否存在指定角色的用户（用于管理员账号初始化判断）
+    boolean existsByRole(String role);
 }

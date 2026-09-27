@@ -36,6 +36,9 @@ public interface BookshelfRepository extends JpaRepository<Bookshelf, Long> {
     @Query("DELETE FROM Bookshelf b WHERE b.userId = :userId AND b.bookId = :bookId")
     void deleteByUserIdAndBookId(@Param("userId") Long userId, @Param("bookId") Long bookId);
     void deleteByBookId(Long bookId);
+    /** 删除某用户的全部书架记录（删除用户时级联清理）。派生删除方法必须带事务。 */
+    @Transactional
+    void deleteByUserId(Long userId);
     // 统计用户书架书籍数量
     long countByUserId(Long userId);
 

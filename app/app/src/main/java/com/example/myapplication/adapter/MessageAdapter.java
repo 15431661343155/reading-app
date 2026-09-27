@@ -94,7 +94,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.ViewHold
             case "activity":
                 return R.drawable.ic_bookstore;
             case "interaction":
-                return R.drawable.ic_discussion;
+                return R.drawable.ic_fenlei;
             default:
                 return R.drawable.ic_notification;
         }

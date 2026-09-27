@@ -7,7 +7,6 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.widget.Toolbar;
 
@@ -18,6 +17,8 @@ import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.BindRequest;
 import com.example.myapplication.bean.SendCodeRequest;
 import com.example.myapplication.utils.ThemeManager;
+import com.example.myapplication.utils.Hint;
+import com.example.myapplication.widget.MorphSubmitButton;
 
 import retrofit2.Call;
 import retrofit2.Response;
@@ -28,7 +29,7 @@ public class EmailBindingActivity extends BaseActivity {
     private EditText etEmail;
     private EditText etCode;
     private Button btnSendCode;
-    private Button btnBind;
+    private MorphSubmitButton btnBind;
     private LinearLayout layoutCurrentEmail;
 
     @Override
@@ -60,6 +61,8 @@ public class EmailBindingActivity extends BaseActivity {
         loadCurrentEmail();
 
         btnSendCode.setOnClickListener(v -> sendVerificationCode());
+        btnBind.setIdleColor(0xFF6C5CE7);
+        btnBind.setIdleText("绑定邮箱");
         btnBind.setOnClickListener(v -> bindEmail());
     }
 
@@ -89,11 +92,11 @@ public class EmailBindingActivity extends BaseActivity {
     private void sendVerificationCode() {
         String email = etEmail.getText().toString().trim();
         if (email.isEmpty()) {
-            Toast.makeText(this, "请输入邮箱", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "请输入邮箱");
             return;
         }
         if (!email.contains("@") || !email.contains(".")) {
-            Toast.makeText(this, "邮箱格式不正确", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "邮箱格式不正确");
             return;
         }
 
@@ -104,15 +107,15 @@ public class EmailBindingActivity extends BaseActivity {
         RetrofitClient.getApiService().sendEmailCode(request).enqueue(SafeCallback.from(this,
                 (call, response) -> {
                     if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
-                        Toast.makeText(EmailBindingActivity.this, "验证码已发送", Toast.LENGTH_SHORT).show();
+                        Hint.show(EmailBindingActivity.this, "验证码已发送");
                         startCountdown();
                     } else {
                         String msg = (response.body() != null) ? response.body().getMessage() : "发送失败";
-                        Toast.makeText(EmailBindingActivity.this, msg, Toast.LENGTH_SHORT).show();
+                        Hint.show(EmailBindingActivity.this, msg);
                     }
                 },
                 (call, t) -> {
-                    Toast.makeText(EmailBindingActivity.this, "网络错误: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                    Hint.show(EmailBindingActivity.this, "网络错误: " + t.getMessage());
                 }
         ));
     }
@@ -138,19 +141,19 @@ public class EmailBindingActivity extends BaseActivity {
         String code = etCode.getText().toString().trim();
 
         if (email.isEmpty()) {
-            Toast.makeText(this, "请输入邮箱", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "请输入邮箱");
             return;
         }
         if (!email.contains("@") || !email.contains(".")) {
-            Toast.makeText(this, "邮箱格式不正确", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "邮箱格式不正确");
             return;
         }
         if (code.isEmpty()) {
-            Toast.makeText(this, "请输入验证码", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "请输入验证码");
             return;
         }
         if (code.length() != 6) {
-            Toast.makeText(this, "验证码为6位数字", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "验证码为6位数字");
             return;
         }
 
@@ -158,19 +161,20 @@ public class EmailBindingActivity extends BaseActivity {
         String userId = sp2.getString("userId", "");
 
         BindRequest request = new BindRequest(email, code, "bind");
+        btnBind.startLoading();
         RetrofitClient.getApiService().bindEmail(request).enqueue(SafeCallback.from(this,
                 (call, response) -> {
                     if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                         sp2.edit().putString("email", email).apply();
-                        Toast.makeText(EmailBindingActivity.this, "邮箱绑定成功", Toast.LENGTH_SHORT).show();
-                        finish();
+                        btnBind.succeed("邮箱绑定成功");
+                        btnBind.postDelayed(() -> finish(), 1200);
                     } else {
                         String msg = (response.body() != null) ? response.body().getMessage() : "绑定失败";
-                        Toast.makeText(EmailBindingActivity.this, msg, Toast.LENGTH_SHORT).show();
+                        btnBind.fail(msg);
                     }
                 },
                 (call, t) -> {
-                    Toast.makeText(EmailBindingActivity.this, "网络错误: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                    btnBind.fail("网络错误: " + t.getMessage());
                 }
         ));
     }

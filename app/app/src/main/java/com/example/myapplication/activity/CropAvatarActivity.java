@@ -8,7 +8,7 @@ import android.os.Bundle;
 import android.widget.TextView;
 
 import com.example.myapplication.R;
-import com.example.myapplication.view.CropCircleView;
+import com.example.myapplication.view.CropSquareView;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -24,7 +24,7 @@ public class CropAvatarActivity extends BaseActivity {
     public static final String EXTRA_IMAGE_URI = "image_uri";
     public static final String EXTRA_AVATAR_PATH = "avatar_path";
 
-    private CropCircleView cropView;
+    private CropSquareView cropView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -21,6 +20,9 @@ import com.example.myapplication.activity.BookDetailActivity;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.ReadingProgress;
 import com.example.myapplication.bean.ReadingRecord;
+import com.example.myapplication.utils.ExternalPrefs;
+import com.example.myapplication.utils.ExternalSyncManager;
+import com.example.myapplication.utils.Hint;
 import com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView;
 
 import java.util.ArrayList;
@@ -128,7 +130,7 @@ public class ReadingRecordActivity extends BaseActivity {
         ivDelete.setOnClickListener(v -> {
             List<ReadingRecord> selected = adapter.getSelectedItems();
             if (selected.isEmpty()) {
-                Toast.makeText(this, "请选择要删除的记录", Toast.LENGTH_SHORT).show();
+                Hint.show(this, "请选择要删除的记录");
                 return;
             }
             // 同步删除后台记录
@@ -160,16 +162,28 @@ public class ReadingRecordActivity extends BaseActivity {
             adapter.notifyDataSetChanged();
             updateEmptyView();
             exitEditMode();
-            Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "已删除");
         });
 
         loadRecords();
     }
 
+    /** 外站数据拉取完成后刷新列表（登录后 pullAll 是异步的，此前的加载会读不到数据）。 */
+    private final ExternalSyncManager.PullListener pullListener = () -> {
+        if (!isFinishing() && !isDestroyed()) loadRecords();
+    };
+
     @Override
     protected void onResume() {
         super.onResume();
         loadRecords();
+        ExternalSyncManager.getInstance(this).addPullListener(pullListener);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        ExternalSyncManager.getInstance(this).removePullListener(pullListener);
     }
 
     private void clearLocalRecord(long bookId) {
@@ -221,7 +235,7 @@ public class ReadingRecordActivity extends BaseActivity {
     private void clearExternalRecord(ReadingRecord record) {
         if (!record.isExternal() || record.getSourceType() == null || record.getSourceUrl() == null) return;
         String prefix = "ext_" + record.getSourceType() + "|" + record.getSourceUrl();
-        SharedPreferences extSp = getSharedPreferences("external_reading_records", MODE_PRIVATE);
+        SharedPreferences extSp = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
         SharedPreferences.Editor editor = extSp.edit();
         // 删除该外站书的所有相关 key
         java.util.Map<String, ?> all = extSp.getAll();
@@ -236,6 +250,10 @@ public class ReadingRecordActivity extends BaseActivity {
 
         // ✅ 清理旧版本遗留：reading_records 中可能被错误写入的同名外站书脏条目（bookId=0 + 相同书名作者）
         purgeDirtyExternalFromReadingRecords(record.getBookName(), record.getAuthor());
+
+        // ✅ 同步删除服务器侧阅读记录：否则下次启动 pullAll() 会把它重新拉回本地（"删了又出现"）
+        ExternalSyncManager.getInstance(this)
+                .deleteReadingRecordRemote(record.getSourceType(), record.getSourceUrl());
     }
 
     /**
@@ -362,10 +380,9 @@ public class ReadingRecordActivity extends BaseActivity {
      * 加载阅读记录
      */
     private void loadRecords() {
-        String userIdStr = getSharedPreferences("user_info", MODE_PRIVATE).getString("userId", "");
-        long userId = userIdStr.isEmpty() ? 0 : Long.parseLong(userIdStr);
-        if (userId == 0) return;
-        // 从本地 SharedPreferences 读取（因为服务器没有历史记录接口）
+        // 旧版全局外站数据迁移到当前登录用户命名空间（幂等，未登录则跳过）
+        ExternalPrefs.migrateIfNeeded(this);
+        // 阅读记录本地保存，游客模式也应展示（后端无独立历史接口，以本地为准）
         loadLocalRecords();
     }
 
@@ -436,7 +453,7 @@ public class ReadingRecordActivity extends BaseActivity {
      * 从 external_reading_records 读取外站书籍的阅读记录并合并到列表
      */
     private void loadExternalRecords() {
-        SharedPreferences extSp = getSharedPreferences("external_reading_records", MODE_PRIVATE);
+        SharedPreferences extSp = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
         java.util.Map<String, ?> all = extSp.getAll();
         if (all == null || all.isEmpty()) return;
 
@@ -495,8 +512,7 @@ public class ReadingRecordActivity extends BaseActivity {
                     }
                     @Override
                     public void onFail(String msg, boolean sourceMayDown) {
-                        Toast.makeText(ReadingRecordActivity.this,
-                                sourceMayDown ? "书源暂不可用，请稍后重试" : msg, Toast.LENGTH_SHORT).show();
+                        Hint.show(ReadingRecordActivity.this, sourceMayDown ? "书源暂不可用，请稍后重试" : msg);
                     }
                 });
             }

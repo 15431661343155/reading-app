@@ -911,21 +911,12 @@ public class LocalBookParser {
                 return info;
             }
             
-            // ✅ 使用 ZipFile 读取所有条目
-            java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(epubFile);
-            Map<String, byte[]> zipEntries = new HashMap<>();
-            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zipFile.entries();
-            
-            while (entries.hasMoreElements()) {
-                java.util.zip.ZipEntry entry = entries.nextElement();
-                if (!entry.isDirectory()) {
-                    java.io.InputStream entryStream = zipFile.getInputStream(entry);
-                    byte[] data = readAllBytes(entryStream);
-                    entryStream.close();
-                    zipEntries.put(entry.getName(), data);
-                }
-            }
-            zipFile.close();
+            // ✅ 读取所有 zip 条目。
+            // 普通 EPUB 走 ZipFile（对 STORE 模式的 mimetype 最稳）；
+            // 多看等混淆 EPUB 常把 mimetype 在中央目录写两遍，Android 的 java.util.zip.ZipFile
+            // 遇重复条目名会抛 "Duplicate entry name: mimetype" 导致整本解析失败。
+            // readZipEntries 捕获该异常后回退到 ZipInputStream 流式读取（不校验重名，按先到先得去重）。
+            Map<String, byte[]> zipEntries = readZipEntries(epubFile);
             
             // 如果是临时文件，删除它
             if ("content".equals(scheme) && epubFile != null && epubFile.exists()) {
@@ -2415,6 +2406,61 @@ public class LocalBookParser {
         if (d[0] == (byte) 'R' && d[1] == (byte) 'I' && d[2] == (byte) 'F') return true;   // WEBP
         if (d[0] == (byte) 'B' && d[1] == (byte) 'M') return true;                          // BMP
         return false;
+    }
+
+    /**
+     * 把 EPUB 的 zip 条目全部读入内存（name → bytes）。
+     * 优先用 {@link java.util.zip.ZipFile}（对 STORE 模式的 mimetype 最稳）；
+     * 若 zip 含重复条目名（多看等混淆 EPUB 常见：mimetype 被写两遍），Android 的 ZipFile 会抛
+     * "Duplicate entry name: mimetype" 使整本解析失败，此时回退 {@link #readZipEntriesStreaming}。
+     */
+    private static Map<String, byte[]> readZipEntries(java.io.File epubFile) throws Exception {
+        java.util.zip.ZipFile zf = null;
+        try {
+            Map<String, byte[]> map = new HashMap<>();
+            zf = new java.util.zip.ZipFile(epubFile);
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> en = zf.entries();
+            while (en.hasMoreElements()) {
+                java.util.zip.ZipEntry e = en.nextElement();
+                if (e.isDirectory()) continue;
+                // 防御：个别实现不抛异常而是返回重复项，这里按"先到先得"去重
+                if (map.containsKey(e.getName())) continue;
+                java.io.InputStream is = zf.getInputStream(e);
+                map.put(e.getName(), readAllBytes(is));
+                is.close();
+            }
+            return map;
+        } catch (java.util.zip.ZipException ze) {
+            // 重复条目名等 ZipFile 不支持的情况 → 回退流式读取
+            Log.w("LocalBookParser", "ZipFile 读取失败（疑似重复条目名），回退 ZipInputStream: " + ze.getMessage());
+            return readZipEntriesStreaming(epubFile);
+        } finally {
+            if (zf != null) {
+                try { zf.close(); } catch (java.io.IOException ignored) {}
+            }
+        }
+    }
+
+    /**
+     * 流式读取 zip 全部条目（容错重名）：不校验条目名唯一性，遇到重复名按"先到先得"保留第一个。
+     * 用于 Android ZipFile 因 "Duplicate entry name" 拒绝的混淆 EPUB。
+     */
+    private static Map<String, byte[]> readZipEntriesStreaming(java.io.File epubFile) throws Exception {
+        Map<String, byte[]> map = new HashMap<>();
+        java.io.FileInputStream fis = new java.io.FileInputStream(epubFile);
+        java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(fis);
+        java.util.zip.ZipEntry e;
+        while ((e = zis.getNextEntry()) != null) {
+            if (e.isDirectory()) { zis.closeEntry(); continue; }
+            String name = e.getName();
+            if (!map.containsKey(name)) {
+                map.put(name, readAllBytes(zis));
+            }
+            zis.closeEntry();
+        }
+        zis.close();
+        fis.close();
+        return map;
     }
 
     private static byte[] readAllBytes(InputStream is) throws Exception {

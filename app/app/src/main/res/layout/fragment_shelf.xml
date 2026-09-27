@@ -62,29 +62,38 @@
                 android:contentDescription="更多" />
         </LinearLayout>
 
-        <!-- 分组 Tab（iOS segmented control 风格：外层圆角胶囊容器） -->
+        <!-- 分组 Tab：外层挂轨道背景，内部 [指示器(底) → 文字(顶)]，保证 白块>轨道 且 文字>白块 -->
         <FrameLayout
             android:id="@+id/frame_group_tabs"
             android:layout_width="match_parent"
-            android:layout_height="42dp"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="4dp"
-            android:background="@color/ios_bg_grouped">
+            android:layout_height="42dp">
 
-            <HorizontalScrollView
-                android:id="@+id/scroll_group_tabs"
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:scrollbars="none">
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginVertical="4dp"
+                android:background="@drawable/bg_shelf_seg_track">
 
+                <!-- 滑动指示器：先声明 = 在文字下层；四周 3dp 悬浮内嵌 -->
+                <View
+                    android:id="@+id/seg_thumb_shelf"
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginTop="3dp"
+                    android:layout_marginBottom="3dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:visibility="invisible" />
+
+                <!-- 等宽分段容器：所有分组 weight 均分，加组时自动压缩让位 -->
                 <LinearLayout
                     android:id="@+id/layout_group_tabs"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:orientation="horizontal"
-                    android:paddingHorizontal="4dp"
-                    android:background="@drawable/bg_segmented_control" />
-            </HorizontalScrollView>
+                    android:paddingHorizontal="3dp" />
+            </FrameLayout>
         </FrameLayout>
 
         <View
@@ -117,17 +126,61 @@
 
     </LinearLayout>
 
-    <!-- 空状态提示 -->
-    <TextView
-        android:id="@+id/tv_empty_hint"
-        android:layout_width="match_parent"
+    <!-- 空状态：人物插画 + 两行文案 + 「去书城逛逛」CTA -->
+    <LinearLayout
+        android:id="@+id/layout_empty"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:text="书架空空如也\n去书城逛逛吧"
-        android:textSize="16sp"
-        android:textColor="@color/ios_text_tertiary"
-        android:gravity="center"
-        android:lineSpacingExtra="8dp"
-        android:visibility="visible"/>
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:visibility="visible">
+
+        <ImageView
+            android:id="@+id/iv_empty_char"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter"
+            android:src="@drawable/shelf_empty_char" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="书架空空如也"
+            android:textSize="17sp"
+            android:textColor="@color/ios_text_secondary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="去书城逛逛吧"
+            android:textSize="14sp"
+            android:textColor="@color/ios_text_tertiary" />
+
+        <TextView
+            android:id="@+id/btn_go_store"
+            android:layout_width="124dp"
+            android:layout_height="40dp"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_shelf_empty_cta"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:text="去书城逛逛"
+            android:textColor="@color/white"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <!-- 加载动画：首屏向服务器请求书架期间显示（避免误闪「书架空空如也」） -->
+    <com.example.myapplication.widget.LoadingView
+        android:id="@+id/loading_view"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

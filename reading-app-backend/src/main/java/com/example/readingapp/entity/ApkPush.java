@@ -28,6 +28,10 @@ public class ApkPush {
     @Column(name = "md5")
     private String md5;
 
+    /** 更新内容：上传 APK 时由管理员填写，随更新弹窗展示给用户；空则客户端显示「修复已知问题」 */
+    @Column(name = "update_notes", length = 1000)
+    private String updateNotes;
+
     @Column(name = "is_pushed")
     private Boolean isPushed = false;
 

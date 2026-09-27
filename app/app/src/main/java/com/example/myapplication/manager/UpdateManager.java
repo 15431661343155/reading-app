@@ -1,20 +1,24 @@
 package com.example.myapplication.manager;
 
-import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.Cursor;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.Button;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -41,15 +45,16 @@ public class UpdateManager {
     private static long downloadId = -1;
     private static ApkPush currentApkPush;
     private static BroadcastReceiver downloadReceiver;
-    private static AlertDialog updateDialog;
+    private static Dialog updateDialog;
     private static ProgressBar progressBar;
     private static TextView tvDownloadStatus;
     private static TextView tvDownloadPercent;
     private static LinearLayout layoutButtons;
     private static LinearLayout layoutProgress;
+    private static TextView tvUpdateContent;
     private static Handler progressHandler;
-    private static Button btnCancel;
-    private static Button btnUpdate;
+    private static TextView btnCancel;
+    private static TextView btnUpdate;
     private static boolean isDownloading = false;
 
     public interface UpdateCheckCallback {
@@ -88,6 +93,10 @@ public class UpdateManager {
         });
     }
 
+    /**
+     * 国风「图标探出卡片」更新弹窗 —— 与 LoginHelper.showLoginPrompt 同一套视觉与窗口约定。
+     * 更新内容来自后台上传 APK 时登记的 updateNotes；空则显示「修复已知问题」。
+     */
     public static void showUpdateDialog(final Context context, final ApkPush apkPush) {
         currentApkPush = apkPush;
         isDownloading = false;
@@ -95,8 +104,7 @@ public class UpdateManager {
         final View dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_update, null);
 
         final TextView tvVersion = dialogView.findViewById(R.id.tv_version);
-        final TextView tvUpdateContent = dialogView.findViewById(R.id.tv_update_content);
-        final TextView tvFileSize = dialogView.findViewById(R.id.tv_file_size);
+        tvUpdateContent = dialogView.findViewById(R.id.tv_update_content);
         btnCancel = dialogView.findViewById(R.id.btn_cancel);
         btnUpdate = dialogView.findViewById(R.id.btn_update);
         layoutProgress = dialogView.findViewById(R.id.layout_progress);
@@ -105,18 +113,31 @@ public class UpdateManager {
         tvDownloadPercent = dialogView.findViewById(R.id.tv_download_percent);
         layoutButtons = dialogView.findViewById(R.id.layout_buttons);
 
-        tvVersion.setText("v" + apkPush.getVersion());
-        tvUpdateContent.setText("发现新版本 v" + apkPush.getVersion() + "，请及时更新以获得更好的体验！");
-        tvFileSize.setText("大小：" + formatFileSize(apkPush.getFileSize()));
+        // 版本号 + 包大小合并胶囊
+        tvVersion.setText("v" + apkPush.getVersion() + " · 大小 " + formatFileSize(apkPush.getFileSize()));
+        tvUpdateContent.setText(buildUpdateNotes(apkPush.getUpdateNotes()));
 
         layoutProgress.setVisibility(View.GONE);
         layoutButtons.setVisibility(View.VISIBLE);
         progressBar.setProgress(0);
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
-        builder.setView(dialogView);
-        builder.setCancelable(true);
-        updateDialog = builder.create();
+        Dialog dialog = new Dialog(context, R.style.LoginPromptDialogStyle);
+        dialog.setContentView(dialogView);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setGravity(Gravity.CENTER);
+            // 与登录弹窗同约定：必须显式给宽度（inflate(layout,null) 丢根 layout_*）。
+            // 312 = 卡片 280dp + 左右各 16dp（留卡片投影）
+            float density = context.getResources().getDisplayMetrics().density;
+            window.setLayout((int) (312 * density), WindowManager.LayoutParams.WRAP_CONTENT);
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+        dialog.setCanceledOnTouchOutside(true);
+        // 下载中若用户点外部/返回键关掉弹窗，同步取消下载并注销接收器，避免泄漏
+        dialog.setOnDismissListener(d -> {
+            if (isDownloading) cancelDownload(context);
+        });
+        updateDialog = dialog;
 
         btnCancel.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -139,6 +160,45 @@ public class UpdateManager {
         });
 
         updateDialog.show();
+    }
+
+    /**
+     * 更新内容排版：多行时每行加「· 」项目符号；单行原样；空显示默认文案。
+     */
+    private static CharSequence buildUpdateNotes(String notes) {
+        if (notes == null || notes.trim().isEmpty()) {
+            return "修复已知问题，提升使用体验";
+        }
+        String trimmed = notes.trim();
+        if (!trimmed.contains("\n")) {
+            return trimmed;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String line : trimmed.split("\n")) {
+            String t = line.trim();
+            if (!t.isEmpty()) sb.append("· ").append(t).append("\n");
+        }
+        if (sb.length() > 0) sb.setLength(sb.length() - 1);
+        return sb.toString();
+    }
+
+    /**
+     * 构造安装包公开下载地址：BASE_URL + /api/app/apk/download/ + URL 编码后的文件名
+     * （文件名含中文「书阁阅读」，必须编码后才能被 DownloadManager 正确请求）。
+     * fileName 缺失时才回落到 filePath（按旧逻辑拼接）。
+     */
+    private static String buildApkDownloadUrl(ApkPush push) {
+        String fileName = push == null ? null : push.getFileName();
+        if (fileName != null && !fileName.trim().isEmpty()) {
+            String encoded;
+            try {
+                encoded = java.net.URLEncoder.encode(fileName, "UTF-8").replace("+", "%20");
+            } catch (Exception e) {
+                encoded = fileName;
+            }
+            return RetrofitClient.getFullImageUrl("/api/app/apk/download/" + encoded);
+        }
+        return RetrofitClient.getFullImageUrl(push.getFilePath());
     }
 
     private static boolean hasInstallPermission(Context context) {
@@ -172,6 +232,8 @@ public class UpdateManager {
 
     private static void startDownload(final Context context) {
         isDownloading = true;
+        // 进度条顶替「更新内容」面板（与效果图状态二一致）
+        if (tvUpdateContent != null) tvUpdateContent.setVisibility(View.GONE);
         layoutProgress.setVisibility(View.VISIBLE);
         layoutButtons.setVisibility(View.GONE);
         tvDownloadStatus.setText("准备下载...");
@@ -198,8 +260,11 @@ public class UpdateManager {
             }
         }
 
-        // 开始下载
-        String downloadUrl = RetrofitClient.getFullImageUrl(currentApkPush.getFilePath());
+        // 开始下载。
+        // ⚠️ 不信任后端下发的 filePath：历史记录里存过 /www/app/apk/...（服务器本地路径）
+        // 或 /api/admin/apk/download/...（需管理员登录，匿名 401），DownloadManager 都会失败。
+        // 统一改用公开下载接口 /api/app/apk/download/{urlencoded 文件名}（SecurityConfig permitAll）。
+        String downloadUrl = buildApkDownloadUrl(currentApkPush);
 
         android.app.DownloadManager.Request request = new android.app.DownloadManager.Request(Uri.parse(downloadUrl));
         request.setTitle("书阁阅读更新");
@@ -211,6 +276,7 @@ public class UpdateManager {
         if (downloadManager == null) {
             tvDownloadStatus.setText("下载服务不可用");
             isDownloading = false;
+            if (tvUpdateContent != null) tvUpdateContent.setVisibility(View.VISIBLE);
             layoutButtons.setVisibility(View.VISIBLE);
             return;
         }

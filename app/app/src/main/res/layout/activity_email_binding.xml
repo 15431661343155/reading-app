@@ -4,127 +4,161 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="?attr/android:windowBackground">
+    android:background="#F3F1F8">
 
-    <androidx.appcompat.widget.Toolbar
+    <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:background="@color/ios_bg"
+        android:background="#FBFAFE"
         app:title="@string/email_binding"
-        app:titleTextColor="@color/white"/>
+        app:titleCentered="true"
+        app:titleTextColor="@color/ios_text_primary" />
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="vertical"
-        android:padding="15dp">
+        android:fillViewport="true">
 
-        <!-- 当前绑定邮箱 -->
-        <LinearLayout
-            android:id="@+id/layout_current_email"
-            android:layout_width="match_parent"
-            android:layout_height="55dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:background="@drawable/bg_logout">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="当前邮箱"
-                android:textSize="16sp"/>
-
-            <TextView
-                android:id="@+id/tv_current_email"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:textSize="16sp"
-                android:textAlignment="textEnd"
-                android:textColor="#8E8E93"/>
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#e0e0e0"/>
-
-        <!-- 新邮箱输入 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:layout_marginTop="30dp">
+            android:paddingStart="15dp"
+            android:paddingEnd="15dp"
+            android:paddingTop="18dp"
+            android:paddingBottom="24dp">
+
+            <!-- 当前绑定邮箱 -->
+            <LinearLayout
+                android:id="@+id/layout_current_email"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_cp_input"
+                android:gravity="center_vertical"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="当前邮箱"
+                    android:textSize="15sp"
+                    android:textColor="#8E8AA0" />
+
+                <TextView
+                    android:id="@+id/tv_current_email"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="15sp"
+                    android:textAlignment="textEnd"
+                    android:textColor="#1D1D1F"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginTop="30dp"
                 android:text="输入新邮箱"
                 android:textSize="14sp"
-                android:textColor="#666666"
-                android:layout_marginBottom="10dp"/>
+                android:textStyle="bold"
+                android:textColor="#1D1D1F" />
 
+            <!-- 新邮箱 -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:orientation="horizontal"
+                android:layout_height="56dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_cp_input"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_logout">
+                android:paddingStart="16dp"
+                android:paddingEnd="12dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="11dp"
+                    android:src="@drawable/ic_email"
+                    app:tint="#8E8AA0" />
 
                 <EditText
                     android:id="@+id/et_email"
                     android:layout_width="0dp"
-                    android:layout_weight="1"
                     android:layout_height="match_parent"
-                    android:hint="请输入邮箱"
-                    android:textSize="16sp"
+                    android:layout_weight="1"
                     android:background="@null"
+                    android:hint="请输入邮箱"
                     android:inputType="textEmailAddress"
-                    android:paddingHorizontal="15dp"/>
+                    android:textSize="15sp"
+                    android:textColor="#1D1D1F"
+                    android:textColorHint="#B9B4C9" />
 
-                <Button
+                <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/btn_send_code"
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_cp_code_pill"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="7dp"
+                    android:paddingBottom="7dp"
                     android:text="获取验证码"
-                    android:textSize="12sp"
-                    android:layout_marginEnd="10dp"
-                    android:background="@drawable/bg_logout"/>
+                    android:textColor="#6C5CE7"
+                    android:textSize="13sp" />
             </LinearLayout>
 
-            <!-- 验证码输入 -->
+            <!-- 验证码 -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:orientation="horizontal"
+                android:layout_height="56dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_cp_input"
                 android:gravity="center_vertical"
-                android:layout_marginTop="1dp"
-                android:background="@drawable/bg_logout">
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="11dp"
+                    android:src="@drawable/ic_security"
+                    app:tint="#8E8AA0" />
 
                 <EditText
                     android:id="@+id/et_code"
                     android:layout_width="0dp"
-                    android:layout_weight="1"
                     android:layout_height="match_parent"
-                    android:hint="请输入验证码"
-                    android:textSize="16sp"
+                    android:layout_weight="1"
                     android:background="@null"
+                    android:hint="请输入验证码"
                     android:inputType="number"
                     android:maxLength="6"
-                    android:paddingHorizontal="15dp"/>
+                    android:textSize="15sp"
+                    android:textColor="#1D1D1F"
+                    android:textColorHint="#B9B4C9" />
             </LinearLayout>
 
-            <Button
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginTop="12dp"
+                android:text="验证码发送至新邮箱，60 秒后可重新获取"
+                android:textSize="12sp"
+                android:textColor="#A29DB8" />
+
+            <com.example.myapplication.widget.MorphSubmitButton
                 android:id="@+id/btn_bind"
                 android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:text="绑定邮箱"
-                android:textSize="16sp"
-                android:layout_marginTop="30dp"
-                android:background="@drawable/bg_logout"/>
+                android:layout_height="56dp"
+                android:layout_marginTop="26dp" />
         </LinearLayout>
-    </LinearLayout>
+    </ScrollView>
+
 </LinearLayout>

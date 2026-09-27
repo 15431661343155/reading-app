@@ -7,6 +7,7 @@ public class ApkPush {
     private Long fileSize;
     private String version;
     private String md5;
+    private String updateNotes;
     private Boolean isPushed;
     private String pushTime;
     private String createdAt;
@@ -23,6 +24,8 @@ public class ApkPush {
     public void setVersion(String version) { this.version = version; }
     public String getMd5() { return md5; }
     public void setMd5(String md5) { this.md5 = md5; }
+    public String getUpdateNotes() { return updateNotes; }
+    public void setUpdateNotes(String updateNotes) { this.updateNotes = updateNotes; }
     public Boolean getIsPushed() { return isPushed; }
     public void setIsPushed(Boolean isPushed) { this.isPushed = isPushed; }
     public String getPushTime() { return pushTime; }

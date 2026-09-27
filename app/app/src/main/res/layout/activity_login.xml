@@ -1,89 +1,474 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--登录页布局 - 全面屏适配-->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--登录页 - 背景图 + 毛玻璃卡片（紫主题）
+    三种形态共用一个卡片：
+      · 密码登录      提示 + 邮箱 + 密码 + 登录 + 注册入口 + 协议 + 切换
+      · 验证码第一步   提示 + 邮箱 + 继续 + 协议 + 切换
+      · 验证码第二步   已发送提示 + 6 格验证码 + 倒计时 + 验证并登录 + 返回上一步
+    协议勾选只有一份，天然不会出现两处状态不同步。
+    注册入口只在密码态出现：点它切到验证码登录（未注册邮箱首次验证即自动建号），已无独立注册页-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="30dp"
-    android:background="?android:attr/windowBackground">
+    android:background="@color/ios_bg">
 
-    <!-- Logo区域 -->
-    <LinearLayout
+    <!-- 背景图：按屏幕等比裁切铺满 -->
+    <ImageView
+        android:id="@+id/iv_login_bg"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:layout_marginTop="40dp"
-        android:layout_marginBottom="40dp">
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        android:src="@drawable/login_bg" />
 
-        <ImageView
-            android:layout_width="80dp"
-            android:layout_height="80dp"
-            android:src="@mipmap/ic_launcher" />
+    <!-- 白色渐变遮罩：卡片上方透出画面，卡片区域柔和透白，底部纯白
+         具体色标在 LoginActivity 里按 View 高度精确设置 -->
+    <View
+        android:id="@+id/v_login_mask"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
-        <TextView
-            android:layout_width="wrap_content"
+    <ScrollView
+        android:id="@+id/sv_login"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:textColor="@color/black"
-            android:layout_marginTop="12dp" />
-    </LinearLayout>
+            android:orientation="vertical"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="24dp">
 
-    <!-- 输入区域 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+            <!-- 卡片上方留白（露出背景画面）
+                 总留白仍是 214dp：下面的导航栏 bar_login 占 70dp（= 8 + 52 + 10），
+                 其余 144dp 由 spacer_top 承担，卡片在屏幕上的绝对位置不变。
+                 高度由 LoginActivity#applyCardOffset 按形态设置：密码态 144dp，验证码态再 +30dp。
+                 原因：验证码态卡片矮得多（894px vs 1249px），上缘与密码态对齐时卡片下方会多出
+                 约 355px 空白，看着像"浮在顶上"；下移一档后上下留白接近平衡。
+                 两种验证码步骤共用同一位移，步骤切换时卡片上缘不动、不会上下跳。
+                 ⚠️ 实测（2026-09-22，1080×1920 / density 480）：密码态卡上缘 y=714、卡片高 436dp
+                 → 卡底到 2022px，**已超出屏底约 102px（34dp）**，即内容本来就略超一屏。
+                 所以「214dp 安全」这个旧结论是错的：卡片位置只能守、不能再推，
+                 要继续下移必须先压缩别的东西，且先问用户。
+                 遮罩渐变以卡片上缘为基准自动跟随（见 LoginActivity#setupMask） -->
+            <!-- ==================== 顶部导航栏 ====================
+                 与玻璃卡片同款材质（复用 bg_login_card：78% 白填充 + 1dp 高光描边 + 24dp 圆角），
+                 嵌在卡片上方的留白里，因此 spacer_top 等量减少 70dp（= 8 + 52 + 10），
+                 卡片在屏幕上的位置完全不变（否则本来已超一屏的内容会再被顶下去）。
+                 标题用 FrameLayout 的 center 定位，不用水平 LinearLayout：后者两端各有内容时
+                 标题会被挤离几何中心。返回图标复用 ic_login_back（WebDoc 页同款），
+                 行为与系统返回一致（见 LoginActivity#initView / #onBackPressed）。 -->
+            <FrameLayout
+                android:id="@+id/bar_login"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="10dp"
+                android:background="@drawable/bg_login_card">
 
-        <EditText
-            android:id="@+id/et_username"
-            android:hint="请输入账号"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:background="@drawable/bg_search_radius"
-            android:paddingLeft="16dp"
-            android:paddingRight="16dp" />
+                <ImageView
+                    android:id="@+id/btn_login_back"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:layout_marginStart="6dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="返回"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_login_back" />
 
-        <EditText
-            android:id="@+id/et_password"
-            android:hint="请输入密码"
-            android:inputType="textPassword"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:background="@drawable/bg_search_radius"
-            android:paddingLeft="16dp"
-            android:paddingRight="16dp"
-            android:layout_marginTop="15dp" />
-    </LinearLayout>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="登录"
+                    android:textColor="@color/login_text_title"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
 
-    <!-- 按钮区域 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_marginTop="30dp">
+            <!-- 剩余留白（总 214dp − 导航栏 70dp = 144dp）；高度由代码按形态设置 -->
+            <Space
+                android:id="@+id/spacer_top"
+                android:layout_width="match_parent"
+                android:layout_height="144dp" />
 
-        <Button
-            android:id="@+id/btn_login"
-            android:text="登录"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:backgroundTint="@color/ios_blue"
-            android:textColor="@color/white" />
+            <!-- ==================== 玻璃卡片 ==================== -->
+            <LinearLayout
+                android:id="@+id/card_login"
+                android:layout_width="match_parent"
+                android:layout_height="436dp"
+                android:background="@drawable/bg_login_card"
+                android:orientation="vertical"
+                android:padding="20dp">
 
-        <TextView
-            android:id="@+id/tv_register"
-            android:text="没有账号，点击注册"
-            android:textSize="14sp"
-            android:textColor="@color/black"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="left"
-            android:layout_marginTop="15dp" />
-    </LinearLayout>
+                <!-- ① 说明文字：文案随形态切换 -->
+                <TextView
+                    android:id="@+id/tv_login_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:lineSpacingExtra="2dp"
+                    android:text="使用已注册的邮箱与密码登录。"
+                    android:textColor="@color/login_text_body"
+                    android:textSize="14sp" />
 
-</LinearLayout>
+                <!-- ② 密码登录：邮箱或用户名 + 密码 -->
+                <LinearLayout
+                    android:id="@+id/grp_password"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical">
+
+                    <!--
+                      浮动标签输入框（三处同样结构）：
+                        未聚焦且为空 → 标签以 15sp 灰色停在输入框垂直中心当占位符；
+                        聚焦或有内容 → 标签上移 20dp、缩到 12sp、转主色紫，同时占位文字淡入。
+                      层序 = 占位 TextView（最底，透明 EditText 不会遮住它）
+                             + 透明 EditText（中层，负责点击/光标/输入）
+                             + 标签 TextView（顶层）。
+                      三个子项一律「撑满框高 + gravity=center_vertical + 零内边距」，
+                      即共用完全相同的一套定位算法，垂直中心必然重合、换态时文字不跳。
+                      千万不要给其中某一个单独加 paddingTop：那会把它的文字中心推离几何中心，
+                      与另外两个错开基线（实测可差 31px）。
+                      动画与状态同步见 LoginActivity#setupFloatLabel。
+                    -->
+                    <FrameLayout
+                        android:id="@+id/box_account"
+                        android:layout_width="match_parent"
+                        android:layout_height="58dp"
+                        android:background="@drawable/bg_login_field">
+
+                        <TextView
+                            android:id="@+id/ph_account"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="start"
+                            android:layout_marginStart="18dp"
+                            android:alpha="0"
+                            android:gravity="center_vertical"
+                            android:text="请输入邮箱"
+                            android:textColor="@color/login_text_hint"
+                            android:textSize="15sp" />
+
+                        <EditText
+                            android:id="@+id/et_account"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@null"
+                            android:gravity="center_vertical"
+                            android:importantForAutofill="no"
+                            android:inputType="text"
+                            android:maxLines="1"
+                            android:paddingStart="18dp"
+                            android:paddingEnd="18dp"
+                            android:singleLine="true"
+                            android:textColor="@color/login_text_title"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/label_account"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="start"
+                            android:layout_marginStart="18dp"
+                            android:gravity="center_vertical"
+                            android:text="邮箱"
+                            android:textColor="@color/login_text_hint"
+                            android:textSize="15sp" />
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:id="@+id/box_password"
+                        android:layout_width="match_parent"
+                        android:layout_height="58dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_login_field">
+
+                        <TextView
+                            android:id="@+id/ph_password"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="start"
+                            android:layout_marginStart="18dp"
+                            android:alpha="0"
+                            android:gravity="center_vertical"
+                            android:text="请输入密码"
+                            android:textColor="@color/login_text_hint"
+                            android:textSize="15sp" />
+
+                        <EditText
+                            android:id="@+id/et_password"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@null"
+                            android:gravity="center_vertical"
+                            android:imeOptions="actionDone"
+                            android:importantForAutofill="no"
+                            android:inputType="textPassword"
+                            android:maxLines="1"
+                            android:paddingStart="18dp"
+                            android:paddingEnd="52dp"
+                            android:singleLine="true"
+                            android:textColor="@color/login_text_title"
+                            android:textSize="15sp" />
+
+                        <!-- 眼睛图标与输入行同轴：输入行就是框的垂直中心，用 center_vertical 即可 -->
+                        <ImageView
+                            android:id="@+id/iv_password_eye"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:layout_gravity="end|center_vertical"
+                            android:layout_marginEnd="12dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="显示密码"
+                            android:padding="6dp"
+                            android:src="@drawable/ic_login_eye" />
+
+                        <TextView
+                            android:id="@+id/label_password"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="start"
+                            android:layout_marginStart="18dp"
+                            android:gravity="center_vertical"
+                            android:text="密码"
+                            android:textColor="@color/login_text_hint"
+                            android:textSize="15sp" />
+                    </FrameLayout>
+                </LinearLayout>
+
+                <!-- ③ 验证码第一步：邮箱 -->
+                <FrameLayout
+                    android:id="@+id/box_code_email"
+                    android:layout_width="match_parent"
+                    android:layout_height="58dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_login_field"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/ph_code_email"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="start"
+                        android:layout_marginStart="18dp"
+                        android:alpha="0"
+                        android:gravity="center_vertical"
+                        android:text="请输入邮箱"
+                        android:textColor="@color/login_text_hint"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/et_code_email"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@null"
+                        android:gravity="center_vertical"
+                        android:imeOptions="actionDone"
+                        android:importantForAutofill="no"
+                        android:inputType="textEmailAddress"
+                        android:maxLines="1"
+                        android:paddingStart="18dp"
+                        android:paddingEnd="18dp"
+                        android:singleLine="true"
+                        android:textColor="@color/login_text_title"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/label_code_email"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="start"
+                        android:layout_marginStart="18dp"
+                        android:gravity="center_vertical"
+                        android:text="邮箱"
+                        android:textColor="@color/login_text_hint"
+                        android:textSize="15sp" />
+                </FrameLayout>
+
+                <!-- ④ 验证码第二步：已发送提示 + 6 格验证码 + 倒计时 -->
+                <LinearLayout
+                    android:id="@+id/grp_code_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tv_code_sent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="验证码已发送至"
+                        android:textColor="@color/login_text_title"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:gravity="center"
+                        android:lineSpacingExtra="2dp"
+                        android:text="若该邮箱未注册，验证后将自动注册并登录。"
+                        android:textColor="@color/login_text_desc"
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:id="@+id/grp_code_tiles"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="22dp"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                        <EditText
+                            android:id="@+id/et_code_1"
+                            style="@style/LoginCodeTile" />
+
+                        <EditText
+                            android:id="@+id/et_code_2"
+                            style="@style/LoginCodeTile" />
+
+                        <EditText
+                            android:id="@+id/et_code_3"
+                            style="@style/LoginCodeTile" />
+
+                        <EditText
+                            android:id="@+id/et_code_4"
+                            style="@style/LoginCodeTile" />
+
+                        <EditText
+                            android:id="@+id/et_code_5"
+                            style="@style/LoginCodeTile" />
+
+                        <EditText
+                            android:id="@+id/et_code_6"
+                            style="@style/LoginCodeTile"
+                            android:layout_marginEnd="0dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tv_countdown"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="20dp"
+                        android:gravity="center"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="6dp"
+                        android:text="60 秒后可重新获取"
+                        android:textColor="@color/login_text_dim"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <!-- ⑤ 主按钮：文案随形态切换；形变链状态反馈由 MorphSubmitButton 自绘（见 widget） -->
+                <com.example.myapplication.widget.MorphSubmitButton
+                    android:id="@+id/btn_login"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="16dp" />
+
+                <!-- ⑥ 注册入口（只在密码登录显示；点它切到验证码登录，未注册邮箱首次验证即自动建号） -->
+                <TextView
+                    android:id="@+id/tv_register"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:text="还没有账号？注册"
+                    android:textColor="@color/login_accent_text"
+                    android:textSize="15sp" />
+
+                <!-- ⑦ 协议勾选（唯一一份；11sp + 轻字重，保证 360dp 屏在系统放大字体下也能单行放下） -->
+                <LinearLayout
+                    android:id="@+id/row_consent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!--
+                      勾选态用 ImageView 承载，不用 CheckBox：主题里 Material 的 CheckBox style 自带
+                      buttonTint（取值 colorControlActivated = colorSecondary = ios_blue），AppCompat 会以
+                      SRC_IN 把 button drawable 当 alpha 蒙版重涂成主题色 —— 紫底被涂成蓝色，白色对勾被
+                      涂成同一颜色而与底色融为一体，结果只剩一块纯色、看不到勾。ImageView 的 src 不走
+                      tint 管线，选中态颜色完全由 @color/login_accent 决定。
+                      勾选状态由整行 row_consent 的点击切换（见 LoginActivity#toggleConsent）。
+                    -->
+                    <ImageView
+                        android:id="@+id/iv_consent"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginEnd="4dp"
+                        android:contentDescription="同意用户协议与隐私政策"
+                        android:src="@drawable/sel_login_checkbox" />
+
+                    <!--
+                      整句必须是「一个」TextView：水平 LinearLayout 里多个 wrap_content 文本
+                      总宽超行时，靠后的那个只会被分到剩余的几个像素宽，中文会逐字换行成竖排，
+                      行高暴增后勾选框上下留下大片空白。这里用 0dp + weight=1 拿定宽，
+                      文字最坏情况只是正常折成两行；两个书名号链接由 ClickableSpan 承载。
+                    -->
+                    <TextView
+                        android:id="@+id/tv_consent"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="sans-serif-light"
+                        android:gravity="center_vertical"
+                        android:paddingTop="5dp"
+                        android:paddingBottom="5dp"
+                        android:text="我已阅读并同意《用户协议》和《隐私政策》"
+                        android:textColor="@color/login_text_muted"
+                        android:textColorHighlight="@android:color/transparent"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- ⑧ 方式切换链接 -->
+                <TextView
+                    android:id="@+id/tv_switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:text="使用邮箱验证码登录"
+                    android:textColor="@color/login_accent_text"
+                    android:textSize="15sp" />
+
+                <!-- ⑨ 返回上一步（仅验证码第二步） -->
+                <TextView
+                    android:id="@+id/tv_back"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="返回上一步修改邮箱"
+                    android:textColor="@color/login_accent_text"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- 底部弹性留白：内容不满一屏时把下方内容压到屏幕下方；
+                 内容超过一屏（密码态最高）时收缩到这个下限，避免被导航栏切掉 -->
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:minHeight="8dp" />
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

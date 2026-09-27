@@ -1,0 +1,4929 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="O9QEnUEN0TfBLFKrlBLCOk">
+<head data-page-node-id="R4L8nYEibtvJQXX3FnmDAK">
+  <meta charset="UTF-8" data-page-node-id="R5PyJ7HOP8LaR5iC8gfnmG">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="r1vDgQr2IK3lrqnuUjNspy">
+  <title>书阁阅读 - Web 端</title>
+  <link rel="icon" type="image/png" href="assets/brand-icon.png">
+  <!-- 依赖锁死具体版本，并使用 production 构建（dev 版体积大、带调试告警） -->
+  <!-- 已本地化到 vendor/：避免国内服务器访问 unpkg.com 失败导致整页白屏 -->
+  <script src="vendor/vue.global.prod.js"></script>
+  <script src="vendor/vue-router.global.prod.js"></script>
+  <script src="vendor/axios.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" data-page-node-id="p00E8wNs1krF9IF3W6X02Z">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin data-page-node-id="NAknSgG4qCPyVXHAmVMCig">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" data-page-node-id="jUaE0NT1eyACsOxs1eZYNz">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-soft: #f8f7f5;
+      --bg-muted: #f2f1ee;
+      --ink: #111111;
+      --ink-secondary: #5f5f5f;
+      --ink-muted: #9a9a9a;
+      --border: #eeeeee;
+      --border-strong: #e2e2e2;
+      --accent: #111111;
+      --accent-inverse: #ffffff;
+      --accent-warm: #e85d04;
+      --accent-warm-soft: #fff4ef;
+      --radius-sm: 10px;
+      --radius: 16px;
+      --radius-lg: 24px;
+      --shadow: 0 1px 2px rgba(0,0,0,0.03), 0 8px 24px rgba(0,0,0,0.04);
+      --shadow-lg: 0 4px 12px rgba(0,0,0,0.05), 0 16px 48px rgba(0,0,0,0.07);
+      --max-width: 1200px;
+      --header-height: 68px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Plus Jakarta Sans', 'Noto Serif SC', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    #app { min-height: 100vh; }
+
+    /* Header */
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--header-height);
+      background: rgba(255,255,255,0.96);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(16px);
+      z-index: 100;
+    }
+
+    .header-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      height: 100%;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 32px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      overflow: hidden;
+      display: block;
+      flex-shrink: 0;
+      object-fit: cover;
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 400px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      height: 42px;
+      padding: 0 16px 0 42px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      background: var(--bg-soft);
+      color: var(--ink);
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .search-box input:focus {
+      background: var(--bg);
+      border-color: var(--ink);
+      box-shadow: 0 0 0 4px rgba(17,17,17,0.06);
+    }
+
+    .search-box input::placeholder { color: var(--ink-muted); }
+
+    .search-box svg {
+      position: absolute;
+      left: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--ink-muted);
+      pointer-events: none;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .nav-link {
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink-secondary);
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .nav-link:hover { color: var(--ink); }
+    .nav-link.active { color: var(--ink); background: var(--bg-muted); }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--ink-secondary);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .icon-btn:hover { border-color: var(--border-strong); color: var(--ink); background: var(--bg-soft); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 20px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-inverse);
+    }
+
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+
+    .btn-soft {
+      background: var(--bg-muted);
+      color: var(--ink);
+    }
+
+    .btn-soft:hover { background: var(--border-strong); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink-secondary);
+      border: 1px solid var(--border-strong);
+    }
+
+    .btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+
+    .btn-sm { padding: 7px 14px; font-size: 13px; }
+
+    /* Main */
+    .main {
+      padding-top: var(--header-height);
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding-left: 24px;
+      padding-right: 24px;
+    }
+
+    .page-layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 36px;
+      align-items: stretch;
+      padding-top: 28px;
+      padding-bottom: 0;
+      height: calc(100vh - var(--header-height) - 130px);
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: static;
+      top: auto;
+      height: 100%;
+      max-height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    /* 书城主内容：与左栏各自独立滚动，互相不联动 */
+    .store-main {
+      min-width: 0;
+      height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .sidebar-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+      padding-left: 14px;
+    }
+
+    .sidebar-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink-secondary);
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .sidebar-item:hover { background: var(--bg-soft); color: var(--ink); }
+    .sidebar-item.active { background: var(--ink); color: var(--accent-inverse); }
+
+    .sidebar-count {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ink-muted);
+      background: var(--bg-muted);
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .sidebar-item.active .sidebar-count { background: rgba(255,255,255,0.2); color: #fff; }
+
+    /* Cards */
+    .card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      transition: all 0.25s ease;
+    }
+
+    .card:hover { box-shadow: var(--shadow-lg); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .card-more {
+      font-size: 13px;
+      color: var(--ink-secondary);
+      text-decoration: none;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: gap 0.2s ease;
+    }
+
+    .card-more:hover { color: var(--ink); gap: 8px; }
+
+    .chapter-header-actions { display: flex; align-items: center; gap: 12px; }
+
+    .chapter-sort-btn {
+      flex: none;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .chapter-sort-btn:hover { background: rgba(0,0,0,0.05); }
+
+    .card-body { padding: 24px; }
+
+    /* Home */
+    .home-content { padding-top: 28px; padding-bottom: 56px; }
+
+    .welcome-bar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .welcome-title {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    .welcome-title span { color: var(--accent-warm); }
+    .welcome-sub { font-size: 14px; color: var(--ink-secondary); margin-top: 6px; }
+
+    /* Continue card */
+    .continue-card {
+      display: grid;
+      grid-template-columns: 140px 1fr auto;
+      gap: 28px;
+      align-items: center;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin-bottom: 32px;
+    }
+
+    .continue-cover {
+      width: 100%;
+      aspect-ratio: 2/3;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #111, #333);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 40px;
+      font-weight: 900;
+      box-shadow: var(--shadow);
+    }
+
+    .continue-info h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0 0 6px;
+    }
+
+    .continue-info p {
+      font-size: 14px;
+      color: var(--ink-secondary);
+      margin: 0 0 16px;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      max-width: 280px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent-warm);
+      border-radius: 999px;
+      transition: width 0.4s ease;
+    }
+
+    .progress-text {
+      font-size: 13px;
+      color: var(--ink-muted);
+      margin-top: 8px;
+      font-weight: 500;
+    }
+
+    /* Section grid */
+    .section-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 24px;
+    }
+
+    /* Book list */
+    .book-list { display: flex; flex-direction: column; gap: 4px; }
+
+    .book-row {
+      display: grid;
+      grid-template-columns: 56px 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .book-row:hover { background: var(--bg-soft); }
+
+    .book-row-cover {
+      width: 56px;
+      height: 78px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 20px;
+      font-weight: 700;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    .book-row-meta h4 {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 0 0 4px;
+    }
+
+    .book-row-meta p {
+      font-size: 13px;
+      color: var(--ink-secondary);
+      margin: 0;
+    }
+
+    .book-row-rating {
+      text-align: right;
+      min-width: 70px;
+    }
+
+    .rating-score {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--accent-warm);
+    }
+
+    .rating-count {
+      font-size: 12px;
+      color: var(--ink-muted);
+    }
+
+    /* Book grid */
+    .book-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 20px;
+    }
+
+    .book-card {
+      cursor: pointer;
+      transition: transform 0.2s ease;
+      /* 关键：网格 1fr 列默认最小宽度=内容宽度，nowrap 长书名会把整列撑爆，
+         导致同网格列宽不一（长书名列巨宽、封面被挤小）。min-width:0 交给 ellipsis 处理 */
+      min-width: 0;
+    }
+
+    .book-card:hover { transform: translateY(-4px); }
+
+    .book-cover {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 2/3;
+      border-radius: 10px;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .book-cover::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, transparent 5%, transparent 95%, rgba(0,0,0,0.15) 100%);
+      pointer-events: none;
+    }
+
+    .book-cover-letter {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 42px;
+      font-weight: 900;
+      color: rgba(255,255,255,0.95);
+      text-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 1;
+    }
+
+    .book-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .book-card-author {
+      font-size: 12px;
+      color: var(--ink-muted);
+      margin: 0;
+      font-weight: 500;
+    }
+
+    /* Tags */
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--bg-muted);
+      color: var(--ink-secondary);
+    }
+
+    .tag.warm { background: var(--accent-warm-soft); color: var(--accent-warm); }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .tab {
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink-secondary);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab:hover { color: var(--ink); background: var(--bg-soft); }
+    .tab.active { background: var(--ink); color: #fff; }
+
+    /* 书城子页面（新书 / 男生 / 女生 …，可左右滑动切换） */
+    .store-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+
+    .store-tabs::-webkit-scrollbar { display: none; }
+
+    /* 横向拖拽由 JS 接管，纵向滚动仍交给浏览器 */
+    .store-viewport { overflow: hidden; touch-action: pan-y; }
+
+    .store-track {
+      display: flex;
+      align-items: flex-start;
+      will-change: transform;
+    }
+
+    .store-page { flex: 0 0 100%; min-width: 0; }
+
+    /* Rank list modern */
+    .rank-list { display: flex; flex-direction: column; gap: 4px; }
+
+    .rank-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .rank-item:hover { background: var(--bg-soft); }
+
+    .rank-number {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      background: var(--bg-muted);
+      color: var(--ink-secondary);
+      flex-shrink: 0;
+    }
+
+    .rank-item:nth-child(1) .rank-number { background: var(--ink); color: #fff; }
+    .rank-item:nth-child(2) .rank-number { background: var(--ink-secondary); color: #fff; }
+    .rank-item:nth-child(3) .rank-number { background: var(--ink-muted); color: #fff; }
+
+    .rank-title {
+      font-size: 14px;
+      font-weight: 700;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .rank-heat { font-size: 12px; color: var(--ink-muted); font-weight: 600; }
+
+    /* Bookshelf */
+    .shelf-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .shelf-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 16px;
+    }
+
+    .shelf-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .shelf-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+
+    .shelf-card-cover {
+      width: 108px;
+      height: 162px;
+      margin: 0 auto 10px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 34px;
+      font-weight: 900;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .shelf-card h4 {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .shelf-card p {
+      font-size: 12px;
+      color: var(--ink-muted);
+      margin: 0 0 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .shelf-card .progress-bar { max-width: none; flex-shrink: 0; }
+
+    /* 进度文字固定占两行高度并截断，保证所有卡片等高 */
+    .shelf-card .progress-text {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      white-space: normal;
+      word-break: break-all;
+      min-height: 38px;
+      margin-bottom: 0;
+    }
+
+    /* Discuss */
+    .discuss-header {
+      padding: 28px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 28px;
+    }
+
+    .discuss-header h1 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 28px;
+      font-weight: 900;
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .discuss-header p { color: var(--ink-secondary); margin: 0; font-size: 15px; }
+
+    /* Auth */
+    .auth-page {
+      min-height: calc(100vh - var(--header-height));
+      display: grid;
+      grid-template-columns: 1fr 480px;
+      align-items: stretch;
+    }
+
+    .auth-hero {
+      background: var(--bg-soft);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 64px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .auth-hero-pattern {
+      position: absolute;
+      inset: 0;
+      opacity: 0.5;
+      background-image: radial-gradient(circle at 20% 30%, rgba(232,93,4,0.08) 0%, transparent 40%),
+                        radial-gradient(circle at 80% 70%, rgba(17,17,17,0.04) 0%, transparent 40%);
+    }
+
+    .auth-hero-content {
+      position: relative;
+      z-index: 1;
+      max-width: 420px;
+    }
+
+    .auth-hero-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 28px;
+    }
+
+    .auth-hero h2 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 36px;
+      font-weight: 900;
+      line-height: 1.25;
+      margin: 0 0 16px;
+      letter-spacing: -0.02em;
+    }
+
+    .auth-hero p {
+      font-size: 16px;
+      color: var(--ink-secondary);
+      line-height: 1.7;
+      margin: 0;
+    }
+
+    .auth-hero-features {
+      margin-top: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .auth-feature {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink-secondary);
+    }
+
+    .auth-feature-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--accent-warm-soft);
+      color: var(--accent-warm);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .auth-panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 48px 64px;
+      background: var(--bg);
+    }
+
+    .auth-panel-inner {
+      width: 100%;
+      max-width: 360px;
+      margin: 0 auto;
+    }
+
+    .auth-header {
+      margin-bottom: 32px;
+    }
+
+    .auth-header h1 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 28px;
+      font-weight: 900;
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .auth-header p {
+      font-size: 14px;
+      color: var(--ink-secondary);
+      margin: 0;
+    }
+
+    .auth-tabs {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+
+    .auth-tab {
+      position: relative;
+      padding: 0 0 12px;
+      border: none;
+      background: transparent;
+      color: var(--ink-muted);
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: color 0.2s ease;
+    }
+
+    .auth-tab::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 2px;
+      border-radius: 999px;
+      background: transparent;
+      transition: background 0.2s ease;
+    }
+
+    .auth-tab:hover { color: var(--ink-secondary); }
+
+    .auth-tab.active {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .auth-tab.active::after { background: var(--ink); }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 7px;
+    }
+
+    .form-input {
+      width: 100%;
+      height: 48px;
+      padding: 0 16px;
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 15px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .form-input:focus {
+      border-color: var(--ink);
+      box-shadow: 0 0 0 4px rgba(17,17,17,0.06);
+    }
+
+    .form-input::placeholder { color: var(--ink-muted); }
+
+    .form-options {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      font-size: 13px;
+    }
+
+    .form-remember {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--ink-secondary);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .form-remember input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent-warm);
+      cursor: pointer;
+    }
+
+    .form-forgot {
+      color: var(--ink-secondary);
+      text-decoration: none;
+      font-weight: 700;
+      transition: color 0.2s ease;
+    }
+
+    .form-forgot:hover { color: var(--accent-warm); }
+
+    .auth-submit {
+      width: 100%;
+      height: 48px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .auth-divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 28px 0;
+      color: var(--ink-muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .auth-divider::before,
+    .auth-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .auth-social {
+      display: flex;
+      gap: 12px;
+    }
+
+    .auth-social-btn {
+      flex: 1;
+      height: 44px;
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      background: var(--bg);
+      color: var(--ink-secondary);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .auth-social-btn:hover { background: var(--bg-soft); border-color: var(--ink); color: var(--ink); }
+
+    .auth-footer {
+      margin-top: 28px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--ink-secondary);
+      font-weight: 600;
+    }
+
+    .auth-footer a {
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 700;
+      margin-left: 4px;
+    }
+
+    .auth-footer a:hover { color: var(--accent-warm); }
+
+    /* 验证码分步登录 */
+    .auth-step-bars {
+      display: flex;
+      gap: 6px;
+      margin: 0 0 22px;
+    }
+
+    .auth-step-bar {
+      width: 24px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--border-strong);
+    }
+
+    .auth-step-bar.on { background: var(--ink); }
+
+    .auth-consent {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 20px;
+      cursor: pointer;
+    }
+
+    .auth-consent input {
+      width: 18px;
+      height: 18px;
+      margin: 1px 0 0;
+      flex: none;
+      accent-color: var(--accent-warm);
+      cursor: pointer;
+    }
+
+    .auth-consent span {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--ink-muted);
+      font-weight: 600;
+    }
+
+    .auth-consent .auth-doc {
+      color: var(--accent-warm);
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+      border-bottom: 1px solid rgba(232, 93, 4, 0.35);
+    }
+
+    .auth-consent .auth-doc:hover { border-bottom-color: var(--accent-warm); }
+
+    .auth-sent-card {
+      background: var(--bg-soft);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-secondary);
+    }
+
+    .auth-sent-card strong { color: var(--ink); font-weight: 700; }
+
+    .auth-sent-card p {
+      margin: 6px 0 0;
+      color: var(--ink-muted);
+      font-weight: 600;
+      line-height: 1.6;
+    }
+
+    .auth-code-inputs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .auth-code-inputs input {
+      flex: 1 1 0;
+      width: 100%;
+      min-width: 0;
+      height: 58px;
+      padding: 0;
+      text-align: center;
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 22px;
+      font-weight: 700;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .auth-code-inputs input:focus {
+      border-color: var(--accent-warm);
+      box-shadow: 0 0 0 4px rgba(232,93,4,0.10);
+    }
+
+    .auth-resend {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-muted);
+    }
+
+    .auth-resend button {
+      border: none;
+      background: none;
+      padding: 0;
+      font: inherit;
+      font-weight: 700;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .auth-resend button:disabled { color: var(--ink-muted); cursor: default; }
+
+    .auth-link-btn {
+      display: block;
+      width: 100%;
+      margin-top: 16px;
+      padding: 0;
+      border: none;
+      background: none;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink-secondary);
+      cursor: pointer;
+      transition: color 0.2s ease;
+    }
+
+    .auth-link-btn:hover { color: var(--ink); }
+
+    @media (max-width: 900px) {
+      .auth-page { grid-template-columns: 1fr; }
+      .auth-hero { display: none; }
+      .auth-panel { padding: 40px 24px; }
+    }
+
+    /* Book Detail */
+    .detail-page { padding-top: 28px; padding-bottom: 56px; }
+
+    .detail-hero {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+
+    .detail-cover {
+      width: 200px;
+      aspect-ratio: 2/3;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 64px;
+      font-weight: 900;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .detail-cover::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(255,255,255,0.12) 0%, transparent 6%, transparent 94%, rgba(0,0,0,0.2) 100%);
+      pointer-events: none;
+    }
+
+    .detail-info h1 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 34px;
+      font-weight: 900;
+      margin: 0 0 12px;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .detail-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 18px;
+      font-size: 14px;
+      color: var(--ink-secondary);
+      font-weight: 600;
+    }
+
+    .detail-meta .rating-score {
+      font-size: 18px;
+      color: var(--accent-warm);
+    }
+
+    .detail-tags {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .detail-desc {
+      font-size: 15px;
+      line-height: 1.75;
+      color: var(--ink-secondary);
+      margin: 0 0 28px;
+      max-width: 640px;
+    }
+
+    .detail-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .detail-actions .btn {
+      padding: 12px 28px;
+      font-size: 15px;
+    }
+
+    .detail-layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+    /* 书籍详情页：主内容 + 同类推荐侧栏双栏（区别于发现页的单栏 .detail-layout） */
+    .book-detail-layout {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 32px;
+      align-items: start;
+    }
+
+    .chapter-card { margin-bottom: 16px; }
+
+    .chapter-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .chapter-header h3 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .chapter-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .chapter-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--bg-soft);
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+
+    .chapter-item:hover {
+      background: var(--bg);
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow);
+    }
+
+    .related-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+    }
+
+    .related-card {
+      cursor: pointer;
+      transition: transform 0.2s ease;
+      min-width: 0; /* 同 book-card：防 nowrap 书名撑爆 1fr 列 */
+    }
+
+    .related-card:hover { transform: translateY(-3px); }
+
+    .related-cover {
+      width: 100%;
+      aspect-ratio: 2/3;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 28px;
+      font-weight: 900;
+      margin-bottom: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    }
+
+    .related-card h4 {
+      font-size: 13px;
+      font-weight: 700;
+      margin: 0 0 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .related-card p {
+      font-size: 12px;
+      color: var(--ink-muted);
+      margin: 0;
+      font-weight: 500;
+    }
+
+    @media (max-width: 900px) {
+      .detail-hero { grid-template-columns: 140px 1fr; gap: 24px; }
+      .detail-cover { width: 140px; }
+      .detail-info h1 { font-size: 24px; }
+      .detail-layout { grid-template-columns: 1fr; }
+      .chapter-list { grid-template-columns: 1fr; }
+      .related-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    @media (max-width: 640px) {
+      .detail-hero { grid-template-columns: 1fr; text-align: center; }
+      .detail-cover { width: 160px; margin: 0 auto; }
+      .detail-meta { justify-content: center; }
+      .detail-tags { justify-content: center; }
+      .detail-actions { justify-content: center; }
+      .related-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* Reader */
+    .reader-page {
+      --reader-bg: #ffffff;
+      --reader-ink: #111111;
+      --reader-muted: #5f5f5f;
+      --reader-line: 1.9;
+      --reader-size: 18px;
+      background: var(--reader-bg);
+      color: var(--reader-ink);
+      min-height: calc(100vh - var(--header-height));
+      display: flex;
+      flex-direction: column;
+    }
+
+    .reader-page.theme-dark {
+      --reader-bg: #1a1a1a;
+      --reader-ink: #e5e5e5;
+      --reader-muted: #999999;
+    }
+
+    .reader-page.theme-sepia {
+      --reader-bg: #f4ecd8;
+      --reader-ink: #3d2b1f;
+      --reader-muted: #7a6b5a;
+    }
+
+    .reader-toolbar {
+      position: sticky;
+      top: var(--header-height);
+      background: var(--reader-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 50;
+      transition: background 0.2s ease;
+    }
+
+    .reader-toolbar-left, .reader-toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .reader-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--reader-muted);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .reader-btn:hover { background: rgba(0,0,0,0.05); color: var(--reader-ink); }
+    .reader-page.theme-dark .reader-btn:hover { background: rgba(255,255,255,0.08); }
+
+    .reader-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--reader-ink);
+      text-align: center;
+      flex: 1;
+      padding: 0 16px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .reader-content {
+      flex: 1;
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 48px 24px;
+      font-size: var(--reader-size);
+      line-height: var(--reader-line);
+      transition: font-size 0.2s ease;
+    }
+
+    .reader-content h2 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 1.6em;
+      font-weight: 900;
+      margin: 0 0 1.2em;
+      line-height: 1.3;
+    }
+
+    .reader-content p {
+      margin: 0 0 1.2em;
+      text-align: justify;
+      text-indent: 2em;
+    }
+
+    .reader-nav {
+      position: sticky;
+      bottom: 0;
+      background: var(--reader-bg);
+      border-top: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 50;
+      transition: background 0.2s ease;
+    }
+
+    .reader-nav-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: var(--reader-bg);
+      color: var(--reader-ink);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .reader-nav-btn:hover { background: rgba(0,0,0,0.04); }
+    .reader-page.theme-dark .reader-nav-btn:hover { background: rgba(255,255,255,0.06); }
+    .reader-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .reader-progress {
+      font-size: 13px;
+      color: var(--reader-muted);
+      font-weight: 600;
+    }
+
+    .reader-drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .reader-drawer-overlay.open { opacity: 1; pointer-events: auto; }
+
+    .reader-drawer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 320px;
+      max-width: 85vw;
+      background: var(--reader-bg);
+      border-right: 1px solid var(--border);
+      z-index: 201;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .reader-drawer.open { transform: translateX(0); }
+
+    .reader-drawer-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .reader-drawer-header-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .drawer-sort-btn {
+      flex: none;
+      margin-top: 2px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--reader-ink);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .drawer-sort-btn:hover { background: rgba(0,0,0,0.05); }
+    .reader-page.theme-dark .drawer-sort-btn:hover { background: rgba(255,255,255,0.08); }
+
+    .reader-drawer-header h3 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      color: var(--reader-ink);
+    }
+
+    .reader-drawer-header p {
+      font-size: 13px;
+      color: var(--reader-muted);
+      margin: 0;
+      font-weight: 500;
+    }
+
+    .reader-drawer-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .reader-drawer-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-radius: 10px;
+      color: var(--reader-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .reader-drawer-item:hover { background: rgba(0,0,0,0.04); color: var(--reader-ink); }
+    .reader-page.theme-dark .reader-drawer-item:hover { background: rgba(255,255,255,0.06); }
+    .reader-drawer-item.active { background: rgba(0,0,0,0.06); color: var(--reader-ink); font-weight: 700; }
+    .reader-page.theme-dark .reader-drawer-item.active { background: rgba(255,255,255,0.1); }
+
+    .reader-settings {
+      position: fixed;
+      top: calc(var(--header-height) + 60px);
+      right: 24px;
+      width: 280px;
+      background: var(--reader-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      padding: 20px;
+      z-index: 150;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-8px);
+      transition: all 0.2s ease;
+    }
+
+    .reader-settings.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+    .reader-settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .reader-settings-row:last-child { margin-bottom: 0; }
+
+    .reader-settings-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--reader-muted);
+    }
+
+    .reader-size-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .reader-size-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      background: var(--reader-bg);
+      color: var(--reader-ink);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .reader-theme-options {
+      display: flex;
+      gap: 8px;
+    }
+
+    .reader-theme-option {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .reader-theme-option.active { border-color: var(--accent-warm); }
+
+    @media (max-width: 640px) {
+      .reader-content { padding: 32px 20px; }
+      .reader-nav { padding: 12px 16px; }
+      .reader-toolbar { padding: 10px 16px; }
+      .reader-settings { right: 16px; left: 16px; width: auto; }
+    }
+
+    /* Footer */
+    .footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 24px;
+      text-align: center;
+      color: var(--ink-muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .footer-sub { margin-top: 6px; font-size: 12px; }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .book-grid { grid-template-columns: repeat(4, 1fr); }
+      .shelf-grid { grid-template-columns: repeat(3, 1fr); }
+      .section-grid { grid-template-columns: 1fr; }
+      .page-layout { grid-template-columns: 1fr; height: auto; overflow: visible; }
+      .book-detail-layout { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .store-main { height: auto; overflow: visible; }
+      .nav { display: none; }
+    }
+
+    @media (max-width: 640px) {
+      .main { padding-left: 16px; padding-right: 16px; }
+      .header-inner { padding: 0 16px; gap: 16px; }
+      .search-box { max-width: 160px; }
+      .continue-card { grid-template-columns: 1fr; text-align: center; }
+      .continue-cover { width: 100px; margin: 0 auto; }
+      .book-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+      .shelf-grid { grid-template-columns: repeat(2, 1fr); }
+      .book-row { grid-template-columns: 50px 1fr; }
+      .book-row-rating { display: none; }
+      .book-row-cover { width: 50px; height: 70px; }
+    }
+
+    /* ===== 状态展示：空 / 错误 / 加载 ===== */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--ink-muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .empty-state strong { color: var(--ink); font-size: 16px; font-weight: 800; }
+    .empty-state .btn { margin-top: 8px; }
+    .empty-state.sm { padding: 28px 16px; }
+
+    .loading-state {
+      padding: 48px 0;
+      text-align: center;
+      color: var(--ink-muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .error-box {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
+      border: 1px solid #f3c8b4;
+      border-radius: var(--radius);
+      background: var(--accent-warm-soft);
+      color: #9c3a00;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.6;
+    }
+    .error-box .grow { flex: 1; }
+
+    /* ===== 封面：真实图片优先，加载失败回落到渐变字母 ===== */
+    .book-cover, .detail-cover { position: relative; }
+    .book-row-cover, .shelf-card-cover, .related-cover, .continue-cover {
+      position: relative;
+      overflow: hidden;
+    }
+    .cover-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 2;
+    }
+    .cover-layer { position: relative; z-index: 1; }
+
+    /* ===== 分页器 ===== */
+    .pager {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 16px 0 4px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink-secondary);
+    }
+    .pager button {
+      padding: 6px 14px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .pager button:hover:not(:disabled) { background: var(--bg-soft); border-color: var(--ink); }
+    .pager button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .pager .pager-jump {
+      width: 58px;
+      height: 30px;
+      text-align: center;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+      outline: none;
+    }
+
+    /* ===== 轻提示（替代原生 alert） ===== */
+    .toast-wrap {
+      position: fixed;
+      left: 50%;
+      bottom: 32px;
+      transform: translateX(-50%);
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+      max-width: 90vw;
+    }
+    .toast {
+      padding: 11px 20px;
+      border-radius: 999px;
+      background: rgba(17, 17, 17, 0.92);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+      animation: toastIn 0.18s ease;
+    }
+    .toast.error { background: #b3341a; }
+    .toast.success { background: #1f7a44; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ===== 登录页补充 ===== */
+    .auth-code-row { display: flex; gap: 10px; }
+    .auth-code-row .form-input { flex: 1; }
+    .auth-code-row .btn { flex-shrink: 0; height: 48px; min-width: 118px; }
+    .field-hint { margin-top: 6px; font-size: 12px; color: var(--ink-muted); font-weight: 600; }
+    .field-hint.bad { color: #c44d04; }
+
+    /* ---------- 个人中心 ---------- */
+    .profile-head {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .profile-avatar {
+      width: 76px;
+      height: 76px;
+      flex: none;
+      border-radius: 50%;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-muted);
+      border: 1px solid var(--border-strong);
+      color: var(--ink);
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    .profile-avatar-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    /* 头像裁剪弹窗 */
+    .crop-modal-mask {
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,0.55);
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .crop-modal {
+      width: min(440px, 100%);
+      background: var(--bg);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+    }
+    .crop-modal-head { display: flex; align-items: center; justify-content: space-between; }
+    .crop-modal-head h3 { margin: 0; font-size: 17px; }
+    .crop-close {
+      border: none; background: transparent; font-size: 22px; line-height: 1;
+      cursor: pointer; color: var(--ink-secondary); padding: 0 4px;
+    }
+    .crop-tip { margin: 6px 0 12px; font-size: 13px; color: var(--ink-secondary); }
+    .crop-stage {
+      position: relative; display: inline-block; max-width: 100%;
+      overflow: hidden; line-height: 0; border-radius: 8px;
+      background: #000; user-select: none; touch-action: none;
+    }
+    .crop-stage img { display: block; max-width: 100%; height: auto; }
+    .crop-box {
+      position: absolute; box-sizing: border-box;
+      border: 2px solid #fff; cursor: move; touch-action: none;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+    }
+    .crop-box::after {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background:
+        linear-gradient(rgba(255,255,255,0.45) 1px, transparent 1px) 0 0 / 100% 33.333%,
+        linear-gradient(90deg, rgba(255,255,255,0.45) 1px, transparent 1px) 0 0 / 33.333% 100%;
+    }
+    .crop-size-row { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; font-size: 13px; color: var(--ink-secondary); }
+    .crop-size-row input[type=range] { flex: 1; }
+    .crop-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+
+    .profile-actions { display: flex; gap: 12px; margin-top: 24px; }
+
+    .profile-readonly {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      height: 48px;
+      padding: 0 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg-soft);
+      color: var(--ink-secondary);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    /* ===== 详情页目录展开 ===== */
+    .chapter-expand { margin-top: 14px; display: flex; justify-content: center; }
+
+    /* ===== 阅读器补充 ===== */
+    .reader-hint {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      max-width: 720px;
+      margin: 16px auto 0;
+      padding: 12px 16px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      background: var(--reader-bg);
+      color: var(--reader-muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .reader-drawer-pager {
+      border-top: 1px solid var(--border);
+      padding: 8px 12px;
+    }
+
+    /* ===== 基础复位：按钮/链接不再继承浏览器默认样式 ===== */
+    button { font-family: inherit; font-size: inherit; }
+    a { text-decoration: none; color: inherit; }
+
+    /* 章节项 / 目录项已改为语义化 button，补齐按钮默认样式复位 */
+    .chapter-item {
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+    }
+    .reader-drawer-item {
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+    }
+    .rank-item { color: inherit; }
+
+    /* ===== 账号菜单 ===== */
+    .user-menu { position: relative; }
+
+    .user-menu-panel {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 10px);
+      min-width: 168px;
+      padding: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      z-index: 120;
+    }
+
+    .user-menu-name {
+      padding: 8px 12px 10px;
+      margin-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 800;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .user-menu-item {
+      display: block;
+      width: 100%;
+      padding: 9px 12px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: none;
+      color: var(--ink-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .user-menu-item:hover { background: var(--bg-soft); color: var(--ink); }
+  </style>
+  </head>
+<body data-page-node-id="wbYp4akuLwTqmpelF0QbPK">
+  <div id="app" data-page-node-id="CMcA0QVgR2vqCiAWGc8JBD">
+    <div class="loading-state" style="padding-top:120px;" data-page-node-id="sg341ArxVKgZqgig1HWH6L">页面加载中…</div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      if (typeof Vue === 'undefined' || typeof VueRouter === 'undefined' || typeof axios === 'undefined') {
+        document.getElementById('app').innerHTML =
+          '<div style="max-width:520px;margin:120px auto;padding:28px;border:1px solid #eee;border-radius:16px;font-family:sans-serif;color:#111;line-height:1.7;">' +
+          '<h2 style="margin:0 0 10px;font-size:18px;">页面依赖加载失败</h2>' +
+          '<p style="margin:0;color:#5f5f5f;font-size:14px;">Vue / Vue Router / axios 未能从本地 vendor/ 目录加载。请确认站点根下存在 vendor/vue.global.prod.js、vendor/vue-router.global.prod.js、vendor/axios.min.js。</p>' +
+          '</div>';
+        return;
+      }
+
+      const { createApp, ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
+      const { createRouter, createWebHashHistory, useRoute, useRouter, onBeforeRouteLeave } = VueRouter;
+
+      /* ====================== 配置 ====================== */
+
+      // 默认走同源：留空 => 请求 /api/...（部署后由 nginx 反代到后端 127.0.0.1:8080）。
+      // 勿再写死 http://IP:8080：页面在 https 下会因「混合内容」被浏览器直接拦截。
+      const DEFAULT_API_BASE = '';
+
+      function readApiBase() {
+        const saved = localStorage.getItem('apiBaseUrl');
+        let base = (saved && saved.trim() ? saved.trim() : DEFAULT_API_BASE).replace(/\/+$/, '');
+        // 页面已是 https 时忽略历史遗留的 http:// 地址（否则会被按混合内容拦截）
+        if (location.protocol === 'https:' && /^http:\/\//i.test(base)) base = DEFAULT_API_BASE;
+        return base;
+      }
+
+      const API_BASE_URL = readApiBase();
+      // 仅用于界面展示/编辑（同源时显示当前站点地址，便于识别）
+      const API_BASE_LABEL = API_BASE_URL || location.origin;
+      const READER_SETTINGS_KEY = 'webReaderSettings';
+
+      function coverUrl(path) {
+        if (!path) return '';
+        if (/^https?:\/\//i.test(path)) return path;
+        // 基址为空（同源）时保证以 / 开头，避免拼出相对当前路径的错误地址
+        return API_BASE_URL + (path.charAt(0) === '/' ? path : '/' + path);
+      }
+
+      function hideImg(event) {
+        if (event && event.target) event.target.style.display = 'none';
+      }
+
+      /* ====================== 工具 ====================== */
+
+      const palettes = [
+        ['#111827', '#374151'],
+        ['#1e3a5f', '#2d5a87'],
+        ['#064e3b', '#065f46'],
+        ['#4c0519', '#831843'],
+        ['#312e81', '#4338ca'],
+        ['#5c4033', '#7a5544'],
+        ['#0f172a', '#334155'],
+        ['#701a75', '#a21caf'],
+      ];
+
+      function gradientFor(title) {
+        const text = title || '书';
+        let hash = 0;
+        for (let i = 0; i < text.length; i++) hash = text.charCodeAt(i) + ((hash << 5) - hash);
+        const [a, b] = palettes[Math.abs(hash) % palettes.length];
+        return 'linear-gradient(135deg, ' + a + ' 0%, ' + b + ' 100%)';
+      }
+
+      function formatWords(count) {
+        const n = Number(count) || 0;
+        if (n <= 0) return '字数未知';
+        if (n >= 10000) return (n / 10000).toFixed(1) + '万字';
+        return n + '字';
+      }
+
+      function safeParse(raw) {
+        try { return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+      }
+
+      function toDate(value) {
+        if (!value) return null;
+        // 数字 = epoch 毫秒。后端 ReadingProgress 现在会下发 updatedAtEpoch，
+        // 它是绝对时间，和设备时区无关；没有它时才按本机时区解析 ISO 字符串
+        // （updatedAt 是服务器本地时间、不带时区，跨时区会整体偏掉）。
+        if (typeof value === 'number') {
+          const t = new Date(value);
+          return isNaN(t.getTime()) ? null : t;
+        }
+        const d = new Date(String(value).replace(' ', 'T'));
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      function fromNow(value) {
+        const d = toDate(value);
+        if (!d) return '未知';
+        const diff = Date.now() - d.getTime();
+        if (diff < 60000) return '刚刚';
+        const min = Math.floor(diff / 60000);
+        if (min < 60) return min + ' 分钟前';
+        const hour = Math.floor(min / 60);
+        if (hour < 24) return hour + ' 小时前';
+        const day = Math.floor(hour / 24);
+        if (day < 30) return day + ' 天前';
+        return d.toLocaleDateString('zh-CN');
+      }
+
+      /** 子分类（后端下发的是 JSON 数组串，容错逗号分隔 / 空 / 非法值） */
+      function parseSubCategories(raw) {
+        if (!raw) return [];
+        const s = String(raw).trim();
+        if (!s) return [];
+        if (s.charAt(0) === '[') {
+          try {
+            const arr = JSON.parse(s);
+            if (Array.isArray(arr)) return arr.map(String).filter(Boolean);
+          } catch (e) { /* 非法 JSON：退化为分隔符切分 */ }
+        }
+        return s.replace(/^\[|\]$/g, '').split(/[,，;；]/).map(function (x) {
+          return x.replace(/"/g, '').trim();
+        }).filter(Boolean);
+      }
+
+      /** 后端 Book 实体没有 score / rating，只有 viewCount / likeCount，别再造评分了。 */
+      function adaptBook(raw) {
+        if (!raw) return null;
+        const subs = parseSubCategories(raw.subCategories);
+        const category = raw.category && String(raw.category).trim() ? String(raw.category).trim() : '';
+        const book = {
+          id: raw.id,
+          title: (raw.title && String(raw.title).trim()) || '未命名',
+          author: (raw.author && String(raw.author).trim()) || '佚名',
+          category: category || '未分类',
+          mainCategory: category,
+          subs: subs,
+          cover: raw.cover || '',
+          desc: raw.intro && String(raw.intro).trim() ? String(raw.intro).trim() : '暂无简介',
+          wordCount: Number(raw.wordCount) || 0,
+          words: formatWords(raw.wordCount),
+          chapterCount: Number(raw.chapterCount) || 0,
+          viewCount: Number(raw.viewCount) || 0,
+          likeCount: Number(raw.likeCount) || 0,
+          statusText: raw.status === 1 ? '完结' : '连载',
+          updatedAt: raw.updatedAt || raw.createdAt || '',
+        };
+        // 展示用：主分类 · 子分类1/子分类2
+        book.categoryLabel = [category].concat(subs.length ? [subs.join('/')] : []).filter(Boolean).join(' · ')
+          || '未分类';
+        return book;
+      }
+
+      function heatText(book) {
+        if (book.likeCount || book.viewCount) return book.likeCount + ' 点赞 · ' + book.viewCount + ' 阅读';
+        return book.chapterCount + ' 章 · ' + book.words;
+      }
+
+      function paragraphsFrom(content, title) {
+        const lines = String(content || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+        if (title && lines[0] === title) lines.shift();
+        return lines;
+      }
+
+      /* ====================== 轻提示 ====================== */
+
+      const toast = reactive({ list: [] });
+      let toastSeq = 0;
+
+      function showToast(message, type, duration) {
+        const id = ++toastSeq;
+        toast.list.push({ id: id, message: message, type: type || 'info' });
+        setTimeout(function () {
+          const i = toast.list.findIndex(function (t) { return t.id === id; });
+          if (i >= 0) toast.list.splice(i, 1);
+        }, duration || 2600);
+      }
+
+      /* ====================== 登录态 ====================== */
+
+      const auth = reactive({
+        token: localStorage.getItem('token') || '',
+        user: safeParse(localStorage.getItem('userInfo')),
+      });
+
+      const isLoggedIn = computed(function () { return !!auth.token; });
+      const currentUserId = computed(function () { return auth.user ? auth.user.id : null; });
+
+      function setAuth(data) {
+        auth.token = data.token;
+        auth.user = data;
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('userInfo', JSON.stringify(data));
+      }
+
+      function clearAuth() {
+        auth.token = '';
+        auth.user = null;
+        localStorage.removeItem('token');
+        localStorage.removeItem('userInfo');
+        store.shelf = [];
+        store.recent = [];
+        store.shelfLoaded = false;
+        store.recentLoaded = false;
+      }
+
+      /* ====================== HTTP ====================== */
+
+      const api = axios.create({ baseURL: API_BASE_URL, timeout: 15000 });
+
+      api.interceptors.request.use(function (config) {
+        if (auth.token) config.headers.Authorization = 'Bearer ' + auth.token;
+        return config;
+      });
+
+      let sessionNoticeAt = 0;
+
+      api.interceptors.response.use(
+        function (response) { return response.data; },
+        function (error) {
+          const status = error.response ? error.response.status : 0;
+          const body = error.response ? error.response.data : null;
+
+          if (status === 401) {
+            if (isLoggedIn.value) {
+              clearAuth();
+              if (Date.now() - sessionNoticeAt > 3000) {
+                sessionNoticeAt = Date.now();
+                showToast('登录已过期，请重新登录', 'error');
+              }
+            }
+          }
+
+          let message = (body && body.message) || '';
+          if (!message) {
+            if (error.code === 'ECONNABORTED') message = '请求超时';
+            else if (error.message === 'Network Error') message = '网络不可达';
+            else message = error.message || '请求失败';
+          }
+
+          const wrapped = new Error(message);
+          wrapped.status = status;
+          return Promise.reject(wrapped);
+        }
+      );
+
+      /** 后端约定「业务失败 = HTTP 200 + success=false」，这里统一转成异常，避免各处漏判。 */
+      function unwrap(res) {
+        if (!res || res.success !== true) {
+          const err = new Error((res && res.message) || '请求失败');
+          err.code = res ? res.code : undefined;
+          throw err;
+        }
+        return res.data;
+      }
+
+      function describeError(e, fallback) {
+        const msg = e && e.message ? e.message : '';
+        if (!msg || msg === 'Network Error' || msg === '网络不可达') {
+          return '无法连接后端（' + API_BASE_LABEL + '）。请确认后端已启动；若后端未放行跨域，浏览器会直接拦截请求。';
+        }
+        return msg;
+      }
+
+      /* ====================== 接口 ====================== */
+
+      const bookApi = {
+        async listBooks(sort) {
+          const page = unwrap(await api.get('/api/books', { params: { page: 0, size: 100, sort: sort || 'id' } }));
+          return { items: (page.content || []).map(adaptBook), total: page.totalElements || 0 };
+        },
+        async searchBooks(keyword) {
+          const page = unwrap(await api.get('/api/books/search', { params: { keyword: keyword, page: 0, size: 50 } }));
+          return { items: (page.content || []).map(adaptBook), total: page.totalElements || 0 };
+        },
+        async hotBooks() {
+          return (unwrap(await api.get('/api/books/hot')) || []).map(adaptBook);
+        },
+        async latestBooks() {
+          return (unwrap(await api.get('/api/books/new')) || []).map(adaptBook);
+        },
+        async categories() {
+          return unwrap(await api.get('/api/books/fiction/categories')) || [];
+        },
+        /** 分类树：主分类 + 各自子分类（书城子页面 / 子分类筛选的数据源） */
+        async categoryTree() {
+          return unwrap(await api.get('/api/books/category-tree')) || { mains: [], librarySubs: [] };
+        },
+        /**
+         * 本站藏书列表（书城子页面用）。
+         * params 支持 mainCategory / subCategory / sortBy（viewCount=热门，createdAt=最新导入）。
+         */
+        async fictionBooks(params) {
+          const page = unwrap(await api.get('/api/books/fiction', { params: params }));
+          return { items: (page.content || []).map(adaptBook), total: page.totalElements || 0 };
+        },
+        /** 阅读量埋点：打开书详情 +1（书城「热门」按它排序），失败静默不影响阅读 */
+        trackView(id) {
+          if (!id) return Promise.resolve(null);
+          return api.post('/api/books/' + id + '/view')
+            .catch(function () { return null; });
+        },
+        async bookDetail(id) {
+          return adaptBook(unwrap(await api.get('/api/books/' + id)));
+        },
+        async chapters(bookId) {
+          return (unwrap(await api.get('/api/chapters/book/' + bookId)) || []).map(function (c, idx) {
+            return { id: c.id, title: c.title || ('第 ' + (idx + 1) + ' 章'), index: idx };
+          });
+        },
+        async chapter(chapterId) {
+          return unwrap(await api.get('/api/chapters/' + chapterId));
+        },
+        addToShelf(bookId) {
+          return api.post('/api/bookshelf/add', null, { params: { bookId: bookId } }).then(unwrap);
+        },
+        removeFromShelf(bookId) {
+          return api.delete('/api/bookshelf/remove', { params: { bookId: bookId } }).then(unwrap);
+        },
+        shelf(userId) {
+          return api.get('/api/user/bookshelf/' + userId).then(unwrap);
+        },
+        recentReading(userId) {
+          return api.get('/api/user/progress/recent/' + userId).then(unwrap);
+        },
+        progress(userId, bookId) {
+          return api.get('/api/user/progress/' + userId + '/' + bookId).then(unwrap);
+        },
+        saveProgress(payload) {
+          return api.post('/api/user/progress/save', payload).then(unwrap);
+        },
+      };
+
+      const authApi = {
+        login(account, password) {
+          return api.post('/api/auth/login', { account: account, password: password }).then(unwrap);
+        },
+        loginByCode(email, code) {
+          return api.post('/api/auth/login-by-code', { email: email, code: code }).then(unwrap);
+        },
+        sendEmailCode(email) {
+          return api.post('/api/auth/email-code', { email: email }).then(unwrap);
+        },
+        registerByEmail(payload) {
+          return api.post('/api/auth/register-by-email', payload).then(unwrap);
+        },
+        // 个人资料：当前用户由后端从 JWT 取，前端不传（也不能传）userId
+        profile() {
+          return api.get('/api/user/profile').then(unwrap);
+        },
+        updateProfile(payload) {
+          return api.put('/api/user/profile', payload).then(unwrap);
+        },
+        uploadAvatar(file) {
+          const formData = new FormData();
+          formData.append('file', file);
+          // 不手工指定 Content-Type：交给浏览器带上 multipart 的 boundary
+          return api.post('/api/user/avatar', formData).then(unwrap);
+        },
+      };
+
+      /* ====================== 全局数据 ====================== */
+
+      // 与后端 UserServiceImpl.REGISTER_USERNAME_PATTERN 保持一致，改一处必须同步另一处
+      const USERNAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{2,19}$/;
+      const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      function loadReaderSettings() {
+        const saved = safeParse(localStorage.getItem(READER_SETTINGS_KEY));
+        const base = { fontSize: 18, theme: 'light' };
+        if (saved && typeof saved === 'object') {
+          base.fontSize = Math.min(26, Math.max(14, Number(saved.fontSize) || 18));
+          if (['light', 'sepia', 'dark'].indexOf(saved.theme) >= 0) base.theme = saved.theme;
+        }
+        return base;
+      }
+
+      const store = reactive({
+        books: [],
+        booksTotal: 0,
+        booksLoaded: false,
+        booksError: '',
+        booksSort: 'id',
+
+        categories: [],
+
+        /** 分类树：mains=[{id,name,subs:[]}]（书城子页面用它建页） */
+        categoryTree: { mains: [], librarySubs: [] },
+        treeLoaded: false,
+
+        hot: [],
+        hotLoaded: false,
+        hotError: '',
+
+        latest: [],
+        latestLoaded: false,
+        latestError: '',
+
+        shelf: [],
+        shelfLoaded: false,
+        shelfError: '',
+
+        recent: [],
+        recentLoaded: false,
+
+        reader: loadReaderSettings(),
+      });
+
+      async function loadCategories() {
+        try { store.categories = await bookApi.categories(); }
+        catch (e) { store.categories = []; }
+      }
+
+      /** 拉取分类树（书城子页面用）；失败退化为空树，书城至少还能显示「新书」页 */
+      async function loadCategoryTree(force) {
+        if (store.treeLoaded && !force) return store.categoryTree;
+        try {
+          const tree = await bookApi.categoryTree();
+          store.categoryTree = {
+            mains: (tree && tree.mains) ? tree.mains : [],
+            librarySubs: (tree && tree.librarySubs) ? tree.librarySubs : [],
+          };
+          store.treeLoaded = true;
+        } catch (e) {
+          store.categoryTree = { mains: [], librarySubs: [] };
+          store.treeLoaded = false;
+        }
+        return store.categoryTree;
+      }
+
+      async function loadBooks(sort) {
+        store.booksError = '';
+        store.booksSort = sort || store.booksSort;
+        try {
+          const res = await bookApi.listBooks(store.booksSort);
+          store.books = res.items;
+          store.booksTotal = res.total;
+          store.booksLoaded = true;
+        } catch (e) {
+          store.books = [];
+          store.booksLoaded = false;
+          store.booksError = describeError(e, '书籍列表加载失败');
+          throw e;
+        }
+      }
+
+      async function loadHot() {
+        store.hotError = '';
+        try {
+          store.hot = await bookApi.hotBooks();
+          store.hotLoaded = true;
+        } catch (e) {
+          store.hot = [];
+          store.hotLoaded = false;
+          store.hotError = describeError(e, '热门书籍加载失败');
+        }
+      }
+
+      async function loadLatest() {
+        store.latestError = '';
+        try {
+          store.latest = await bookApi.latestBooks();
+          store.latestLoaded = true;
+        } catch (e) {
+          store.latest = [];
+          store.latestLoaded = false;
+          store.latestError = describeError(e, '最新上架加载失败');
+        }
+      }
+
+      async function loadRecent() {
+        if (!isLoggedIn.value || !currentUserId.value) { store.recent = []; store.recentLoaded = false; return; }
+        try {
+          const list = await bookApi.recentReading(currentUserId.value);
+          store.recent = (list || []).map(function (p) {
+            const b = p.book || {};
+            return {
+              bookId: p.bookId,
+              title: b.title || ('书籍 #' + p.bookId),
+              author: b.author || '佚名',
+              cover: b.cover || '',
+              chapterCount: Number(b.chapterCount) || 0,
+              chapterIndex: typeof p.chapterIndex === 'number' ? p.chapterIndex : 0,
+              chapterTitle: (p.chapter && p.chapter.title) || '',
+              updatedAt: p.updatedAt || '',
+              // 绝对时间戳，优先用它算「多久前」，避免设备时区 ≠ 服务器时区时偏掉
+              updatedAtEpoch: typeof p.updatedAtEpoch === 'number' ? p.updatedAtEpoch : 0,
+            };
+          }).sort(function (a, b2) { return String(b2.updatedAt).localeCompare(String(a.updatedAt)); });
+          store.recentLoaded = true;
+        } catch (e) {
+          store.recent = [];
+          store.recentLoaded = false;
+        }
+      }
+
+      async function loadShelf() {
+        if (!isLoggedIn.value || !currentUserId.value) {
+          store.shelf = [];
+          store.shelfLoaded = false;
+          store.shelfError = '';
+          return;
+        }
+        store.shelfError = '';
+        try {
+          // 书架表只存 bookId + 时间，进度要另外从阅读进度接口取
+          const results = await Promise.all([
+            bookApi.shelf(currentUserId.value),
+            bookApi.recentReading(currentUserId.value).catch(function () { return []; }),
+          ]);
+          const progressMap = {};
+          (results[1] || []).forEach(function (p) { progressMap[p.bookId] = p; });
+
+          store.shelf = (results[0] || []).map(function (item) {
+            const b = item.book || {};
+            const p = progressMap[item.bookId];
+            const total = Number(b.chapterCount) || 0;
+            const idx = p && typeof p.chapterIndex === 'number' ? p.chapterIndex : -1;
+            const percent = (idx >= 0 && total > 0) ? Math.min(100, Math.round(((idx + 1) / total) * 100)) : 0;
+            return {
+              bookId: item.bookId,
+              title: b.title || ('书籍 #' + item.bookId),
+              author: b.author || '佚名',
+              cover: b.cover || '',
+              category: b.category || '未分类',
+              chapterCount: total,
+              chapterIndex: idx,
+              chapterTitle: (p && p.chapter && p.chapter.title) || '',
+              progress: percent,
+              addedAt: item.addedAt || '',
+              lastReadAt: (p && p.updatedAt) || item.lastReadAt || '',
+              lastReadAtEpoch: (p && typeof p.updatedAtEpoch === 'number') ? p.updatedAtEpoch : 0,
+            };
+          }).sort(function (a, b2) { return String(b2.lastReadAt).localeCompare(String(a.lastReadAt)); });
+
+          store.shelfLoaded = true;
+        } catch (e) {
+          store.shelf = [];
+          store.shelfLoaded = false;
+          store.shelfError = describeError(e, '书架加载失败');
+        }
+      }
+
+      const shelfIdSet = computed(function () {
+        const set = {};
+        store.shelf.forEach(function (s) { set[s.bookId] = true; });
+        return set;
+      });
+
+      function isInShelf(bookId) { return !!shelfIdSet.value[bookId]; }
+
+      /* ====================== 组件 ====================== */
+
+      /* ---------- 404 ---------- */
+      const NotFound = {
+        template: [
+          '<div class="home-content">',
+          '  <div class="empty-state">',
+          '    <strong>页面不存在</strong>',
+          '    <span>地址「{{ path }}」没有对应的页面</span>',
+          '    <router-link to="/" class="btn btn-primary btn-sm">回到首页</router-link>',
+          '  </div>',
+          '</div>',
+        ].join(''),
+        setup() {
+          const route = useRoute();
+          return { path: computed(function () { return route.fullPath; }) };
+        },
+      };
+
+      /* ---------- 首页 ---------- */
+      const Home = {
+        template: [
+          '<div class="home-content">',
+          '  <div class="welcome-bar">',
+          '    <div>',
+          '      <h1 class="welcome-title">{{ greeting }}，<span>{{ displayName }}</span></h1>',
+          '      <p class="welcome-sub">{{ subText }}</p>',
+          '    </div>',
+          '    <router-link to="/bookstore" class="btn btn-soft">去发现新书</router-link>',
+          '  </div>',
+
+          '  <div v-if="continueItem" class="continue-card">',
+          '    <div class="continue-cover" :style="{ background: gradientFor(continueItem.title) }">',
+          '      <img v-if="continueItem.cover" class="cover-img" :src="coverUrl(continueItem.cover)" :alt="continueItem.title" @error="hideImg">',
+          '      <span class="cover-layer">{{ continueItem.title[0] }}</span>',
+          '    </div>',
+          '    <div class="continue-info">',
+          '      <h3>继续阅读《{{ continueItem.title }}》</h3>',
+          '      <p>{{ continueItem.author }} · 读到第 {{ continueItem.chapterIndex + 1 }} 章{{ continueItem.chapterTitle ? "（" + continueItem.chapterTitle + "）" : "" }}</p>',
+          '      <div class="progress-bar"><div class="progress-fill" :style="continueBarStyle"></div></div>',
+          '      <p class="progress-text">共 {{ continueItem.chapterCount || "?" }} 章 · 上次阅读 {{ fromNow(continueItem.updatedAtEpoch || continueItem.updatedAt) }}</p>',
+          '    </div>',
+          '    <router-link :to="readLink(continueItem)" class="btn btn-primary">继续阅读</router-link>',
+          '  </div>',
+
+          '  <div v-else class="card" style="margin-bottom: 32px;">',
+          '    <div class="empty-state">',
+          '      <strong>{{ isLoggedIn ? "还没有阅读记录" : "登录后记录阅读进度" }}</strong>',
+          '      <span>{{ isLoggedIn ? "去书城挑一本，读到哪都能接着看" : "书架、进度会跟随你的账号同步" }}</span>',
+          '      <router-link to="/bookstore" class="btn btn-primary btn-sm">去书城</router-link>',
+          '    </div>',
+          '  </div>',
+
+          '  <div class="section-grid">',
+          '    <div class="card">',
+          '      <div class="card-header">',
+          '        <h2 class="card-title">最近在追</h2>',
+          '        <router-link to="/bookshelf" class="card-more">查看书架 →</router-link>',
+          '      </div>',
+          '      <div class="card-body">',
+          '        <div v-if="!isLoggedIn" class="empty-state sm">',
+          '          <span>登录后显示书架中正在阅读的书</span>',
+          '        </div>',
+          '        <div v-else-if="readingNow.length" class="book-list">',
+          '          <router-link v-for="item in readingNow" :key="item.bookId" :to="readLink(item)" class="book-row">',
+          '            <div class="book-row-cover" :style="{ background: gradientFor(item.title) }">',
+          '              <img v-if="item.cover" class="cover-img" :src="coverUrl(item.cover)" :alt="item.title" @error="hideImg">',
+          '              <span class="cover-layer">{{ item.title[0] }}</span>',
+          '            </div>',
+          '            <div class="book-row-meta">',
+          '              <h4>{{ item.title }}</h4>',
+          '              <p>{{ item.author }} · 读到第 {{ item.chapterIndex + 1 }} / {{ item.chapterCount }} 章</p>',
+          '            </div>',
+          '            <div class="book-row-rating">',
+          '              <div class="rating-score">{{ item.progress }}%</div>',
+          '              <div class="rating-count">已读</div>',
+          '            </div>',
+          '          </router-link>',
+          '        </div>',
+          '        <div v-else class="empty-state sm">',
+          '          <span>书架里还没有开始阅读的书</span>',
+          '        </div>',
+          '      </div>',
+          '    </div>',
+
+          '    <div class="card">',
+          '      <div class="card-header">',
+          '        <h2 class="card-title">热门书籍</h2>',
+          '        <router-link to="/discover" class="card-more">更多</router-link>',
+          '      </div>',
+          '      <div class="card-body">',
+          '        <div v-if="!store.hotLoaded && !store.hotError" class="loading-state">加载中…</div>',
+          '        <div v-else-if="store.hotError" class="error-box"><span class="grow">{{ store.hotError }}</span><button class="btn btn-ghost btn-sm" @click="retryHot">重试</button></div>',
+          '        <div v-else-if="!store.hot.length" class="empty-state sm"><span>后端暂无热门数据</span></div>',
+          '        <div v-else class="rank-list">',
+          '          <router-link v-for="(item, idx) in store.hot.slice(0, 6)" :key="item.id" :to="\'/book/\' + item.id" class="rank-item">',
+          '            <span class="rank-number">{{ idx + 1 }}</span>',
+          '            <span class="rank-title">{{ item.title }}</span>',
+          '            <span class="rank-heat">{{ item.chapterCount }} 章</span>',
+          '          </router-link>',
+          '        </div>',
+          '      </div>',
+          '    </div>',
+          '  </div>',
+
+          '  <div class="card" style="margin-top: 24px;">',
+          '    <div class="card-header">',
+          '      <h2 class="card-title">最新上架</h2>',
+          '      <router-link to="/bookstore" class="card-more">进入书城 →</router-link>',
+          '    </div>',
+          '    <div class="card-body">',
+          '      <div v-if="!store.latestLoaded && !store.latestError" class="loading-state">加载中…</div>',
+          '      <div v-else-if="store.latestError" class="error-box"><span class="grow">{{ store.latestError }}</span><button class="btn btn-ghost btn-sm" @click="retryLatest">重试</button></div>',
+          '      <div v-else class="book-grid">',
+          '        <router-link v-for="book in store.latest.slice(0, 6)" :key="book.id" :to="\'/book/\' + book.id" class="book-card">',
+          '          <div class="book-cover" :style="{ background: gradientFor(book.title) }">',
+          '            <img v-if="book.cover" class="cover-img" :src="coverUrl(book.cover)" :alt="book.title" @error="hideImg">',
+          '            <span class="book-cover-letter cover-layer">{{ book.title[0] }}</span>',
+          '          </div>',
+          '          <h4 class="book-card-title">{{ book.title }}</h4>',
+          '          <p class="book-card-author">{{ book.author }}</p>',
+          '        </router-link>',
+          '      </div>',
+          '    </div>',
+          '  </div>',
+          '</div>',
+        ].join(''),
+        setup() {
+          onMounted(function () {
+            if (!store.hotLoaded) loadHot();
+            if (!store.latestLoaded) loadLatest();
+            if (isLoggedIn.value) {
+              // 首页的「最近在追」和「书架 N 本 · 在读 M 本」读的都是 store.shelf，
+              // 而 store.shelf 原先只在书架页加载 —— 直接打开首页时这两处永远是空的
+              // （显示「书架里还没有开始阅读的书」）。这里补一次拉取。
+              if (!store.shelfLoaded) loadShelf();
+              if (!store.recentLoaded) loadRecent();
+            }
+          });
+
+          // 同书架页：阅读器退出时 saveProgress 会异步把 store.shelfLoaded 翻回 false，
+          // 若首页已挂载，需自愈重新拉取，避免「最近在追 / 在读 N 本」停在旧数据。
+          watch(function () { return store.shelfLoaded; }, function (loaded) {
+            if (!loaded && isLoggedIn.value && !store.shelfError && !store.shelf.length) loadShelf();
+          });
+
+          const greeting = computed(function () {
+            const hour = new Date().getHours();
+            if (hour < 6) return '凌晨好';
+            if (hour < 12) return '早上好';
+            if (hour < 14) return '中午好';
+            if (hour < 18) return '下午好';
+            return '晚上好';
+          });
+
+          const displayName = computed(function () {
+            if (!isLoggedIn.value) return '书友';
+            return auth.user.nickname || auth.user.username || '书友';
+          });
+
+          const readingNow = computed(function () {
+            // 用 chapterIndex >= 0（有阅读记录）判断，不能用 progress > 0：
+            // 只读了开头几章时百分比四舍五入就是 0，会被误判成「没读过」而不显示。
+            return store.shelf.filter(function (s) { return s.chapterIndex >= 0 && s.progress < 100; }).slice(0, 3);
+          });
+
+          const subText = computed(function () {
+            if (!isLoggedIn.value) return '登录后可同步书架与阅读进度';
+            return '书架 ' + store.shelf.length + ' 本 · 在读 ' + readingNow.value.length + ' 本';
+          });
+
+          const continueItem = computed(function () { return store.recent.length ? store.recent[0] : null; });
+
+          const continuePercent = computed(function () {
+            const item = continueItem.value;
+            if (!item || !item.chapterCount) return 0;
+            return Math.min(100, Math.round(((item.chapterIndex + 1) / item.chapterCount) * 100));
+          });
+
+          // 进度条宽度用对象形式绑定，避免在 HTML 属性里再嵌一层引号
+          const continueBarStyle = computed(function () {
+            return { width: continuePercent.value + '%' };
+          });
+
+          function readLink(item) {
+            const idx = Math.max(0, (typeof item.chapterIndex === 'number' ? item.chapterIndex : 0) + 1);
+            return '/read/' + item.bookId + '/' + idx;
+          }
+
+          return {
+            auth: auth, isLoggedIn: isLoggedIn, store: store,
+            greeting: greeting, displayName: displayName, subText: subText,
+            readingNow: readingNow, continueItem: continueItem, continuePercent: continuePercent,
+            continueBarStyle: continueBarStyle,
+            readLink: readLink, gradientFor: gradientFor, coverUrl: coverUrl, hideImg: hideImg,
+            fromNow: fromNow,
+            retryHot: loadHot, retryLatest: loadLatest,
+          };
+        },
+      };
+
+      /* ---------- 书城列表行（书城各子页面共用，避免把同一段卡片结构写 N 遍） ---------- */
+      const BookCardRow = {
+        name: 'BookCardRow',
+        props: { book: { type: Object, required: true } },
+        template: [
+          '<div class="book-row">',
+          '  <router-link :to="\'/book/\' + book.id" class="book-row-cover" :style="{ background: gradientFor(book.title) }">',
+          '    <img v-if="book.cover" class="cover-img" :src="coverUrl(book.cover)" :alt="book.title" @error="hideImg">',
+          '    <span class="cover-layer">{{ book.title[0] }}</span>',
+          '  </router-link>',
+          '  <div class="book-row-meta">',
+          '    <router-link :to="\'/book/\' + book.id" style="text-decoration: none; color: inherit;"><h4>{{ book.title }}</h4></router-link>',
+          '    <p>{{ book.author }} · {{ book.words }} · {{ book.chapterCount }} 章 · {{ book.categoryLabel }}</p>',
+          '    <p style="margin-top: 6px; line-height: 1.55; color: var(--ink-secondary);">{{ book.desc }}</p>',
+          '    <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">',
+          '      <span class="tag">{{ book.statusText }}</span>',
+          '      <span class="tag">{{ book.viewCount }} 阅读</span>',
+          '      <span class="tag">{{ book.likeCount }} 点赞</span>',
+          '    </div>',
+          '  </div>',
+          '  <div class="book-row-rating">',
+          '    <button v-if="isInShelf(book.id)" type="button" class="btn btn-soft btn-sm" @click="removeFromShelf">移出书架</button>',
+          '    <button v-else type="button" class="btn btn-primary btn-sm" @click="addToShelf">加入书架</button>',
+          '  </div>',
+          '</div>',
+        ].join(''),
+        setup(props) {
+          const route = useRoute();
+          const router = useRouter();
+
+          async function addToShelf() {
+            if (!isLoggedIn.value) {
+              router.push({ path: '/login', query: { redirect: route.fullPath } });
+              return;
+            }
+            try {
+              await bookApi.addToShelf(props.book.id);
+              showToast('《' + props.book.title + '》已加入书架', 'success');
+              await loadShelf();
+            } catch (e) { showToast(describeError(e, '加入书架失败'), 'error'); }
+          }
+
+          async function removeFromShelf() {
+            try {
+              await bookApi.removeFromShelf(props.book.id);
+              showToast('已移出书架');
+              await loadShelf();
+            } catch (e) { showToast(describeError(e, '移出失败'), 'error'); }
+          }
+
+          return {
+            isInShelf: isInShelf, addToShelf: addToShelf, removeFromShelf: removeFromShelf,
+            gradientFor: gradientFor, coverUrl: coverUrl, hideImg: hideImg,
+          };
+        },
+      };
+
+      /* ---------- 书城 ---------- */
+      /*
+        结构：顶部三个（及以上）子页面 —— 新书 / 男生 / 女生 /（后台自定义的主分类），
+        每页显示该主分类下的热门书籍（按点击量 viewCount 倒序）；
+        「新书」不是分类，按导入时间（createdAt）倒序。左右滑动或点 Tab 切换。
+      */
+      const Bookstore = {
+        components: { BookCardRow: BookCardRow },
+        template: [
+          '<div class="home-content">',
+          '  <div class="store-tabs">',
+          '    <button type="button" v-for="(p, i) in pages" :key="p.title" class="tab" :class="{ active: pageIndex === i }" @click="goPage(i)">{{ p.title }}</button>',
+          '  </div>',
+
+          '  <div class="page-layout">',
+          '    <aside class="sidebar">',
+          '      <div class="sidebar-title">{{ currentPage.title === "新书" ? "新书榜" : "子分类" }}</div>',
+          '      <div class="sidebar-menu">',
+          '        <template v-if="currentPage.title === \'新书\'">',
+          '          <div class="sidebar-item active"><span>按导入时间最新</span></div>',
+          '        </template>',
+          '        <template v-else>',
+          '          <div class="sidebar-item" :class="{ active: !currentPage.sub }" @click="setSub(\'\')">',
+          '            <span>全部</span><span class="sidebar-count">{{ currentPage.items.length }}</span>',
+          '          </div>',
+          '          <div v-for="s in currentPage.subs" :key="s" class="sidebar-item" :class="{ active: currentPage.sub === s }" @click="setSub(s)">',
+          '            <span>{{ s }}</span>',
+          '          </div>',
+          '        </template>',
+          '      </div>',
+          '      <div class="sidebar-title" style="margin-top: 28px;">排序</div>',
+          '      <div class="sidebar-menu">',
+          '        <div v-for="s in sortOptions" :key="s.value" class="sidebar-item" :class="{ active: currentPage.sort === s.value }" @click="setSort(s.value)">',
+          '          <span>{{ s.label }}</span>',
+          '        </div>',
+          '      </div>',
+          '    </aside>',
+
+          '    <div class="store-main">',
+          '      <div class="store-viewport" @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp" @click.capture="onCaptureClick">',
+          '        <div class="store-track" :style="trackStyle">',
+          '          <section v-for="(p, i) in pages" :key="p.title" class="store-page">',
+          '            <div v-if="p.loading && !p.items.length" class="loading-state">加载中…</div>',
+          '            <div v-else-if="p.error" class="error-box" style="margin-bottom: 24px;">',
+          '              <span class="grow">{{ p.error }}</span>',
+          '              <button class="btn btn-ghost btn-sm" @click="loadPage(i, true)">重试</button>',
+          '            </div>',
+          '            <div v-else-if="!p.items.length" class="empty-state">',
+          '              <strong>这个分类下还没有书</strong>',
+          '              <span>换个分类，或到后台导入几本</span>',
+          '            </div>',
+          '            <div v-else class="book-list">',
+          '              <book-card-row v-for="book in p.items" :key="book.id" :book="book"></book-card-row>',
+          '            </div>',
+          '          </section>',
+          '        </div>',
+          '      </div>',
+          '      <p class="progress-text" style="text-align: center; margin-top: 12px;">',
+          '        左右滑动切换子页面 · 本页 {{ currentPage.items.length }} 本',
+          '      </p>',
+          '    </div>',
+          '  </div>',
+          '</div>',
+        ].join(''),
+        setup() {
+          const route = useRoute();
+          const SWIPE_THRESHOLD = 50;
+
+          const sortOptions = [
+            { label: '按点击量（热门）', value: 'viewCount' },
+            { label: '按导入时间', value: 'createdAt' },
+            { label: '按更新时间', value: 'updatedAt' },
+            { label: '按点赞数', value: 'likeCount' },
+          ];
+
+          function newPage(title, main, subs) {
+            return {
+              title: title, main: main, subs: subs || [], sub: '',
+              // 新书页没有分类，按导入时间；其余页按点击量（热门）
+              sort: main ? 'viewCount' : 'createdAt',
+              items: [], loading: false, loaded: false, error: '',
+            };
+          }
+
+          const pages = ref([newPage('新书', null, [])]);
+          const pageIndex = ref(0);
+          const dragOffset = ref(0);
+          const dragging = ref(false);
+          let pointer = null;
+          let justDragged = false;
+
+          const currentPage = computed(function () {
+            return pages.value[pageIndex.value] || pages.value[0];
+          });
+
+          const trackStyle = computed(function () {
+            const base = 'translateX(' + (-pageIndex.value * 100) + '%)';
+            const offset = dragOffset.value ? ' translateX(' + dragOffset.value + 'px)' : '';
+            return {
+              transform: base + offset,
+              transition: dragging.value ? 'none' : 'transform 280ms cubic-bezier(0.16, 1, 0.3, 1)',
+            };
+          });
+
+          /** 按分类树建页：固定第一个「新书」，其余按主分类顺序（后台新加的主分类自动出现在这里） */
+          async function buildPages() {
+            const tree = await loadCategoryTree();
+            const list = [newPage('新书', null, [])];
+            (tree.mains || []).forEach(function (m) {
+              if (!m || !m.name) return;
+              list.push(newPage(m.name, m.name, m.subs));
+            });
+            // 已加载过的页保留结果，来回进书城不重复请求
+            const old = {};
+            pages.value.forEach(function (p) { old[p.title] = p; });
+            pages.value = list.map(function (p) {
+              const prev = old[p.title];
+              if (!prev) return p;
+              p.sub = prev.sub;
+              p.sort = prev.sort;
+              p.items = prev.items;
+              p.loaded = prev.loaded;
+              return p;
+            });
+            if (pageIndex.value >= pages.value.length) pageIndex.value = 0;
+          }
+
+          /** 兼容 /bookstore?category=xxx（发现页的分类链接）：优先命中主分类页，其次命中子分类 */
+          function applyQueryCategory() {
+            const q = typeof route.query.category === 'string' ? route.query.category : '';
+            if (!q) return;
+            let hit = -1;
+            pages.value.forEach(function (p, i) { if (p.title === q) hit = i; });
+            if (hit >= 0) { pageIndex.value = hit; return; }
+            pages.value.forEach(function (p, i) {
+              if (hit >= 0) return;
+              if (p.subs.indexOf(q) >= 0) { hit = i; pageIndex.value = i; p.sub = q; }
+            });
+          }
+
+          async function loadPage(index, force) {
+            const p = pages.value[index];
+            if (!p || p.loading) return;
+            if (p.loaded && !force) return;
+            p.loading = true;
+            p.error = '';
+            try {
+              const params = { page: 0, size: 50, sortBy: p.sort };
+              if (p.main) params.mainCategory = p.main;
+              if (p.sub) params.subCategory = p.sub;
+              const res = await bookApi.fictionBooks(params);
+              p.items = res.items;
+              p.loaded = true;
+            } catch (e) {
+              p.error = describeError(e, '书籍列表加载失败');
+              p.items = [];
+            } finally {
+              p.loading = false;
+            }
+          }
+
+          function goPage(index) {
+            if (index < 0 || index >= pages.value.length || index === pageIndex.value) return;
+            pageIndex.value = index;
+            dragOffset.value = 0;
+            window.scrollTo(0, 0);
+            loadPage(index, false);
+          }
+
+          function setSub(sub) {
+            const p = currentPage.value;
+            if (!p || p.sub === sub) return;
+            p.sub = sub;
+            window.scrollTo(0, 0);
+            loadPage(pageIndex.value, true);
+          }
+
+          function setSort(sort) {
+            const p = currentPage.value;
+            if (!p || p.sort === sort) return;
+            p.sort = sort;
+            window.scrollTo(0, 0);
+            loadPage(pageIndex.value, true);
+          }
+
+          /* ===== 左右滑动切换（指针事件同时覆盖手指 / 鼠标拖拽） ===== */
+          function onDown(e) {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            pointer = { id: e.pointerId, x: e.clientX };
+            dragging.value = false;
+            dragOffset.value = 0;
+          }
+
+          function onMove(e) {
+            if (!pointer || e.pointerId !== pointer.id) return;
+            const dx = e.clientX - pointer.x;
+            if (!dragging.value && Math.abs(dx) < 8) return;
+            dragging.value = true;
+            justDragged = true;
+            // 到头了给一半阻尼，手感上能感到「没有下一页」
+            const atStart = pageIndex.value === 0 && dx > 0;
+            const atEnd = pageIndex.value === pages.value.length - 1 && dx < 0;
+            dragOffset.value = (atStart || atEnd) ? dx / 2 : dx;
+          }
+
+          function onUp(e) {
+            if (!pointer || (e && e.pointerId !== pointer.id)) return;
+            const dx = dragOffset.value;
+            const wasDragging = dragging.value;
+            pointer = null;
+            dragging.value = false;
+            dragOffset.value = 0;
+            if (wasDragging && Math.abs(dx) > SWIPE_THRESHOLD) {
+              goPage(pageIndex.value + (dx < 0 ? 1 : -1));
+            }
+            if (wasDragging) {
+              // 拖拽结束浏览器还会补一次 click，吞掉它，避免误进书籍详情
+              setTimeout(function () { justDragged = false; }, 320);
+            }
+          }
+
+          function onCaptureClick(e) {
+            if (justDragged) {
+              e.preventDefault();
+              e.stopPropagation();
+              justDragged = false;
+            }
+          }
+
+          onMounted(async function () {
+            await buildPages();
+            applyQueryCategory();
+            loadPage(pageIndex.value, false);
+            // 详情页「同类推荐」依赖 store.books，这里保持原有加载
+            if (!store.booksLoaded) loadBooks().catch(function () {});
+          });
+
+          return {
+            store: store, pages: pages, pageIndex: pageIndex, currentPage: currentPage,
+            trackStyle: trackStyle, sortOptions: sortOptions,
+            goPage: goPage, setSub: setSub, setSort: setSort, loadPage: loadPage,
+            onDown: onDown, onMove: onMove, onUp: onUp, onCaptureClick: onCaptureClick,
+          };
+        },
+      };
+
+
+      /* ---------- 书架 ---------- */
+      const Bookshelf = {
+        template: [
+          '<div class="home-content">',
+          '  <div class="welcome-bar">',
+          '    <div>',
+          '      <h1 class="welcome-title">我的书架</h1>',
+          '      <p class="welcome-sub">{{ subText }}</p>',
+          '    </div>',
+          '    <router-link to="/bookstore" class="btn btn-primary btn-sm">+ 去书城选书</router-link>',
+          '  </div>',
+
+          '  <div v-if="!isLoggedIn" class="empty-state">',
+          '    <strong>登录后查看书架</strong>',
+          '    <span>书架与阅读进度会跟随账号同步</span>',
+          '    <router-link :to="{ path: \'/login\', query: { redirect: \'/bookshelf\' } }" class="btn btn-primary btn-sm">去登录</router-link>',
+          '  </div>',
+
+          '<template v-else>',
+          '  <div class="shelf-tabs">',
+          '    <button type="button" v-for="t in tabs" :key="t.value" class="tab" :class="{ active: activeTab === t.value }" @click="activeTab = t.value">{{ t.label }}</button>',
+          '  </div>',
+
+          '  <div v-if="!store.shelfLoaded && !store.shelfError" class="loading-state">加载中…</div>',
+          '  <div v-else-if="store.shelfError" class="error-box">',
+          '    <span class="grow">{{ store.shelfError }}</span>',
+          '    <button class="btn btn-ghost btn-sm" @click="reload">重试</button>',
+          '  </div>',
+          '  <div v-else-if="!filteredShelf.length" class="empty-state">',
+          '    <strong>{{ store.shelf.length ? "这个分类下没有书" : "书架还是空的" }}</strong>',
+          '    <span>{{ store.shelf.length ? "换一个筛选条件" : "去书城加入几本吧" }}</span>',
+          '    <router-link to="/bookstore" class="btn btn-primary btn-sm">去书城</router-link>',
+          '  </div>',
+          '  <div v-else class="shelf-grid">',
+          '    <div v-for="book in filteredShelf" :key="book.bookId" class="shelf-card">',
+          '      <router-link :to="\'/book/\' + book.bookId" class="shelf-card-cover" :style="{ background: gradientFor(book.title) }">',
+          '        <img v-if="book.cover" class="cover-img" :src="coverUrl(book.cover)" :alt="book.title" @error="hideImg">',
+          '        <span class="cover-layer">{{ book.title[0] }}</span>',
+          '      </router-link>',
+          '      <router-link :to="\'/book/\' + book.bookId" style="text-decoration: none; color: inherit;"><h4>{{ book.title }}</h4></router-link>',
+          '      <p>{{ book.author }} · {{ book.chapterCount }} 章</p>',
+          '      <div class="progress-bar"><div class="progress-fill" :style="{ width: book.progress + \'%\' }"></div></div>',
+          '      <p class="progress-text">{{ progressText(book) }}</p>',
+          '      <div style="display: flex; gap: 8px; margin-top: auto; padding-top: 12px;">',
+          '        <router-link :to="readLink(book)" class="btn btn-primary btn-sm" style="flex: 1;">{{ book.chapterIndex >= 0 ? "继续阅读" : "开始阅读" }}</router-link>',
+          '        <button type="button" class="btn btn-ghost btn-sm" @click="removeFromShelf(book)">移出</button>',
+          '      </div>',
+          '    </div>',
+          '  </div>',
+          '</template>',
+          '</div>',
+        ].join(''),
+        setup() {
+          const tabs = [
+            { label: '全部书籍', value: 'all' },
+            { label: '最近阅读', value: 'reading' },
+            { label: '已读完', value: 'finished' },
+            { label: '未开始', value: 'unread' },
+          ];
+          const activeTab = ref('all');
+
+          const filteredShelf = computed(function () {
+            const list = store.shelf;
+            if (activeTab.value === 'reading') {
+              // 同首页：有阅读记录即算「在读」，避免只读了开头（百分比为 0）被过滤掉
+              return list.filter(function (b) { return b.chapterIndex >= 0 && b.progress < 100; });
+            }
+            if (activeTab.value === 'finished') {
+              return list.filter(function (b) { return b.chapterIndex >= 0 && b.progress >= 100; });
+            }
+            if (activeTab.value === 'unread') {
+              return list.filter(function (b) { return b.chapterIndex < 0; });
+            }
+            return list;
+          });
+
+          const subText = computed(function () {
+            if (!isLoggedIn.value) return '登录后同步书架';
+            return '共 ' + store.shelf.length + ' 本';
+          });
+
+          function progressText(book) {
+            if (book.chapterIndex < 0) return '尚未开始阅读';
+            const chapterName = book.chapterTitle ? '（' + book.chapterTitle + '）' : '';
+            return '读到第 ' + (book.chapterIndex + 1) + ' 章' + chapterName + ' · ' + fromNow(book.lastReadAtEpoch || book.lastReadAt);
+          }
+
+          function readLink(book) {
+            return '/read/' + book.bookId + '/' + Math.max(1, book.chapterIndex + 1);
+          }
+
+          async function removeFromShelf(book) {
+            try {
+              await bookApi.removeFromShelf(book.bookId);
+              showToast('《' + book.title + '》已移出书架');
+              await loadShelf();
+            } catch (e) { showToast(describeError(e, '移出失败'), 'error'); }
+          }
+
+          function reload() { return loadShelf(); }
+
+          // 阅读器退出时 saveProgress 会异步把 store.shelfLoaded 翻回 false 以强制刷新，
+          // 若此时书架页已挂载（onMounted 已跑过），需自愈重新拉取，否则会卡在「加载中」。
+          watch(function () { return store.shelfLoaded; }, function (loaded) {
+            if (!loaded && isLoggedIn.value && !store.shelfError) loadShelf();
+          });
+
+          onMounted(function () {
+            if (isLoggedIn.value) loadShelf();
+          });
+
+          return {
+            store: store, isLoggedIn: isLoggedIn, tabs: tabs, activeTab: activeTab,
+            filteredShelf: filteredShelf, subText: subText, progressText: progressText,
+            readLink: readLink, removeFromShelf: removeFromShelf, reload: reload,
+            gradientFor: gradientFor, coverUrl: coverUrl, hideImg: hideImg,
+          };
+        },
+      };
+
+      /* ---------- 发现 ---------- */
+      const Discover = {
+        template: [
+          '<div class="home-content">',
+          '  <div class="discuss-header">',
+          '    <h1>发现好书</h1>',
+          '    <p>热门榜与最新上架，数据来自书库实时数据</p>',
+          '  </div>',
+
+          '  <div class="tabs" style="margin-bottom: 20px;">',
+          '    <router-link v-for="c in store.categories" :key="c" :to="{ path: \'/bookstore\', query: { category: c } }" class="tab" style="text-decoration: none;">{{ c }}</router-link>',
+          '  </div>',
+
+          '  <div class="detail-layout">',
+          '    <div>',
+          '      <div class="card">',
+          '        <div class="card-header">',
+          '          <h2 class="card-title">热门书籍</h2>',
+          '          <router-link to="/bookstore" class="card-more">全部书籍 →</router-link>',
+          '        </div>',
+          '        <div class="card-body">',
+          '          <div v-if="!store.hotLoaded && !store.hotError" class="loading-state">加载中…</div>',
+          '          <div v-else-if="store.hotError" class="error-box"><span class="grow">{{ store.hotError }}</span><button class="btn btn-ghost btn-sm" @click="loadHot">重试</button></div>',
+          '          <div v-else-if="!store.hot.length" class="empty-state sm"><span>后端暂无热门数据</span></div>',
+          '          <div v-else class="book-list">',
+          '            <router-link v-for="(book, idx) in store.hot" :key="book.id" :to="\'/book/\' + book.id" class="book-row">',
+          '              <div class="book-row-cover" :style="{ background: gradientFor(book.title) }">',
+          '                <img v-if="book.cover" class="cover-img" :src="coverUrl(book.cover)" :alt="book.title" @error="hideImg">',
+          '                <span class="cover-layer">{{ book.title[0] }}</span>',
+          '              </div>',
+          '              <div class="book-row-meta">',
+          '                <h4>{{ idx + 1 }}. {{ book.title }}</h4>',
+          '                <p>{{ book.author }} · {{ book.category }} · {{ book.chapterCount }} 章 · {{ book.words }}</p>',
+          '              </div>',
+          '              <div class="book-row-rating">',
+          '                <div class="rating-count">{{ heatText(book) }}</div>',
+          '              </div>',
+          '            </router-link>',
+          '          </div>',
+          '        </div>',
+          '      </div>',
+          '    </div>',
+
+          '    <aside>',
+          '      <div class="card">',
+          '        <div class="card-header"><h2 class="card-title">最新上架</h2><router-link to="/bookstore" class="card-more">进入书城 →</router-link></div>',
+          '        <div class="card-body">',
+          '          <div v-if="!store.latestLoaded && !store.latestError" class="loading-state">加载中…</div>',
+          '          <div v-else-if="store.latestError" class="error-box"><span class="grow">{{ store.latestError }}</span><button class="btn btn-ghost btn-sm" @click="loadLatest">重试</button></div>',
+          '          <div v-else class="book-grid">',
+          '            <router-link v-for="book in store.latest.slice(0, 8)" :key="book.id" :to="\'/book/\' + book.id" class="book-card">',
+          '              <div class="book-cover" :style="{ background: gradientFor(book.title) }">',
+          '                <img v-if="book.cover" class="cover-img" :src="coverUrl(book.cover)" :alt="book.title" @error="hideImg">',
+          '                <span class="book-cover-letter cover-layer">{{ book.title[0] }}</span>',
+          '              </div>',
+          '              <h4 class="book-card-title">{{ book.title }}</h4>',
+          '              <p class="book-card-author">{{ book.author }}</p>',
+          '            </router-link>',
+          '          </div>',
+          '        </div>',
+          '      </div>',
+          '    </aside>',
+          '  </div>',
+          '</div>',
+        ].join(''),
+        setup() {
+          onMounted(function () {
+            if (!store.hotLoaded) loadHot();
+            if (!store.latestLoaded) loadLatest();
+            if (!store.categories.length) loadCategories();
+          });
+          return {
+            store: store, heatText: heatText, gradientFor: gradientFor,
+            coverUrl: coverUrl, hideImg: hideImg, loadHot: loadHot, loadLatest: loadLatest,
+          };
+        },
+      };
+
+      /* ---------- 搜索 ---------- */
+      const Search = {
+        template: [
+          '<div class="home-content">',
+          '  <div class="welcome-bar">',
+          '    <div>',
+          '      <h1 class="welcome-title">搜索</h1>',
+          '      <p class="welcome-sub">{{ keyword ? "关键词：" + keyword : "输入书名或作者后回车" }}</p>',
+          '    </div>',
+          '  </div>',
+
+          '  <div class="search-box" style="max-width: 480px; margin-bottom: 28px;">',
+          '    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">',
+          '      <circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path>',
+          '    </svg>',
+          '    <input v-model="draft" type="search" placeholder="搜索书名、作者" aria-label="搜索书名或作者" @keyup.enter="run">',
+          '  </div>',
+
+          '  <div v-if="!keyword" class="empty-state"><span>输入关键词开始搜索</span></div>',
+          '  <div v-else-if="loading" class="loading-state">搜索中…</div>',
+          '  <div v-else-if="error" class="error-box"><span class="grow">{{ error }}</span><button class="btn btn-ghost btn-sm" @click="run">重试</button></div>',
+          '  <div v-else-if="!results.length" class="empty-state">',
+          '    <strong>没有找到匹配的书</strong>',
+          '    <span>试试别的关键词</span>',
+          '  </div>',
+          '  <div v-else class="book-list">',
+          '    <div v-for="book in results" :key="book.id" class="book-row">',
+          '      <router-link :to="\'/book/\' + book.id" class="book-row-cover" :style="{ background: gradientFor(book.title) }">',
+          '        <img v-if="book.cover" class="cover-img" :src="coverUrl(book.cover)" :alt="book.title" @error="hideImg">',
+          '        <span class="cover-layer">{{ book.title[0] }}</span>',
+          '      </router-link>',
+          '      <div class="book-row-meta">',
+          '        <router-link :to="\'/book/\' + book.id" style="text-decoration: none; color: inherit;"><h4>{{ book.title }}</h4></router-link>',
+          '        <p>{{ book.author }} · {{ book.words }} · {{ book.chapterCount }} 章 · {{ book.category }}</p>',
+          '        <p style="margin-top: 6px; line-height: 1.55; color: var(--ink-secondary);">{{ book.desc }}</p>',
+          '      </div>',
+          '      <div class="book-row-rating">',
+          '        <button v-if="isInShelf(book.id)" type="button" class="btn btn-soft btn-sm" @click="removeFromShelf(book)">移出书架</button>',
+          '        <button v-else type="button" class="btn btn-primary btn-sm" @click="addToShelf(book)">加入书架</button>',
+          '      </div>',
+          '    </div>',
+          '  </div>',
+          '</div>',
+        ].join(''),
+        setup() {
+          const route = useRoute();
+          const router = useRouter();
+
+          const keyword = computed(function () { return typeof route.query.q === 'string' ? route.query.q.trim() : ''; });
+          const draft = ref(keyword.value);
+          const results = ref([]);
+          const loading = ref(false);
+          const error = ref('');
+
+          function run() {
+            const q = draft.value.trim();
+            if (!q) { showToast('请输入关键词'); return; }
+            if (q === keyword.value) { fetch(); return; }
+            router.push({ path: '/search', query: { q: q } });
+          }
+
+          async function fetch() {
+            if (!keyword.value) { results.value = []; return; }
+            loading.value = true;
+            error.value = '';
+            try {
+              const res = await bookApi.searchBooks(keyword.value);
+              results.value = res.items;
+            } catch (e) {
+              results.value = [];
+              error.value = describeError(e, '搜索失败');
+            } finally {
+              loading.value = false;
+            }
+          }
+
+          async function addToShelf(book) {
+            if (!isLoggedIn.value) {
+              router.push({ path: '/login', query: { redirect: route.fullPath } });
+              return;
+            }
+            try {
+              await bookApi.addToShelf(book.id);
+              showToast('《' + book.title + '》已加入书架', 'success');
+              await loadShelf();
+            } catch (e) { showToast(describeError(e, '加入书架失败'), 'error'); }
+          }
+
+          async function removeFromShelf(book) {
+            try {
+              await bookApi.removeFromShelf(book.id);
+              showToast('已移出书架');
+              await loadShelf();
+            } catch (e) { showToast(describeError(e, '移出失败'), 'error'); }
+          }
+
+          onMounted(fetch);
+          watch(function () { return route.query.q; }, function () {
+            draft.value = keyword.value;
+            fetch();
+          });
+
+          return {
+            keyword: keyword, draft: draft, results: results, loading: loading, error: error,
+            run: run, isInShelf: isInShelf, addToShelf: addToShelf, removeFromShelf: removeFromShelf,
+            gradientFor: gradientFor, coverUrl: coverUrl, hideImg: hideImg,
+          };
+        },
+      };
+
+      /* ---------- 登录 / 注册 ---------- */
+      const Login = {
+        template: [
+          '<div class="auth-page">',
+          '  <div class="auth-hero">',
+          '    <div class="auth-hero-pattern"></div>',
+          '    <div class="auth-hero-content">',
+          '      <div class="auth-hero-brand"><img class="brand-mark" src="assets/brand-icon.png" alt="书阁阅读">书阁阅读</div>',
+          '      <h2>阅读，<br>从这里开始</h2>',
+          '      <p>登录你的账号，同步书架与阅读进度，随时随地继续未完的章节。</p>',
+          '      <div class="auth-hero-features">',
+          '        <div class="auth-feature">',
+          '          <div class="auth-feature-icon">',
+          '            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>',
+          '          </div>',
+          '          多端阅读进度实时同步',
+          '        </div>',
+          '        <div class="auth-feature">',
+          '          <div class="auth-feature-icon">',
+          '            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>',
+          '          </div>',
+          '          书架、进度、书签云端保存',
+          '        </div>',
+          '        <div class="auth-feature">',
+          '          <div class="auth-feature-icon">',
+          '            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+          '          </div>',
+          '          海量书源，一键搜索',
+          '        </div>',
+          '      </div>',
+          '    </div>',
+          '  </div>',
+
+          '  <div class="auth-panel">',
+          '    <div class="auth-panel-inner">',
+          '      <div class="auth-tabs">',
+          '        <button type="button" class="auth-tab" :class="{ active: mode === \'password\' }" @click="switchMode(\'password\')">密码登录</button>',
+          '        <button type="button" class="auth-tab" :class="{ active: mode === \'code\' }" @click="switchMode(\'code\')">验证码登录</button>',
+          '      </div>',
+
+          '      <div class="auth-header">',
+          '        <h1>{{ titles }}</h1>',
+          '        <p>{{ subtitles }}</p>',
+          '      </div>',
+
+          '      <form @submit.prevent="submit">',
+          '        <div v-if="error" class="form-error" role="alert" style="margin-bottom:16px;padding:12px 14px;border-radius:10px;background:#fff0eb;color:#c44d04;font-size:13px;font-weight:700;">{{ error }}</div>',
+
+          '        <template v-if="mode === \'password\'">',
+          '          <div class="form-group">',
+          '            <label class="form-label" for="login-account">用户名 / 邮箱</label>',
+          '            <input id="login-account" v-model="form.account" type="text" class="form-input" placeholder="请输入用户名或邮箱" autocomplete="username" required>',
+          '          </div>',
+          '          <div class="form-group">',
+          '            <label class="form-label" for="login-password">密码</label>',
+          '            <input id="login-password" v-model="form.password" type="password" class="form-input" placeholder="请输入密码" autocomplete="current-password" required>',
+          '          </div>',
+          '          <div class="form-options">',
+          '            <label class="form-remember">',
+          '              <input type="checkbox" v-model="form.remember">',
+          '              <span>记住我</span>',
+          '            </label>',
+          '          </div>',
+          '          <label class="auth-consent">',
+          '            <input type="checkbox" v-model="consent">',
+          '            <span>我已阅读并同意<a class="auth-doc" href="/文档资料/terms.html" target="_blank" rel="noopener">《用户服务协议》</a>和<a class="auth-doc" href="/文档资料/privacy.html" target="_blank" rel="noopener">《隐私政策》</a>。</span>',
+          '          </label>',
+          '        </template>',
+
+          '        <template v-if="mode === \'code\' && codeStep === 1">',
+          '          <div class="auth-step-bars">',
+          '            <span class="auth-step-bar on"></span>',
+          '            <span class="auth-step-bar"></span>',
+          '          </div>',
+          '          <div class="form-group">',
+          '            <label class="form-label" for="login-email">邮箱</label>',
+          '            <input id="login-email" v-model="form.email" type="email" class="form-input" placeholder="you@example.com" autocomplete="email" required>',
+          '          </div>',
+          '          <label class="auth-consent">',
+          '            <input type="checkbox" v-model="consent">',
+          '            <span>我已阅读并同意<a class="auth-doc" href="/文档资料/terms.html" target="_blank" rel="noopener">《用户服务协议》</a>和<a class="auth-doc" href="/文档资料/privacy.html" target="_blank" rel="noopener">《隐私政策》</a>。</span>',
+          '          </label>',
+          '          <button type="button" class="btn btn-primary auth-submit" :disabled="sendingCode" @click="startCodeLogin">',
+          '            {{ sendingCode ? \'发送中…\' : \'使用邮箱验证码继续\' }}',
+          '          </button>',
+          '        </template>',
+
+          '        <template v-if="mode === \'code\' && codeStep === 2">',
+          '          <div class="auth-step-bars">',
+          '            <span class="auth-step-bar on"></span>',
+          '            <span class="auth-step-bar on"></span>',
+          '          </div>',
+          '          <div class="auth-sent-card">',
+          '            <div>验证码已发送至 <strong>{{ maskedEmail }}</strong></div>',
+          '            <p>若该邮箱尚未注册，验证通过后将自动注册并登录。</p>',
+          '          </div>',
+          '          <div class="auth-code-inputs">',
+          '            <input v-for="i in 6" :key="i" :ref="el => setCodeRef(i - 1, el)" :value="codeDigits[i - 1]" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" :aria-label="\'验证码 \' + i" @input="onCodeInput(i - 1, $event)" @keydown.delete="onCodeBackspace(i - 1, $event)" @focus="onCodeFocus" @paste="onCodePaste($event)">',
+          '          </div>',
+          '          <div class="auth-resend">',
+          '            <button type="button" :disabled="countdown > 0 || sendingCode" @click="resendCode">{{ resendText }}</button>',
+          '          </div>',
+          '        </template>',
+
+          '        <template v-if="mode === \'register\'">',
+          '          <div class="form-group">',
+          '            <label class="form-label" for="login-email">邮箱</label>',
+          '            <input id="login-email" v-model="form.email" type="email" class="form-input" placeholder="you@example.com" autocomplete="email" required>',
+          '          </div>',
+          '          <div class="form-group">',
+          '            <label class="form-label" for="login-code">邮箱验证码</label>',
+          '            <div class="auth-code-row">',
+          '              <input id="login-code" v-model="form.code" type="text" class="form-input" placeholder="6 位验证码" inputmode="numeric" maxlength="6" required>',
+          '              <button type="button" class="btn btn-soft" :disabled="countdown > 0 || sendingCode" @click="sendCode">{{ codeButtonText }}</button>',
+          '            </div>',
+          '            <p class="field-hint">{{ codeHint }}</p>',
+          '          </div>',
+          '          <div class="form-group">',
+          '            <label class="form-label" for="login-password">密码</label>',
+          '            <input id="login-password" v-model="form.password" type="password" class="form-input" placeholder="6~20 位密码" autocomplete="new-password" required>',
+          '          </div>',
+          '          <div class="form-group">',
+          '            <label class="form-label" for="login-username">用户名</label>',
+          '            <input id="login-username" v-model="form.username" type="text" class="form-input" placeholder="字母开头，3~20 位字母/数字/下划线" autocomplete="username" required @blur="usernameTouched = true">',
+          '            <p class="field-hint" :class="{ bad: usernameTouched && !usernameValid }">{{ usernameHint }}</p>',
+          '          </div>',
+          '          <div class="form-group">',
+          '            <label class="form-label" for="login-confirm">确认密码</label>',
+          '            <input id="login-confirm" v-model="form.confirmPassword" type="password" class="form-input" placeholder="请再次输入密码" autocomplete="new-password" required>',
+          '          </div>',
+          '        </template>',
+
+          '        <button v-if="mode !== \'code\' || codeStep === 2" type="submit" class="btn btn-primary auth-submit" :disabled="loading">',
+          '          {{ loading ? \'请稍候…\' : submitLabel }}',
+          '        </button>',
+
+          '        <button v-if="mode === \'code\' && codeStep === 2" type="button" class="auth-link-btn" @click="backToEmail">返回上一步修改邮箱</button>',
+          '      </form>',
+
+          '      <div v-if="mode !== \'code\'" class="auth-footer">',
+          '        <template v-if="mode === \'register\'">已有账号？<a href="#" @click.prevent="switchMode(\'password\')">立即登录</a></template>',
+          '        <template v-else>还没有账号？<a href="#" @click.prevent="switchMode(\'register\')">邮箱注册</a></template>',
+          '      </div>',
+          '    </div>',
+          '  </div>',
+          '</div>',
+        ].join(''),
+        setup() {
+          const route = useRoute();
+          const router = useRouter();
+
+          const baseTitles = { password: '欢迎回来', code: '欢迎回来', register: '创建账户' };
+          const baseSubtitles = {
+            password: '请输入账号密码以继续阅读',
+            code: '未注册的邮箱首次登录会自动创建账号',
+            register: '邮箱 + 验证码 + 用户名 + 密码',
+          };
+          const codeStepSubtitles = { 1: '未注册的邮箱首次登录会自动创建账号', 2: '5 分钟内有效，请勿将验证码转发给他人' };
+          const submitLabels = { password: '登录', code: '验证并登录', register: '注册并登录' };
+
+          const mode = ref('password');
+          const codeStep = ref(1);
+          const consent = ref(false);
+          const codeDigits = ref(['', '', '', '', '', '']);
+          const form = ref({ account: '', email: '', code: '', password: '', confirmPassword: '', username: '', remember: true });
+          const loading = ref(false);
+          const error = ref('');
+          const sendingCode = ref(false);
+          const countdown = ref(0);
+          const usernameTouched = ref(false);
+          let timer = null;
+          const codeEls = [];
+
+          const titles = computed(function () {
+            if (mode.value === 'code') return codeStep.value === 2 ? '输入验证码' : '欢迎回来';
+            return baseTitles[mode.value];
+          });
+          const subtitles = computed(function () {
+            if (mode.value === 'code') return codeStepSubtitles[codeStep.value];
+            return baseSubtitles[mode.value];
+          });
+          const submitLabel = computed(function () { return submitLabels[mode.value]; });
+          const usernameValid = computed(function () { return USERNAME_PATTERN.test(form.value.username); });
+          const usernameHint = computed(function () {
+            if (usernameValid.value) return '用户名可用格式';
+            return '需字母开头，3~20 位，仅字母、数字、下划线';
+          });
+          const codeButtonText = computed(function () {
+            if (sendingCode.value) return '发送中…';
+            if (countdown.value > 0) return countdown.value + ' 秒后重发';
+            return '获取验证码';
+          });
+          const codeHint = computed(function () {
+            if (mode.value === 'register') return '验证码会发送到上面的邮箱，用于完成注册';
+            return '验证码 5 分钟内有效，未注册邮箱会自动创建账号';
+          });
+          const codeValue = computed(function () { return codeDigits.value.join(''); });
+          const maskedEmail = computed(function () {
+            const email = (form.value.email || '').trim();
+            const at = email.indexOf('@');
+            if (at <= 0) return email;
+            return email.charAt(0) + '***' + email.slice(at);
+          });
+          const resendText = computed(function () {
+            if (sendingCode.value) return '发送中…';
+            if (countdown.value > 0) return countdown.value + ' 秒后可重新获取';
+            return '重新获取验证码';
+          });
+
+          function switchMode(next) {
+            mode.value = next;
+            error.value = '';
+            codeStep.value = 1;
+            codeDigits.value = ['', '', '', '', '', ''];
+            form.value.code = '';
+          }
+
+          async function sendCode() {
+            const email = (form.value.email || '').trim();
+            if (!EMAIL_PATTERN.test(email)) { error.value = '请先填写正确的邮箱地址'; return false; }
+            sendingCode.value = true;
+            error.value = '';
+            try {
+              await authApi.sendEmailCode(email);
+              showToast('验证码已发送，请查收邮件', 'success');
+              countdown.value = 60;
+              clearInterval(timer);
+              timer = setInterval(function () {
+                countdown.value -= 1;
+                if (countdown.value <= 0) clearInterval(timer);
+              }, 1000);
+              return true;
+            } catch (e) {
+              error.value = describeError(e, '验证码发送失败');
+              return false;
+            } finally {
+              sendingCode.value = false;
+            }
+          }
+
+          // 验证码登录第一步：校验邮箱 + 协议，发码成功后进入第二步
+          async function startCodeLogin() {
+            error.value = '';
+            const email = (form.value.email || '').trim();
+            if (!EMAIL_PATTERN.test(email)) { error.value = '请先填写正确的邮箱地址'; return; }
+            if (!consent.value) { error.value = '请先阅读并同意《用户服务协议》和《隐私政策》'; return; }
+            const ok = await sendCode();
+            if (!ok) return;
+            codeDigits.value = ['', '', '', '', '', ''];
+            form.value.code = '';
+            codeStep.value = 2;
+            nextTick(function () {
+              if (codeEls[0]) codeEls[0].focus();
+            });
+          }
+
+          function backToEmail() {
+            codeStep.value = 1;
+            error.value = '';
+          }
+
+          function setCodeRef(index, el) {
+            if (el) codeEls[index] = el;
+          }
+
+          function onCodeInput(index, event) {
+            const el = event.target;
+            const digits = (el.value || '').replace(/\D/g, '');
+            if (!digits) {
+              codeDigits.value[index] = '';
+              el.value = '';
+              form.value.code = codeValue.value;
+              return;
+            }
+            let cursor = index;
+            const chars = digits.split('');
+            for (let i = 0; i < chars.length; i += 1) {
+              if (cursor > 5) break;
+              codeDigits.value[cursor] = chars[i];
+              cursor += 1;
+            }
+            el.value = codeDigits.value[index] || '';
+            form.value.code = codeValue.value;
+            const nextIndex = Math.min(cursor, 5);
+            if (nextIndex !== index) {
+              const nextEl = codeEls[nextIndex];
+              if (nextEl) {
+                nextEl.focus();
+                if (nextEl.select) nextEl.select();
+              }
+            }
+          }
+
+          function onCodeFocus(event) {
+            if (event && event.target && event.target.select) event.target.select();
+          }
+
+          function onCodeBackspace(index, event) {
+            event.preventDefault();
+            if (codeDigits.value[index]) {
+              codeDigits.value[index] = '';
+              event.target.value = '';
+            } else if (index > 0) {
+              codeDigits.value[index - 1] = '';
+              const prev = codeEls[index - 1];
+              if (prev) { prev.value = ''; prev.focus(); }
+            }
+            form.value.code = codeValue.value;
+          }
+
+          function onCodePaste(event) {
+            const clipboard = event.clipboardData || window.clipboardData;
+            if (!clipboard) return;
+            const raw = (clipboard.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+            if (!raw) return;
+            event.preventDefault();
+            for (let i = 0; i < 6; i += 1) codeDigits.value[i] = raw.charAt(i) || '';
+            form.value.code = codeValue.value;
+            codeEls.forEach(function (el, i) {
+              if (el) el.value = codeDigits.value[i];
+            });
+            const focusEl = codeEls[Math.min(raw.length, 5)];
+            if (focusEl) focusEl.focus();
+          }
+
+          function resendCode() {
+            if (countdown.value > 0 || sendingCode.value) return;
+            sendCode();
+          }
+
+          async function submit() {
+            error.value = '';
+            const f = form.value;
+
+            if (mode.value === 'register') {
+              if (!USERNAME_PATTERN.test(f.username)) { error.value = '用户名需字母开头，3~20 位字母、数字或下划线'; return; }
+              if (!EMAIL_PATTERN.test(f.email.trim())) { error.value = '请填写正确的邮箱地址'; return; }
+              if (!f.code.trim()) { error.value = '请填写邮箱验证码'; return; }
+              if ((f.password || '').length < 6) { error.value = '密码至少 6 位'; return; }
+              if (f.password !== f.confirmPassword) { error.value = '两次输入的密码不一致'; return; }
+            }
+            if (mode.value === 'code') {
+              if (!EMAIL_PATTERN.test(f.email.trim())) { error.value = '请填写正确的邮箱地址'; return; }
+              if (codeValue.value.length !== 6) { error.value = '请输入 6 位邮箱验证码'; return; }
+            }
+            if (mode.value === 'password' && !f.account.trim()) { error.value = '请输入用户名或邮箱'; return; }
+            if ((mode.value === 'password' || mode.value === 'code') && !consent.value) {
+              error.value = '请先阅读并同意《用户服务协议》和《隐私政策》';
+              return;
+            }
+
+            loading.value = true;
+            try {
+              let data;
+              if (mode.value === 'password') {
+                data = await authApi.login(f.account.trim(), f.password);
+              } else if (mode.value === 'code') {
+                data = await authApi.loginByCode(f.email.trim(), codeValue.value);
+                if (data.newUser) showToast('已为你创建账号', 'success');
+              } else {
+                data = await authApi.registerByEmail({
+                  email: f.email.trim(),
+                  code: f.code.trim(),
+                  username: f.username,
+                  password: f.password,
+                });
+              }
+              setAuth(data);
+              showToast('欢迎回来，' + (data.nickname || data.username || '书友'), 'success');
+              // 登录后必须重新拉一次用户数据，否则书架仍是空的
+              await Promise.all([loadShelf(), loadRecent()]);
+              const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
+              router.push(redirect);
+            } catch (e) {
+              error.value = describeError(e, mode.value === 'register' ? '注册失败' : '登录失败');
+            } finally {
+              loading.value = false;
+            }
+          }
+
+          onMounted(function () {
+            if (isLoggedIn.value) router.replace('/');
+          });
+
+          onUnmounted(function () { clearInterval(timer); });
+
+          return {
+            mode: mode, form: form, loading: loading, error: error,
+            titles: titles, subtitles: subtitles, codeHint: codeHint,
+            submitLabel: submitLabel,
+            switchMode: switchMode, sendCode: sendCode, submit: submit,
+            sendingCode: sendingCode, countdown: countdown, codeButtonText: codeButtonText,
+            usernameValid: usernameValid, usernameHint: usernameHint, usernameTouched: usernameTouched,
+            codeStep: codeStep, consent: consent, codeDigits: codeDigits, maskedEmail: maskedEmail,
+            resendText: resendText, resendCode: resendCode, startCodeLogin: startCodeLogin,
+            backToEmail: backToEmail, setCodeRef: setCodeRef, onCodeInput: onCodeInput,
+            onCodeBackspace: onCodeBackspace, onCodeFocus: onCodeFocus, onCodePaste: onCodePaste,
+          };
+        },
+      };
+
+      /* ---------- 个人中心 ---------- */
+      const AVATAR_HINT_IDLE = '支持 jpg / png / webp / gif，最大 5MB';
+
+      const Profile = {
+        template: [
+          '<div class="home-content">',
+          '  <div class="welcome-bar">',
+          '    <div>',
+          '      <h1 class="welcome-title">个人中心</h1>',
+          '      <p class="welcome-sub">{{ subText }}</p>',
+          '    </div>',
+          '  </div>',
+
+          '  <div v-if="!isLoggedIn" class="empty-state">',
+          '    <strong>登录后管理个人资料</strong>',
+          '    <span>昵称、性别与头像会保存到后端账号，换设备也能看到</span>',
+          '    <router-link :to="{ path: \'/login\', query: { redirect: \'/profile\' } }" class="btn btn-primary btn-sm">去登录</router-link>',
+          '  </div>',
+
+          '  <div v-else-if="loading" class="loading-state">加载中…</div>',
+
+          '  <div v-else-if="loadError" class="error-box">',
+          '    <span class="grow">{{ loadError }}</span>',
+          '    <button type="button" class="btn btn-ghost btn-sm" @click="loadProfile">重试</button>',
+          '  </div>',
+
+          '  <div v-else class="card">',
+          '    <div class="card-header"><h2 class="card-title">基本资料</h2></div>',
+          '    <div class="card-body">',
+
+          '      <div class="profile-head">',
+          '        <div class="profile-avatar">',
+          '          <img v-if="form.avatar" :src="avatarSrc(form.avatar)" alt="头像" @error="hideImg">',
+          '          <img v-else src="assets/default-avatar.jpg" alt="默认头像">',
+          '        </div>',
+          '        <div class="profile-avatar-meta">',
+          '          <label class="btn btn-ghost btn-sm" for="profile-avatar-file">选择头像</label>',
+          '          <button v-if="form.avatar" type="button" class="btn btn-ghost btn-sm" @click="clearAvatar">移除头像</button>',
+          '          <input id="profile-avatar-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" @change="onAvatarPick">',
+          '          <p class="field-hint">{{ avatarHint }}</p>',
+          '        </div>',
+          '      </div>',
+
+          '      <div class="form-group">',
+          '        <label class="form-label" for="profile-nickname">昵称</label>',
+          '        <input id="profile-nickname" v-model="form.nickname" class="form-input" type="text" maxlength="50" placeholder="请输入昵称">',
+          '        <p class="field-hint">最长 50 个字符；留空时展示用户名</p>',
+          '      </div>',
+
+          '      <div class="form-group">',
+          '        <label class="form-label" for="profile-gender">性别</label>',
+          '        <select id="profile-gender" v-model.number="form.gender" class="form-input">',
+          '          <option :value="0">保密</option>',
+          '          <option :value="1">男</option>',
+          '          <option :value="2">女</option>',
+          '        </select>',
+          '      </div>',
+
+          '      <div class="form-group">',
+          '        <label class="form-label">账号</label>',
+          '        <div class="profile-readonly"><span>{{ form.username || "—" }}</span><span>{{ form.email || "未绑定邮箱" }}</span></div>',
+          '        <p class="field-hint">用户名与邮箱是登录凭证，须走验证码链路修改，不能在这里直接改</p>',
+          '      </div>',
+
+          '      <div v-if="saveError" class="error-box"><span class="grow">{{ saveError }}</span></div>',
+
+'      <div class="profile-actions">',
+'        <button type="button" class="btn btn-primary" :disabled="saving" @click="save">{{ saving ? "保存中…" : "保存" }}</button>',
+'        <button type="button" class="btn btn-ghost" :disabled="saving" @click="reset">重置</button>',
+'      </div>',
+'    </div>',
+'',
+'    <teleport to="body">',
+'      <div v-if="showCrop" class="crop-modal-mask" @click.self="closeCrop">',
+'        <div class="crop-modal">',
+'          <div class="crop-modal-head"><h3>裁剪头像</h3><button type="button" class="crop-close" @click="closeCrop">×</button></div>',
+'          <p class="crop-tip">拖动方框选择方形区域，也可拖动下方滑块调整裁剪大小</p>',
+'          <div class="crop-stage" ref="cropStageRef">',
+'            <img ref="cropImgRef" :src="cropSrc" @load="onCropImgLoad" alt="裁剪预览">',
+'            <div class="crop-box" :style="`left:${crop.x}px;top:${crop.y}px;width:${crop.size}px;height:${crop.size}px`" @pointerdown="startCropDrag"></div>',
+'          </div>',
+'          <div class="crop-size-row"><label>裁剪大小</label><input type="range" min="30" max="100" v-model.number="cropSizePct" @input="onCropSizeChange"><span>{{ cropSizePct }}%</span></div>',
+'          <p v-if="cropError" class="error-box"><span class="grow">{{ cropError }}</span></p>',
+'          <div class="crop-modal-actions">',
+'            <button type="button" class="btn btn-ghost" @click="closeCrop">取消</button>',
+'            <button type="button" class="btn btn-primary" :disabled="cropLoading" @click="applyCrop">{{ cropLoading ? "处理中…" : "确定" }}</button>',
+'          </div>',
+'        </div>',
+'      </div>',
+'    </teleport>',
+'  </div>',
+'</div>',
+        ].join(''),
+        setup() {
+          const loading = ref(false);
+          const saving = ref(false);
+          const loadError = ref('');
+          const saveError = ref('');
+          const pendingFile = ref(null);
+          const avatarCleared = ref(false);
+          const avatarHint = ref(AVATAR_HINT_IDLE);
+          const form = reactive({ nickname: '', gender: 0, avatar: '', username: '', email: '' });
+
+          // —— 头像裁剪 ——
+          const showCrop = ref(false);
+          const cropSrc = ref('');
+          const cropSizePct = ref(90);
+          const cropError = ref('');
+          const cropLoading = ref(false);
+          const crop = reactive({ x: 0, y: 0, size: 0 });
+          const cropImgNatural = reactive({ w: 0, h: 0 });
+          const cropImgDisplay = reactive({ w: 0, h: 0 });
+          const cropImgRef = ref(null);
+          const cropStageRef = ref(null);
+          const lastPreviewUrl = ref('');
+
+          const subText = computed(function () {
+            if (!isLoggedIn.value) return '登录后可修改昵称、性别与头像';
+            return '修改后保存到后端账号，App 与 Web 共用同一份资料';
+          });
+
+          function resetDraftFrom(data) {
+            if (lastPreviewUrl.value) {
+              URL.revokeObjectURL(lastPreviewUrl.value);
+              lastPreviewUrl.value = '';
+            }
+            form.nickname = data.nickname || '';
+            form.gender = data.gender == null ? 0 : data.gender;
+            form.avatar = data.avatar || '';
+            form.username = data.username || '';
+            form.email = data.email || '';
+            pendingFile.value = null;
+            avatarCleared.value = false;
+            avatarHint.value = AVATAR_HINT_IDLE;
+          }
+
+          async function loadProfile() {
+            if (!isLoggedIn.value) return;
+            loading.value = true;
+            loadError.value = '';
+            try {
+              resetDraftFrom(await authApi.profile());
+            } catch (e) {
+              loadError.value = describeError(e, '个人资料加载失败');
+            } finally {
+              loading.value = false;
+            }
+          }
+
+          function onAvatarPick(event) {
+            const input = event.target;
+            const file = input.files && input.files[0];
+            input.value = '';
+            if (!file) return;
+            if (!/^image\//.test(file.type)) {
+              saveError.value = '请选择图片文件';
+              return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+              saveError.value = '图片大小不能超过 5MB';
+              return;
+            }
+            saveError.value = '';
+            cropSrc.value = URL.createObjectURL(file);
+            cropError.value = '';
+            showCrop.value = true;
+          }
+
+          function clearAvatar() {
+            if (lastPreviewUrl.value) {
+              URL.revokeObjectURL(lastPreviewUrl.value);
+              lastPreviewUrl.value = '';
+            }
+            pendingFile.value = null;
+            avatarCleared.value = true;
+            form.avatar = '';
+            avatarHint.value = '保存后恢复默认头像';
+          }
+
+          function closeCrop() {
+            if (cropSrc.value) URL.revokeObjectURL(cropSrc.value);
+            cropSrc.value = '';
+            showCrop.value = false;
+            cropError.value = '';
+          }
+
+          function onCropImgLoad(e) {
+            const img = e.target;
+            cropImgNatural.w = img.naturalWidth || 1;
+            cropImgNatural.h = img.naturalHeight || 1;
+            cropImgDisplay.w = img.offsetWidth || cropImgNatural.w;
+            cropImgDisplay.h = img.offsetHeight || cropImgNatural.h;
+            cropSizePct.value = 90;
+            onCropSizeChange();
+          }
+
+          function onCropSizeChange() {
+            const minSide = Math.min(cropImgDisplay.w, cropImgDisplay.h) || 1;
+            const size = Math.round(minSide * cropSizePct.value / 100);
+            crop.size = size;
+            crop.x = Math.max(0, Math.min(cropImgDisplay.w - size, crop.x));
+            crop.y = Math.max(0, Math.min(cropImgDisplay.h - size, crop.y));
+          }
+
+          function startCropDrag(e) {
+            e.preventDefault();
+            const startX = e.clientX, startY = e.clientY;
+            const ox = crop.x, oy = crop.y;
+            function move(ev) {
+              const dx = ev.clientX - startX, dy = ev.clientY - startY;
+              const maxX = cropImgDisplay.w - crop.size;
+              const maxY = cropImgDisplay.h - crop.size;
+              crop.x = Math.max(0, Math.min(maxX, ox + dx));
+              crop.y = Math.max(0, Math.min(maxY, oy + dy));
+            }
+            function up() {
+              window.removeEventListener('pointermove', move);
+              window.removeEventListener('pointerup', up);
+            }
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', up);
+          }
+
+          function applyCrop() {
+            const img = cropImgRef.value;
+            if (!img) return;
+            if (!cropImgDisplay.w || !cropImgDisplay.h) {
+              cropError.value = '图片尚未加载完成，请稍候';
+              return;
+            }
+            const scale = cropImgNatural.w / cropImgDisplay.w;
+            const sx = crop.x * scale, sy = crop.y * scale, s = crop.size * scale;
+            const OUT = 512;
+            const canvas = document.createElement('canvas');
+            canvas.width = OUT; canvas.height = OUT;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, OUT, OUT);
+            try {
+              ctx.drawImage(img, sx, sy, s, s, 0, 0, OUT, OUT);
+            } catch (err) {
+              cropError.value = '裁剪失败：无法读取图片';
+              return;
+            }
+            cropLoading.value = true;
+            canvas.toBlob(function (blob) {
+              cropLoading.value = false;
+              if (!blob) { cropError.value = '裁剪失败'; return; }
+              const file = new File([blob], 'avatar.png', { type: 'image/png' });
+              const url = URL.createObjectURL(blob);
+              if (lastPreviewUrl.value) URL.revokeObjectURL(lastPreviewUrl.value);
+              lastPreviewUrl.value = url;
+              pendingFile.value = file;
+              avatarCleared.value = false;
+              form.avatar = url;
+              avatarHint.value = '已裁剪并选好头像，点「保存」后上传';
+              closeCrop();
+            }, 'image/png');
+          }
+
+          async function save() {
+            saveError.value = '';
+            const nickname = (form.nickname || '').trim();
+            if (nickname.length > 50) {
+              saveError.value = '昵称最长 50 个字符';
+              return;
+            }
+            saving.value = true;
+            try {
+              // avatar 三态：null = 不改；'' = 恢复默认；/avatars/** = 新上传
+              let avatar = null;
+              if (pendingFile.value) {
+                const uploaded = await authApi.uploadAvatar(pendingFile.value);
+                avatar = uploaded && uploaded.avatar ? uploaded.avatar : null;
+              } else if (avatarCleared.value) {
+                avatar = '';
+              }
+              const updated = await authApi.updateProfile({
+                nickname: nickname,
+                gender: form.gender,
+                avatar: avatar,
+              });
+              resetDraftFrom(updated);
+              // 顶栏的昵称/头像读的是 auth.user，这里同步一份，免得要刷新页面才更新
+              setAuth(Object.assign({}, auth.user, {
+                nickname: updated.nickname,
+                avatar: updated.avatar,
+                gender: updated.gender,
+              }));
+              showToast('资料已保存', 'success');
+            } catch (e) {
+              saveError.value = describeError(e, '保存失败');
+            } finally {
+              saving.value = false;
+            }
+          }
+
+          function reset() {
+            saveError.value = '';
+            loadProfile();
+          }
+
+          function avatarSrc(path) {
+            if (!path) return '';
+            if (/^(https?:|blob:|data:)/i.test(path)) return path;
+            return coverUrl(path);
+          }
+
+          onMounted(loadProfile);
+
+          return {
+            isLoggedIn: isLoggedIn, subText: subText,
+            loading: loading, saving: saving, loadError: loadError, saveError: saveError,
+            form: form, avatarHint: avatarHint,
+            loadProfile: loadProfile, onAvatarPick: onAvatarPick, clearAvatar: clearAvatar,
+            save: save, reset: reset, avatarSrc: avatarSrc, hideImg: hideImg,
+            showCrop: showCrop, cropSrc: cropSrc, crop: crop, cropSizePct: cropSizePct,
+            cropError: cropError, cropLoading: cropLoading, cropImgRef: cropImgRef, cropStageRef: cropStageRef,
+            onCropImgLoad: onCropImgLoad, onCropSizeChange: onCropSizeChange,
+            startCropDrag: startCropDrag, applyCrop: applyCrop, closeCrop: closeCrop,
+          };
+        },
+      };
+
+      /* ---------- 书籍详情 ---------- */
+      const CHAPTER_COLLAPSED = 12;
+      const CHAPTER_PAGE_SIZE = 60;
+
+      const BookDetail = {
+        template: [
+          '<div class="detail-page">',
+          '  <div v-if="loading" class="loading-state" style="padding: 80px 0;">加载中…</div>',
+          '  <div v-else-if="error" class="error-box" style="margin: 40px 0;">',
+          '    <span class="grow">{{ error }}</span>',
+          '    <button class="btn btn-ghost btn-sm" @click="load">重试</button>',
+          '  </div>',
+          '  <template v-else-if="book">',
+          '  <button type="button" class="btn btn-ghost btn-sm" style="margin-bottom:16px;" @click="goBack">← 返回</button>',
+          '  <div class="detail-hero">',
+          '    <div class="detail-cover" :style="{ background: gradientFor(book.title) }">',
+          '      <img v-if="book.cover" class="cover-img" :src="coverUrl(book.cover)" :alt="book.title" @error="hideImg">',
+          '      <span class="cover-layer">{{ book.title[0] }}</span>',
+          '    </div>',
+          '    <div class="detail-info">',
+          '      <h1>{{ book.title }}</h1>',
+          '      <div class="detail-meta">',
+          '        <span>{{ book.author }}</span>',
+          '        <span>{{ book.categoryLabel }}</span>',
+          '        <span>{{ book.words }}</span>',
+          '        <span>{{ book.chapterCount }} 章</span>',
+          '        <span>{{ book.viewCount }} 阅读</span>',
+          '        <span>{{ book.likeCount }} 点赞</span>',
+          '      </div>',
+          '      <div class="detail-tags">',
+          '        <span class="tag warm">{{ book.statusText }}</span>',
+          '        <span class="tag">{{ book.categoryLabel }}</span>',
+          '        <span class="tag">更新于 {{ fromNow(book.updatedAt) }}</span>',
+          '      </div>',
+          '      <p class="detail-desc">{{ book.desc }}</p>',
+          '      <div class="detail-actions">',
+          '        <router-link :to="readLink" class="btn btn-primary">{{ hasProgress ? "继续阅读" : "立即阅读" }}</router-link>',
+          '        <button v-if="isInShelf(book.id)" type="button" class="btn btn-soft" @click="removeFromShelf">移出书架</button>',
+          '        <button v-else type="button" class="btn btn-soft" @click="addToShelf">加入书架</button>',
+          '        <button type="button" class="btn btn-ghost" @click="share">分享</button>',
+          '      </div>',
+          '    </div>',
+          '  </div>',
+
+          '  <div class="book-detail-layout">',
+          '    <div>',
+          '      <div class="card chapter-card" ref="chapterCardRef">',
+          '        <div class="card-header">',
+          '          <h3 class="card-title">章节目录</h3>',
+          '          <div class="chapter-header-actions">',
+          '            <span class="card-more" style="cursor: default;">共 {{ chapterList.length }} 章</span>',
+          '            <button type="button" class="chapter-sort-btn" @click="toggleChapterOrder">{{ chapterDesc ? "倒序" : "正序" }}</button>',
+          '          </div>',
+          '        </div>',
+          '        <div class="card-body">',
+          '          <div v-if="chaptersLoading" class="loading-state">目录加载中…</div>',
+          '          <div v-else-if="!chapterList.length" class="empty-state sm"><span>这本书还没有章节</span></div>',
+          '          <template v-else>',
+          '            <div class="chapter-list">',
+          '              <button type="button" v-for="chapter in visibleChapters" :key="chapter.id" class="chapter-item" @click="openChapter(chapter)">',
+          '                <span>{{ chapter.title }}</span>',
+          '              </button>',
+          '            </div>',
+          '            <div v-if="!expanded && chapterList.length > CHAPTER_COLLAPSED" class="chapter-expand">',
+          '              <button type="button" class="btn btn-soft btn-sm" @click="expand">展开全部 {{ chapterList.length }} 章</button>',
+          '            </div>',
+          '            <div v-else-if="expanded && chapterPageCount > 1" class="pager">',
+          '              <button type="button" :disabled="chapterPage === 0" @click="chapterPage = chapterPage - 1">上一页</button>',
+          '              <span>第 {{ chapterPage + 1 }} / {{ chapterPageCount }} 页</span>',
+          '              <button type="button" :disabled="chapterPage >= chapterPageCount - 1" @click="chapterPage = chapterPage + 1">下一页</button>',
+          '            </div>',
+          '          </template>',
+          '        </div>',
+          '      </div>',
+
+          '      <div class="card" style="margin-top: 16px;">',
+          '        <div class="card-header"><h3 class="card-title">书友评论</h3></div>',
+          '        <div class="card-body">',
+          '          <div class="empty-state sm">',
+          '            <span>评论功能尚未开放（后端暂无对应接口）</span>',
+          '          </div>',
+          '        </div>',
+          '      </div>',
+          '    </div>',
+
+          '    <aside>',
+          '      <div class="card">',
+          '        <div class="card-header"><h3 class="card-title">同类推荐</h3></div>',
+          '        <div class="card-body">',
+          '          <div v-if="!relatedBooks.length" class="empty-state sm"><span>暂无同类书籍</span></div>',
+          '          <div v-else class="related-grid">',
+          '            <router-link v-for="related in relatedBooks" :key="related.id" :to="\'/book/\' + related.id" class="related-card">',
+          '              <div class="related-cover" :style="{ background: gradientFor(related.title) }">',
+          '                <img v-if="related.cover" class="cover-img" :src="coverUrl(related.cover)" :alt="related.title" @error="hideImg">',
+          '                <span class="cover-layer">{{ related.title[0] }}</span>',
+          '              </div>',
+          '              <h4>{{ related.title }}</h4>',
+          '              <p>{{ related.author }}</p>',
+          '            </router-link>',
+          '          </div>',
+          '        </div>',
+          '      </div>',
+          '    </aside>',
+          '  </div>',
+          '  </template>',
+          '</div>',
+        ].join(''),
+        setup() {
+          const route = useRoute();
+          const router = useRouter();
+
+          const book = ref(null);
+          const chapterList = ref([]);
+          const loading = ref(true);
+          const chaptersLoading = ref(false);
+          const error = ref('');
+          const expanded = ref(false);
+          const chapterPage = ref(0);
+          const chapterDesc = ref(false);
+          const chapterCardRef = ref(null);
+          // 这本书的阅读进度（0 基章节号）；-1 表示还没有阅读记录。
+          // 详情页要靠它决定按钮是「继续阅读」还是「立即阅读」，以及点进阅读器后落在哪一章。
+          const readChapterIndex = ref(-1);
+
+          const hasProgress = computed(function () { return readChapterIndex.value >= 0; });
+
+          const readLink = computed(function () {
+            const id = book.value ? book.value.id : route.params.id;
+            const chapterNo = hasProgress.value ? readChapterIndex.value + 1 : 1;
+            return '/read/' + id + '/' + Math.max(1, chapterNo);
+          });
+
+          const chapterPageCount = computed(function () {
+            return Math.max(1, Math.ceil(chapterList.value.length / CHAPTER_PAGE_SIZE));
+          });
+
+          const visibleChapters = computed(function () {
+            if (!expanded.value) return chapterList.value.slice(0, CHAPTER_COLLAPSED);
+            const ordered = chapterDesc.value ? chapterList.value.slice().reverse() : chapterList.value;
+            return ordered.slice(chapterPage.value * CHAPTER_PAGE_SIZE, (chapterPage.value + 1) * CHAPTER_PAGE_SIZE);
+          });
+
+          const relatedBooks = computed(function () {
+            if (!book.value) return [];
+            return store.books
+              .filter(function (b) { return b.id !== book.value.id && b.category === book.value.category; })
+              .slice(0, 4);
+          });
+
+          function expand() {
+            expanded.value = true;
+            chapterPage.value = 0;
+          }
+
+          function scrollChapterTop() {
+            nextTick(function () {
+              if (chapterCardRef.value) chapterCardRef.value.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            });
+          }
+
+          function toggleChapterOrder() {
+            chapterDesc.value = !chapterDesc.value;
+            expanded.value = true;
+            chapterPage.value = 0;
+            scrollChapterTop();
+          }
+
+          watch(chapterPage, scrollChapterTop);
+
+          function openChapter(chapter) {
+            router.push('/read/' + book.value.id + '/' + (chapter.index + 1));
+          }
+
+          // 返回：优先回到进入详情页之前的页面（书架/书城/首页等），无历史则回首页
+          function goBack() {
+            if (window.history.length > 1) router.back();
+            else router.push('/');
+          }
+
+          async function load() {
+            const id = Number(route.params.id);
+            loading.value = true;
+            error.value = '';
+            book.value = null;
+            chapterList.value = [];
+            expanded.value = false;
+            chapterPage.value = 0;
+            readChapterIndex.value = -1;
+            try {
+              const detail = await bookApi.bookDetail(id);
+              if (!detail) throw new Error('书籍不存在');
+              book.value = detail;
+              loading.value = false;
+              // 阅读量埋点：打开详情页 +1（书城各子页的「热门」按它排序），失败静默
+              bookApi.trackView(id);
+              loadReadingProgress(id);
+              chaptersLoading.value = true;
+              try {
+                chapterList.value = await bookApi.chapters(id);
+              } catch (e) {
+                chapterList.value = [];
+                showToast(describeError(e, '目录加载失败'), 'error');
+              } finally {
+                chaptersLoading.value = false;
+              }
+            } catch (e) {
+              error.value = describeError(e, '书籍详情加载失败');
+              loading.value = false;
+            }
+          }
+
+          // 查这本书读到第几章。以前详情页的按钮是写死的「立即阅读 → 第 1 章」，
+          // 读过书再进来也照样显示「立即阅读」，点了还退回第一章。
+          async function loadReadingProgress(id) {
+            if (!isLoggedIn.value || !currentUserId.value) { readChapterIndex.value = -1; return; }
+            let idx = -1;
+            try {
+              const p = await bookApi.progress(currentUserId.value, id);
+              if (p && typeof p.chapterIndex === 'number' && p.chapterIndex >= 0) idx = p.chapterIndex;
+            } catch (e) { /* 拿不到进度就按未读处理 */ }
+            // 刚从阅读器返回时后端进度可能还没落库完，用 store 里已缓存的进度兜底，
+            // 取更靠后的那个（进度不回退）。
+            [store.recent, store.shelf].forEach(function (list) {
+              (list || []).forEach(function (item) {
+                const itemBookId = item.bookId !== undefined ? item.bookId : item.id;
+                if (Number(itemBookId) === Number(id) && typeof item.chapterIndex === 'number' && item.chapterIndex > idx) {
+                  idx = item.chapterIndex;
+                }
+              });
+            });
+            readChapterIndex.value = idx;
+          }
+
+          async function addToShelf() {
+            if (!isLoggedIn.value) {
+              router.push({ path: '/login', query: { redirect: route.fullPath } });
+              return;
+            }
+            try {
+              await bookApi.addToShelf(book.value.id);
+              showToast('《' + book.value.title + '》已加入书架', 'success');
+              await loadShelf();
+            } catch (e) { showToast(describeError(e, '加入书架失败'), 'error'); }
+          }
+
+          async function removeFromShelf() {
+            try {
+              await bookApi.removeFromShelf(book.value.id);
+              showToast('已移出书架');
+              await loadShelf();
+            } catch (e) { showToast(describeError(e, '移出失败'), 'error'); }
+          }
+
+          async function share() {
+            const url = window.location.href;
+            try {
+              if (navigator.share) { await navigator.share({ title: book.value.title, url: url }); return; }
+              await navigator.clipboard.writeText(url);
+              showToast('链接已复制', 'success');
+            } catch (e) {
+              showToast('链接：' + url);
+            }
+          }
+
+          onMounted(function () {
+            load();
+            if (!store.booksLoaded) loadBooks().catch(function () {});
+          });
+          watch(function () { return route.params.id; }, load);
+
+          return {
+            book: book, chapterList: chapterList, visibleChapters: visibleChapters,
+            loading: loading, chaptersLoading: chaptersLoading, error: error,
+            expanded: expanded, expand: expand, chapterPage: chapterPage, chapterPageCount: chapterPageCount,
+            chapterDesc: chapterDesc, chapterCardRef: chapterCardRef, toggleChapterOrder: toggleChapterOrder,
+            CHAPTER_COLLAPSED: CHAPTER_COLLAPSED,
+            relatedBooks: relatedBooks, openChapter: openChapter, load: load,
+            hasProgress: hasProgress, readLink: readLink,
+            goBack: goBack,
+            addToShelf: addToShelf, removeFromShelf: removeFromShelf, share: share,
+            isInShelf: isInShelf, store: store,
+            gradientFor: gradientFor, coverUrl: coverUrl, hideImg: hideImg, fromNow: fromNow,
+          };
+        },
+      };
+
+      /* ---------- 阅读器 ---------- */
+      const DRAWER_PAGE_SIZE = 50;
+
+      // web 端不分页，与 App 共用的阅读进度里「页」这一位没有意义。
+      // 约定：web 保存的进度页数据 = 当前章节首页。
+      // App 端的 scrollPosition 是章节内页码（1 基，reader.html 里 currentPage = scrollPosition - 1），
+      // 所以固定上报 1，App 读到时正好落在该章第一页 —— 即「App 同步 web 记录只需对应章节」。
+      const PROGRESS_CHAPTER_FIRST_PAGE = 1;
+
+      const Reader = {
+        template: [
+          '<div class="reader-page" :class="\'theme-\' + reader.theme">',
+          '  <div class="reader-toolbar">',
+          '    <div class="reader-toolbar-left">',
+          '      <button type="button" class="reader-btn" title="返回" aria-label="返回" @click="goBack">',
+          '        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>',
+          '      </button>',
+          '      <button type="button" class="reader-btn" title="目录" aria-label="打开目录" @click="showDrawer = true">',
+          '        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>',
+          '      </button>',
+          '    </div>',
+          '    <div class="reader-title">{{ book ? book.title : "加载中" }} · {{ currentChapter.title }}</div>',
+          '    <div class="reader-toolbar-right">',
+          '      <button type="button" class="reader-btn" title="设置" aria-label="阅读设置" @click="showSettings = !showSettings">',
+          '        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>',
+          '      </button>',
+          '    </div>',
+          '  </div>',
+
+          '  <div v-if="showResumeHint" class="reader-hint">',
+          '    <span>上次读到第 {{ lastProgress.chapterIndex + 1 }} 章{{ lastProgress.chapterTitle ? "（" + lastProgress.chapterTitle + "）" : "" }}</span>',
+          '    <button type="button" class="btn btn-soft btn-sm" @click="resume">跳转過去</button>',
+          '  </div>',
+
+          '  <div class="reader-content">',
+          '    <div v-if="loading" class="loading-state" style="color: var(--reader-muted);">章节加载中…</div>',
+          '    <div v-else-if="error" class="error-box" style="margin: 40px auto; max-width: 640px;">',
+          '      <span class="grow">{{ error }}</span>',
+          '      <button class="btn btn-ghost btn-sm" @click="loadChapter">重试</button>',
+          '    </div>',
+          '    <template v-else>',
+          '      <h2>{{ currentChapter.title }}</h2>',
+          '      <p v-for="(paragraph, idx) in paragraphs" :key="idx">{{ paragraph }}</p>',
+          '      <p v-if="!paragraphs.length" style="color: var(--reader-muted); text-indent: 0;">本章暂无正文内容</p>',
+          '    </template>',
+          '  </div>',
+
+          '  <div class="reader-nav">',
+          '    <button type="button" class="reader-nav-btn" :disabled="chapterIndex <= 0 || loading" @click="goChapter(chapterIndex - 1)">',
+          '      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>',
+          '      上一章',
+          '    </button>',
+          '    <span class="reader-progress">{{ chapterList.length ? (chapterIndex + 1) + " / " + chapterList.length + " 章" : "—" }}</span>',
+          '    <button type="button" class="reader-nav-btn" :disabled="chapterIndex >= chapterList.length - 1 || loading" @click="goChapter(chapterIndex + 1)">',
+          '      下一章',
+          '      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"></path><path d="M12 5l7 7-7 7"></path></svg>',
+          '    </button>',
+          '  </div>',
+
+          '  <div class="reader-drawer-overlay" :class="{ open: showDrawer }" @click="showDrawer = false"></div>',
+          '  <div class="reader-drawer" :class="{ open: showDrawer }">',
+          '    <div class="reader-drawer-header">',
+          '      <div class="reader-drawer-header-row">',
+          '        <div>',
+          '          <h3>目录</h3>',
+          '          <p>{{ book ? book.title : "" }} · 共 {{ chapterList.length }} 章</p>',
+          '        </div>',
+          '        <button type="button" class="drawer-sort-btn" @click="toggleDrawerOrder">{{ drawerDesc ? "倒序" : "正序" }}</button>',
+          '      </div>',
+          '    </div>',
+          '    <div class="reader-drawer-list" ref="drawerListRef">',
+          '      <button type="button" v-for="chapter in drawerChapters" :key="chapter.id" class="reader-drawer-item" :class="{ active: chapter.index === chapterIndex }" @click="goChapter(chapter.index); showDrawer = false">',
+          '        <span>{{ chapter.title }}</span>',
+          '      </button>',
+          '    </div>',
+          '    <div v-if="drawerPageCount > 1" class="reader-drawer-pager pager" style="padding: 8px 0;">',
+          '      <button type="button" :disabled="drawerPage === 0" @click="drawerPage = drawerPage - 1">上一页</button>',
+          '      <span>{{ drawerPage + 1 }} / {{ drawerPageCount }}</span>',
+          '      <button type="button" :disabled="drawerPage >= drawerPageCount - 1" @click="drawerPage = drawerPage + 1">下一页</button>',
+          '    </div>',
+          '  </div>',
+
+          '  <div class="reader-settings" :class="{ open: showSettings }">',
+          '    <div class="reader-settings-row">',
+          '      <span class="reader-settings-label">字号</span>',
+          '      <div class="reader-size-controls">',
+          '        <button type="button" class="reader-size-btn" aria-label="减小字号" @click="setFontSize(reader.fontSize - 2)">A-</button>',
+          '        <span style="font-weight:700;width:28px;text-align:center;color:var(--reader-ink);">{{ reader.fontSize }}</span>',
+          '        <button type="button" class="reader-size-btn" aria-label="增大字号" @click="setFontSize(reader.fontSize + 2)">A+</button>',
+          '      </div>',
+          '    </div>',
+          '    <div class="reader-settings-row">',
+          '      <span class="reader-settings-label">主题</span>',
+          '      <div class="reader-theme-options">',
+          '        <button type="button" class="reader-theme-option" :class="{ active: reader.theme === \'light\' }" style="background:#ffffff;border-color:#e2e2e2;" aria-label="浅色主题" @click="setTheme(\'light\')"></button>',
+          '        <button type="button" class="reader-theme-option" :class="{ active: reader.theme === \'sepia\' }" style="background:#f4ecd8;border-color:#d4c9a8;" aria-label="护眼主题" @click="setTheme(\'sepia\')"></button>',
+          '        <button type="button" class="reader-theme-option" :class="{ active: reader.theme === \'dark\' }" style="background:#1a1a1a;border-color:#444;" aria-label="深色主题" @click="setTheme(\'dark\')"></button>',
+          '      </div>',
+          '    </div>',
+          '    <p class="field-hint" style="margin-top: 14px;">字号与主题会保存在本地，阅读进度会同步到账号</p>',
+          '  </div>',
+          '</div>',
+        ].join(''),
+        setup() {
+          const route = useRoute();
+          const router = useRouter();
+
+          const bookId = computed(function () { return Number(route.params.bookId); });
+          const chapterList = ref([]);
+          const book = ref(null);
+          const paragraphs = ref([]);
+          const loading = ref(true);
+          const error = ref('');
+          const showDrawer = ref(false);
+          const showSettings = ref(false);
+          const drawerPage = ref(0);
+          const drawerDesc = ref(false);
+          const drawerListRef = ref(null);
+          const lastProgress = ref(null);
+          let progressTimer = null;
+
+          // 阅读位置快照。
+          // 离开阅读器时 route.params.chapterId 已经失效（undefined），由它算出的
+          // chapterIndex 是 NaN，JSON 序列化成 null 回传后端，会把真实进度覆盖掉
+          // （后端 updateProgress 是无条件 SET，null 会直接落库）。
+          // 所以所有保存都读这份快照，快照只在路由确实停在某个章节时才更新。
+          // web 不分页，快照只记章节：页数据固定为该章首页（见 PROGRESS_CHAPTER_FIRST_PAGE）。
+          const savedPosition = { chapterIndex: -1 };
+
+          // 本次进入阅读器后是否真的读过（换过章 / 滚动过）。
+          // 与 App 共用同一条进度记录，打开书看一眼就退出不应该把另一端刚写入的位置顶掉。
+          let hasRead = false;
+
+          function syncPosition(chapterIdParam) {
+            const raw = Number(chapterIdParam !== undefined ? chapterIdParam : route.params.chapterId) - 1;
+            if (!Number.isFinite(raw) || raw < 0) return; // 已离开阅读器路由：保留上一次快照
+            const idx = Math.min(raw, Math.max(0, chapterList.value.length - 1));
+            if (savedPosition.chapterIndex >= 0 && idx !== savedPosition.chapterIndex) hasRead = true;
+            savedPosition.chapterIndex = idx;
+          }
+
+          // 退出阅读器：回到进入阅读器之前的页面（书架/书城/详情等），无历史则回该书详情页
+          function goBack() {
+            if (window.history.length > 1) router.back();
+            else router.push('/book/' + bookId.value);
+          }
+
+          const chapterIndex = computed(function () {
+            const raw = Number(route.params.chapterId) - 1;
+            if (!chapterList.value.length) return Math.max(0, raw);
+            return Math.max(0, Math.min(raw, chapterList.value.length - 1));
+          });
+
+          const currentChapter = computed(function () {
+            return chapterList.value[chapterIndex.value] || { id: 0, title: '加载中…', sortOrder: chapterIndex.value + 1 };
+          });
+
+          const drawerPageCount = computed(function () {
+            return Math.max(1, Math.ceil(chapterList.value.length / DRAWER_PAGE_SIZE));
+          });
+
+          const drawerChapters = computed(function () {
+            const ordered = drawerDesc.value ? chapterList.value.slice().reverse() : chapterList.value;
+            return ordered.slice(drawerPage.value * DRAWER_PAGE_SIZE, (drawerPage.value + 1) * DRAWER_PAGE_SIZE);
+          });
+
+          function scrollDrawerTop() {
+            nextTick(function () {
+              if (drawerListRef.value) drawerListRef.value.scrollTop = 0;
+            });
+          }
+
+          function toggleDrawerOrder() {
+            drawerDesc.value = !drawerDesc.value;
+            drawerPage.value = 0;
+            scrollDrawerTop();
+          }
+
+          watch(drawerPage, scrollDrawerTop);
+
+          const showResumeHint = computed(function () {
+            if (!lastProgress.value) return false;
+            return lastProgress.value.chapterIndex > 0 && chapterIndex.value === 0;
+          });
+
+          function persistSettings() {
+            localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ fontSize: store.reader.fontSize, theme: store.reader.theme }));
+          }
+
+          function setFontSize(size) {
+            store.reader.fontSize = Math.min(26, Math.max(14, size));
+            persistSettings();
+            queueSave();
+          }
+
+          function setTheme(theme) {
+            store.reader.theme = theme;
+            persistSettings();
+            queueSave();
+          }
+
+          function queueSave() {
+            if (!isLoggedIn.value || !book.value) return;
+            syncPosition();
+            clearTimeout(progressTimer);
+            progressTimer = setTimeout(function () { saveProgress(); }, 800);
+          }
+
+          async function saveProgress() {
+            if (!isLoggedIn.value || !currentUserId.value || !book.value) return;
+            syncPosition();
+            // 没有任何阅读动作就退出：不写记录，避免把 App 端刚写入的位置顶掉
+            if (!hasRead || savedPosition.chapterIndex < 0) return;
+            const chapter = chapterList.value[savedPosition.chapterIndex];
+            try {
+              await bookApi.saveProgress({
+                userId: currentUserId.value,
+                bookId: book.value.id,
+                // 带上章节 id，否则后端 updateProgress 会把该列覆盖成 null，
+                // 后台「用户阅读数据」就看不到「读到哪一章」。
+                chapterId: chapter ? chapter.id : null,
+                chapterIndex: savedPosition.chapterIndex,
+                // web 不分页：固定上报「该章第一页」，不传滚动像素偏移
+                scrollPosition: PROGRESS_CHAPTER_FIRST_PAGE,
+                // 字号/夜间/背景色/文本锚点刻意不上报：web 的阅读偏好只存在本地
+                // (READER_SETTINGS_KEY)，后端进度记录是两端共用的，
+                // 上报这些字段会把 App 端存的偏好顶掉。
+              });
+              loadRecent();
+              // 进度变了，书架列表里的进度映射就过期了。标回「未加载」，
+              // 下次进首页/书架页会重新拉一次，否则「最近在追 / 在读 N 本」
+              // 还停留在旧数据上（新读的书不会出现）。
+              store.shelfLoaded = false;
+            } catch (e) { /* 进度保存失败不打断阅读 */ }
+          }
+
+          async function loadChapter() {
+            const target = chapterList.value[chapterIndex.value];
+            if (!target || !target.id) {
+              paragraphs.value = [];
+              return;
+            }
+            loading.value = true;
+            error.value = '';
+            try {
+              const chapter = await bookApi.chapter(target.id);
+              paragraphs.value = paragraphsFrom(chapter && chapter.content, target.title);
+            } catch (e) {
+              paragraphs.value = [];
+              error.value = describeError(e, '章节正文加载失败');
+            } finally {
+              loading.value = false;
+            }
+          }
+
+          async function loadAll() {
+            loading.value = true;
+            error.value = '';
+            showDrawer.value = false;
+            try {
+              const id = bookId.value;
+              const detail = await bookApi.bookDetail(id);
+              if (!detail) throw new Error('书籍不存在');
+              book.value = detail;
+              chapterList.value = await bookApi.chapters(id);
+              // 位置快照基线对齐到入口章节（章节列表已就位，clamp 才准确）。
+              // 本次「打开书」不算读过：之后只有真的换章 / 滚动过才会写记录，
+              // 免得打开看一眼就把另一端刚写入的位置顶掉。
+              syncPosition();
+              hasRead = false;
+              loading.value = false;
+
+              // 先取服务端进度再决定读哪一章：同一本书只有一条记录（last-write-wins），
+              // 打开阅读器直接续读到上次退出的位置 —— 与 App「打开书采纳服务端位置」一致。
+              // 只在 loadAll 里做这一次：之后用户在目录里点的章节不会再被拽回来。
+              if (isLoggedIn.value && currentUserId.value) {
+                try {
+                  lastProgress.value = (await bookApi.progress(currentUserId.value, id)) || null;
+                } catch (e) { lastProgress.value = null; }
+              }
+              const resumeIndex = lastProgress.value && typeof lastProgress.value.chapterIndex === 'number'
+                ? lastProgress.value.chapterIndex : -1;
+              const entryIndex = savedPosition.chapterIndex;
+              if (resumeIndex >= 0 && resumeIndex < chapterList.value.length && resumeIndex !== entryIndex) {
+                // 先把快照基线挪到续读章节，再切路由：这样路由监听里的 queueSave
+                // 不会把「自动定位」误判成用户换章（hasRead 保持 false，不写记录）。
+                savedPosition.chapterIndex = resumeIndex;
+                router.replace('/read/' + id + '/' + (resumeIndex + 1));
+                return;
+              }
+              await loadChapter();
+            } catch (e) {
+              error.value = describeError(e, '书籍加载失败');
+              chapterList.value = [];
+              paragraphs.value = [];
+              loading.value = false;
+            }
+          }
+
+          function goChapter(idx) {
+            if (idx < 0 || idx >= chapterList.value.length) return;
+            // 目录换章用 replace：不往历史栈里追加，返回键才回得去「进入阅读前的页面」
+            // 而非逐章回退。路由参数变化仍会触发 watch → 重新 loadChapter。
+            router.replace('/read/' + bookId.value + '/' + (idx + 1));
+          }
+
+          function resume() {
+            if (!lastProgress.value) return;
+            goChapter(lastProgress.value.chapterIndex);
+          }
+
+          // 用户确实读过才写记录：换章、滚动、点击（翻页/工具条）、滚轮、键盘。
+          // 只打开书看一眼就退出不写，免得把另一端刚写入的位置顶掉
+          // （同一本书只保留最后阅读退出时的那一条）。
+          function markRead() {
+            hasRead = true;
+            queueSave();
+          }
+          function onScroll() { if (window.scrollY > 0) markRead(); }
+
+          // 直接关标签页 / 切到后台不走路由守卫，用 pagehide + visibilitychange 兜住
+          function onHide() {
+            clearTimeout(progressTimer);
+            saveProgress();
+          }
+          function onVisibilityChange() {
+            if (document.visibilityState === 'hidden') onHide();
+          }
+
+          onMounted(function () {
+            loadAll();
+            window.addEventListener('scroll', onScroll, { passive: true });
+            window.addEventListener('wheel', markRead, { passive: true });
+            window.addEventListener('pointerdown', markRead, { passive: true });
+            window.addEventListener('keydown', markRead);
+            window.addEventListener('pagehide', onHide);
+            document.addEventListener('visibilitychange', onVisibilityChange);
+          });
+          watch(function () { return route.params.chapterId; }, function () {
+            window.scrollTo(0, 0);
+            loadChapter();
+            queueSave();
+          });
+          watch(function () { return route.params.bookId; }, loadAll);
+          watch(showDrawer, function (open) {
+            if (open) drawerPage.value = Math.floor(chapterIndex.value / DRAWER_PAGE_SIZE);
+          });
+          watch(function () { return store.reader.theme; }, function (theme) {
+            const dark = theme === 'dark';
+            document.body.style.background = dark ? '#1a1a1a' : '';
+          });
+          // 离开阅读器前保存：此时路由还没切换，from.params 里是真实的章节号，
+          // 用它刷新快照再保存，避免拿卸载后的失效参数去算位置。
+          onBeforeRouteLeave(function (to, from) {
+            syncPosition(from.params.chapterId);
+            clearTimeout(progressTimer);
+            saveProgress();
+          });
+          onUnmounted(function () {
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('wheel', markRead);
+            window.removeEventListener('pointerdown', markRead);
+            window.removeEventListener('keydown', markRead);
+            window.removeEventListener('pagehide', onHide);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            clearTimeout(progressTimer);
+          });
+
+          return {
+            store: store, reader: store.reader,
+            bookId: bookId, book: book, chapterList: chapterList, chapterIndex: chapterIndex,
+            currentChapter: currentChapter, paragraphs: paragraphs, loading: loading, error: error,
+            showDrawer: showDrawer, showSettings: showSettings, drawerPage: drawerPage,
+            drawerDesc: drawerDesc, drawerListRef: drawerListRef, toggleDrawerOrder: toggleDrawerOrder,
+            drawerPageCount: drawerPageCount, drawerChapters: drawerChapters,
+            showResumeHint: showResumeHint, lastProgress: lastProgress,
+            setFontSize: setFontSize, setTheme: setTheme, goChapter: goChapter,
+            goBack: goBack,
+            resume: resume, loadChapter: loadChapter,
+          };
+        },
+      };
+
+      /* ---------- 路由 ---------- */
+      const App = {
+        template: [
+          '<header class="header">',
+          '  <div class="header-inner">',
+          '    <router-link to="/" class="brand" aria-label="回到首页"><img class="brand-mark" src="assets/brand-icon.png" alt="书阁阅读">书阁阅读</router-link>',
+          '    <form class="search-box" @submit.prevent="submitSearch">',
+          '      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">',
+          '        <circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path>',
+          '      </svg>',
+          '      <input v-model="keyword" type="search" placeholder="搜索书名、作者" aria-label="搜索书名或作者">',
+          '    </form>',
+          '    <nav class="nav">',
+          '      <router-link v-for="item in navItems" :key="item.path" :to="item.path" class="nav-link" :class="{ active: isActive(item.path) }">{{ item.label }}</router-link>',
+          '    </nav>',
+          '    <div class="header-actions">',
+          '      <button type="button" class="icon-btn" title="站内消息" aria-label="站内消息" @click="openMessages">',
+          '        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>',
+          '      </button>',
+          '      <router-link v-if="!isLoggedIn" :to="{ path: \'/login\', query: { redirect: route.fullPath } }" class="btn btn-primary">登录</router-link>',
+          '      <div v-else class="user-menu">',
+          '        <button type="button" class="icon-btn" :title="displayName" aria-label="账号菜单" @click="menuOpen = !menuOpen" style="font-weight:800;font-size:14px;overflow:hidden;position:relative;display:grid;place-items:center;">',
+          '          <span>{{ displayName[0] }}</span>',
+          '          <img v-if="!avatar" src="assets/default-avatar.jpg" alt="头像" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;">',
+          '          <img v-if="avatar" :src="coverUrl(avatar)" alt="头像" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;" @error="hideImg">',
+          '        </button>',
+          '        <div v-if="menuOpen" class="user-menu-panel">',
+          '          <div class="user-menu-name">{{ displayName }}</div>',
+          '          <router-link to="/bookshelf" class="user-menu-item" @click="menuOpen = false">我的书架</router-link>',
+          '          <router-link to="/profile" class="user-menu-item" @click="menuOpen = false">个人中心</router-link>',
+          '          <button type="button" class="user-menu-item" @click="doLogout">退出登录</button>',
+          '        </div>',
+          '      </div>',
+          '    </div>',
+          '  </div>',
+          '</header>',
+
+          '<main class="main"><router-view></router-view></main>',
+
+          '<footer v-if="!isReaderRoute" class="footer">',
+          '  <div>© 2026 书阁阅读 · 保留所有权利</div>',
+          '  <div class="footer-sub">鲁ICP备2026056653号-1</div>',
+          '</footer>',
+
+          '<div class="toast-wrap" aria-live="polite">',
+          '  <div v-for="t in toast.list" :key="t.id" class="toast" :class="t.type">{{ t.message }}</div>',
+          '</div>',
+        ].join(''),
+        setup() {
+          const route = useRoute();
+          const router = useRouter();
+
+          const navItems = [
+            { path: '/', label: '首页' },
+            { path: '/bookstore', label: '书城' },
+            { path: '/bookshelf', label: '书架' },
+            { path: '/discover', label: '发现' },
+          ];
+
+          const keyword = ref('');
+          const menuOpen = ref(false);
+
+          const displayName = computed(function () {
+            if (!isLoggedIn.value) return '书友';
+            return auth.user.nickname || auth.user.username || '书友';
+          });
+          const avatar = computed(function () { return auth.user ? auth.user.avatar : ''; });
+          const isReaderRoute = computed(function () { return route.path.indexOf('/read/') === 0; });
+
+          function isActive(path) {
+            const current = route.path;
+            if (path === '/') return current === '/';
+            return current === path || current.indexOf(path + '/') === 0;
+          }
+
+          function submitSearch() {
+            const q = keyword.value.trim();
+            if (!q) { showToast('请输入关键词'); return; }
+            router.push({ path: '/search', query: { q: q } });
+          }
+
+          function openMessages() {
+            if (!isLoggedIn.value) {
+              router.push({ path: '/login', query: { redirect: route.fullPath } });
+              return;
+            }
+            showToast('站内消息暂未开放（后端接口仅 App 使用）');
+          }
+
+          function doLogout() {
+            menuOpen.value = false;
+            clearAuth();
+            showToast('已退出登录');
+            router.push('/');
+          }
+
+          onMounted(function () {
+            loadCategories();
+            if (isLoggedIn.value) { loadShelf(); loadRecent(); }
+          });
+
+          return {
+            route: route, navItems: navItems, keyword: keyword, submitSearch: submitSearch,
+            isActive: isActive, isReaderRoute: isReaderRoute,
+            isLoggedIn: isLoggedIn, displayName: displayName, avatar: avatar,
+            menuOpen: menuOpen, doLogout: doLogout, openMessages: openMessages,
+            toast: toast,
+            hideImg: hideImg, coverUrl: coverUrl,
+          };
+        },
+      };
+
+      const router = createRouter({
+        history: createWebHashHistory(),
+        routes: [
+          { path: '/', name: 'home', component: Home },
+          { path: '/bookstore', name: 'bookstore', component: Bookstore },
+          { path: '/bookshelf', name: 'bookshelf', component: Bookshelf },
+          { path: '/discover', name: 'discover', component: Discover },
+          { path: '/discuss', redirect: '/discover' },
+          { path: '/search', name: 'search', component: Search },
+          { path: '/login', name: 'login', component: Login },
+          { path: '/profile', name: 'profile', component: Profile },
+          { path: '/book/:id', name: 'book', component: BookDetail },
+          { path: '/read/:bookId/:chapterId', name: 'reader', component: Reader },
+          { path: '/:pathMatch(.*)*', name: 'notFound', component: NotFound },
+        ],
+        scrollBehavior: function () { return { top: 0 }; },
+      });
+
+      createApp(App).use(router).mount('#app');
+    })();
+  </script>
+  </body>
+</html>

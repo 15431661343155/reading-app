@@ -54,7 +54,7 @@
     <color name="nav_item_ripple">#1F000000</color>        <!-- 按压缩微水波纹 -->
 
     <!-- ===== 底部导航 · 磨砂玻璃 ===== -->
-    <color name="nav_frost_tint">#40FFFFFF</color>     <!-- 磨砂叠加：25% 白，避免亮背景变成白条 -->
+    <color name="nav_frost_tint">#33FFFFFF</color>     <!-- 磨砂叠加：20% 白，去颗粒+更强模糊后更透 -->
     <color name="nav_frost_base">#80F2F2F7</color>     <!-- 磨砂兜底底色：50% 浅灰 -->
     <color name="nav_frost_sheen">#1AFFFFFF</color>    <!-- 顶部玻璃高光：弱 -->
     <color name="nav_frost_stroke">#33FFFFFF</color>    <!-- 玻璃描边：20% 白 -->
@@ -68,13 +68,38 @@
     <color name="ios_tab_bar_dark">#F0171718</color>
     <color name="ios_card_bg_dark">#FF1C1C1E</color>
 
-    <!-- 阁檐墨韵 · 国风开屏配色 -->
-    <color name="splash_bg">#F5F0E6</color>           <!-- 宣纸底色 -->
-    <color name="splash_title">#3C2415</color>          <!-- 浓墨深棕 -->
-    <color name="splash_subtitle">#5C4033</color>       <!-- 淡墨棕 -->
-    <color name="splash_accent">#8B2500</color>         <!-- 朱砂红 -->
-    <color name="splash_decoration">#D4C5A9</color>     <!-- 金粉/绢边 -->
-    <color name="splash_mountain_far">#DDD5C3</color>   <!-- 远山淡影 -->
-    <color name="splash_mountain_near">#C9B99A</color>  <!-- 近山浓黛 -->
-    <color name="splash_version">#A09080</color>         <!-- 版本号灰棕 -->
+    <!-- 国风开屏配色（仅保留在用项：系统启动屏/主页窗口背景底色） -->
+    <color name="splash_bg">#F6EEDF</color>           <!-- 插画宣纸底色（取自新开屏图） -->
+
+    <!-- ===== 登录页 · 毛玻璃紫主题 ===== -->
+    <color name="login_accent">#FF6C5CE7</color>            <!-- 主色：紫（按钮/链接/选中） -->
+    <color name="login_accent_press">#FF5A4BD1</color>      <!-- 主色按压态 -->
+    <color name="login_accent_text">#FF6C5CE7</color>       <!-- 主色文字 -->
+    <color name="login_text_title">#FF3A3A3F</color>        <!-- 卡片内标题/输入值 -->
+    <color name="login_text_body">#FF4A4A52</color>         <!-- 卡片内提示文字 -->
+    <color name="login_text_desc">#FF6A6A72</color>         <!-- 说明文字 -->
+    <color name="login_text_muted">#FF9A9AA5</color>        <!-- 已读协议等次要文字 -->
+    <color name="login_text_dim">#FF55555C</color>          <!-- 倒计时文字 -->
+    <color name="login_text_hint">#FF9A9AA5</color>         <!-- 输入框占位 -->
+    <color name="login_divider">#FFDCDFE8</color>           <!-- 分割线 -->
+    <color name="login_text_weak">#FFA0A0AA</color>         <!-- 其他登录方式文字 -->
+    <color name="login_icon_circle">#FF4A4A52</color>       <!-- 第三方图标圆底 -->
+    <color name="login_tile_bg">#FFF2F2F7</color>           <!-- 验证码格底色 -->
+    <color name="login_tile_bg_active">#FFFFFFFF</color>    <!-- 验证码格聚焦底色 -->
+    <color name="login_card_fill">#C7FFFFFF</color>         <!-- 玻璃卡片填充：白 78%（无系统模糊，靠不透明度补偿） -->
+    <color name="login_card_stroke">#B3FFFFFF</color>       <!-- 玻璃卡片描边：白 70% -->
+    <color name="login_field_fill">#FFFFFFFF</color>        <!-- 输入框填充：纯白（比玻璃卡片更实，浮起来） -->
+    <color name="login_field_stroke">#26000000</color>      <!-- 输入框描边：15% 黑，极淡灰边 -->
+    <color name="login_cb_stroke">#FF9A9AA5</color>         <!-- 协议勾选框未选描边 -->
+
+    <!-- ===== 国风弹窗（与登录提示弹窗同族）· 个人资料页弹窗专用 ===== -->
+    <color name="gf_teal">#FF3B8272</color>            <!-- 主色：黛青（白字对比度 4.5:1，比登录弹窗的 #56A496 更深） -->
+    <color name="gf_teal_tint">#FFEDF6F3</color>       <!-- 选中项浅青底 -->
+    <color name="gf_gold">#FFC9A96E</color>            <!-- 描金（与 ic_login_prompt_divider 一致） -->
+    <color name="gf_paper_in">#FFFFFDF8</color>        <!-- 输入框/选项底 -->
+    <color name="gf_field_line">#FFD8C9A8</color>      <!-- 输入框描边 -->
+    <color name="gf_muted">#FF8A7F6A</color>           <!-- 说明/计数文字 -->
+    <color name="gf_seal">#FFB03A2E</color>            <!-- 印章红（字数顶格） -->
+    <color name="gf_ink">#FF33261A</color>             <!-- 标题墨色（与登录弹窗标题一致） -->
+    <color name="gf_ink_2">#FF5A4A32</color>           <!-- 次按钮文字（与登录弹窗次按钮一致） -->
 </resources>

@@ -20,8 +20,9 @@ public class ApkPushController {
     @PostMapping("/push")
     public ResponseEntity<ApiResponse<ApkPush>> pushApk(
             @RequestParam String fileName,
-            @RequestParam(required = false) String version) {
-        ApkPush apkPush = apkPushService.pushApk(fileName, version);
+            @RequestParam(required = false) String version,
+            @RequestParam(required = false) String updateNotes) {
+        ApkPush apkPush = apkPushService.pushApk(fileName, version, updateNotes);
         return ResponseEntity.ok(ApiResponse.success("推送成功", apkPush));
     }
 

@@ -165,6 +165,8 @@ public final class EpubBookParser {
         if (opfPath == null) {
             r.warnings.add("找不到 OPF 根文件");
             applyFileNameFallback(r, fileName, hintTitle, hintAuthor);
+            if (r.title.isEmpty()) r.title = "未命名书籍";
+            if (r.author.isEmpty()) r.author = "佚名";
             return r;
         }
 
@@ -213,6 +215,8 @@ public final class EpubBookParser {
         buildChapters(zip, spine, opfDir, toc, tocByPath, r);
 
         // ---- 元信息兜底 ----
+        // 元数据里的占位作者（Unknown/未知）要当成"没有"，让它有机会被文件名捞回来
+        if (isJunkMeta(r.author)) r.author = "";
         applyFileNameFallback(r, fileName, hintTitle, hintAuthor);
         if (r.author.isEmpty()) r.author = "佚名";
         if (r.intro.length() > 2000) r.intro = r.intro.substring(0, 2000) + "...";
@@ -463,17 +467,31 @@ public final class EpubBookParser {
         String t = s.trim();
         if (t.isEmpty()) return true;
         if (t.length() > 12) return false; // 较长文本不太可能是占位符
-        return t.matches("(?i)作者|佚名|未知|不详|无名氏|暂无|无|none|n/?a|null|空|\\[\\s*\\]|\\(?\\)?|[-_—=~．.]+");
+        // 注意要带上 unknown/undefined：实测合集里有 epub 的 dc:creator 直接写 "Unknown"，
+        // 漏掉它就会让「Unknown」当作者入库（占位值必须与 looksLikeAuthor 同步口径）
+        return t.matches("(?i)作者|佚名|未知|不详|无名氏|暂无|无|none|n/?a|null|unknown|undefined|空"
+                + "|\\[\\s*\\]|\\(?\\)?|[-_—=~．.]+");
     }
 
     /** OPF 整体解析失败时的正则兜底 */
     private static void regexFallback(String opfXml, String opfDir, Manifest mf, List<String> spine, ParseResult r) {
         Matcher m = Pattern.compile("<dc:title[^>]*>([^<]*)</dc:title>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
-        if (m.find()) r.title = cleanInline(m.group(1));
+        if (m.find()) {
+            String v = cleanInline(m.group(1));
+            if (!isJunkMeta(v)) r.title = v;
+        }
         m = Pattern.compile("<dc:creator[^>]*>([^<]*)</dc:creator>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
-        if (m.find()) r.author = cleanInline(m.group(1));
+        if (m.find()) {
+            // 这里同样要过 isJunkMeta：否则正则兜底路径会把 Unknown/未知 直接写进作者，
+            // 而主路径（parseMetadataXml）是过滤的，两条路径口径必须一致
+            String v = cleanInline(m.group(1));
+            if (!isJunkMeta(v)) r.author = v;
+        }
         m = Pattern.compile("<dc:description[^>]*>([\\s\\S]*?)</dc:description>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
-        if (m.find()) r.intro = cleanInline(stripTags(m.group(1)));
+        if (m.find()) {
+            String v = cleanInline(stripTags(m.group(1)));
+            if (!isJunkMeta(v)) r.intro = v;
+        }
         m = Pattern.compile("<item\\b[^>]*>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
         while (m.find()) {
             String tag = m.group();
@@ -1388,7 +1406,8 @@ public final class EpubBookParser {
         if (hintTitle != null && !hintTitle.trim().isEmpty()) {
             r.title = hintTitle.trim();
         }
-        if (hintAuthor != null && !hintAuthor.trim().isEmpty()) {
+        if (hintAuthor != null && !hintAuthor.trim().isEmpty()
+                && !isJunkMeta(hintAuthor) && looksLikeAuthor(hintAuthor)) {
             r.author = hintAuthor.trim();
         }
         if (!r.title.isEmpty() && !r.author.isEmpty()) return;
@@ -1402,20 +1421,36 @@ public final class EpubBookParser {
         if (base.isEmpty()) return;
 
         String t = base, a = "";
-        Matcher m = Pattern.compile("^\\s*[《【]([^》】]+)[》】]\\s*[（(\\[]\\s*([^）)\\]\\s]+)\\s*[）)\\]]?\\s*$").matcher(base);
-        if (m.find()) {
-            t = m.group(1).trim();
-            a = m.group(2).trim();
+        // 《书名》作者：某某 / 《书名》著 某某 —— 合集类文件名的主流写法，
+        // 「作者：」前缀必须剥掉，否则「作者：醛石」含全角冒号会被 looksLikeAuthor 拒掉
+        Matcher mkw = Pattern.compile("^\\s*[《【]?\\s*([^》】]{1,60}?)\\s*[》】]?\\s*"
+                + "(?:作\\s*者|著\\s*者|作者名|写手|笔名|著)\\s*[:：\\s]\\s*(.{1,20})\\s*$").matcher(base);
+        if (mkw.find()) {
+            t = mkw.group(1).trim();
+            String cand = mkw.group(2).trim().replaceFirst("\\s*(?:著|作品|创作)$", "").trim();
+            if (looksLikeAuthor(cand)) a = cand;
         } else {
-            m = Pattern.compile("^\\s*(.+?)\\s*[（(\\[]\\s*([^（(\\[）)\\]]{1,20})\\s*[）)\\]]\\s*$").matcher(base);
-            if (m.find() && looksLikeAuthor(m.group(2))) {
+            Matcher m = Pattern.compile("^\\s*[《【]([^》】]+)[》】]\\s*[（(\\[]\\s*([^）)\\]\\s]+)\\s*[）)\\]]?\\s*$").matcher(base);
+            if (m.find()) {
                 t = m.group(1).trim();
                 a = m.group(2).trim();
             } else {
-                m = Pattern.compile("^\\s*(.+?)\\s+-\\s+(.+?)\\s*$").matcher(base);
-                if (m.find()) {
+                m = Pattern.compile("^\\s*(.+?)\\s*[（(\\[]\\s*([^（(\\[）)\\]]{1,20})\\s*[）)\\]]\\s*$").matcher(base);
+                if (m.find() && looksLikeAuthor(m.group(2))) {
                     t = m.group(1).trim();
                     a = m.group(2).trim();
+                } else {
+                    // 书名-作者 / 书名 - 作者：合集类文件名的主流写法。
+                    // 注意连字符两侧**可能没有空白**（实测某 2352 本合集里 2341 本都是
+                    // 「三国之乱臣贼子-秀才会武术.epub」这种紧贴写法），因此不能用
+                    // 「\s+-\s+」要求空白，否则作者全丢。
+                    // 右侧先用 looksLikeAuthor 兜底，避免把「斗破苍穹-天蚕土豆-全集」
+                    // 这种多段名切错。
+                    m = Pattern.compile("^\\s*(.+?)\\s*-\\s*(.+?)\\s*$").matcher(base);
+                    if (m.find() && looksLikeAuthor(m.group(2))) {
+                        t = m.group(1).trim();
+                        a = cleanAuthorTail(m.group(2).trim());
+                    }
                 }
             }
         }
@@ -1424,11 +1459,27 @@ public final class EpubBookParser {
         if (r.author.isEmpty()) r.author = a;
     }
 
+    /**
+     * 剥掉作者名尾部的下载序号后缀，如 {@code 剑西来(1)} → {@code 剑西来}。
+     *
+     * <p>合集类压缩包解压后常见「同名文件自动加 (1)(2)」的产物，实测 2352 本里 185 本如此。
+     * 只在括号内是纯数字/单个字母时才剥，避免误伤「火星引力(网名)」这类真括号名。
+     */
+    private static String cleanAuthorTail(String s) {
+        if (s == null) return "";
+        String v = s.trim();
+        v = v.replaceAll("[（(]\\s*\\d{1,2}\\s*[）)]\\s*$", "").trim();
+        return v;
+    }
+
     private static boolean looksLikeAuthor(String s) {
         if (s == null) return false;
         String v = s.trim();
         if (v.isEmpty() || v.length() > 16) return false;
         if (v.matches("(?i).*(全集|全本|完本|精校|校对|txt|epub|www\\.|\\.com|笔趣|小说网).*")) return false;
+        // 元数据里的占位作者：dc:creator 为 Unknown/未知 时等于没有，不能让「Unknown」
+        // 这种值通过文件名兜底又被捞回来（抽样 120 本里 dc:creator 非空的 27 本中约 1/3 是占位值）
+        if (v.matches("(?i)^\\s*(unknown|n/?a|none|null|undefined|未知|佚名|不详|作者不详|无|—|-)\\s*$")) return false;
         return !v.matches("^\\d+$");
     }
 }

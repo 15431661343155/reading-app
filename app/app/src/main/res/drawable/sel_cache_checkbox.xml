@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  缓存明细的勾选框（iOS 风格圆形）。
+
+  state_selected=true → 蓝底 + 白勾；默认 → 灰描边空心圈。
+
+  刻意不用 CheckBox：Material 主题会给 CheckBox 的 android:button drawable
+  套上 buttonTint（落色到 colorControlActivated），把 drawable 当 alpha 蒙版
+  整体重涂，结果只剩一块纯色、勾消失。用 ImageView + src 走 selector 才稳。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:drawable="@drawable/ic_cache_cb_on" />
+    <item android:drawable="@drawable/ic_cache_cb_off" />
+</selector>

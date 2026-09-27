@@ -3,11 +3,24 @@ package com.example.myapplication.activity;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.Layout;
+import android.text.Spannable;
+import android.text.SpannableString;
 import android.text.StaticLayout;
 import android.text.TextUtils;
 import android.text.TextPaint;
+import android.text.style.ReplacementSpan;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.AccelerateDecelerateInterpolator;
@@ -17,14 +30,17 @@ import android.animation.ValueAnimator;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ImageView;
+import android.widget.PopupWindow;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.widget.Toolbar;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.myapplication.R;
 import com.example.myapplication.api.RetrofitClient;
@@ -32,10 +48,20 @@ import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.Bookshelf;
 import com.example.myapplication.bean.ChapterDto;
+import com.example.myapplication.bean.MajorChapter;
 import com.example.myapplication.bean.ReadingProgress;
 import com.example.myapplication.utils.LocalBookParser;
+import com.example.myapplication.utils.LoginHelper;
+import com.example.myapplication.utils.ExternalPrefs;
+import com.example.myapplication.utils.ExternalSyncManager;
 import com.example.myapplication.utils.ThemeManager;
+import com.example.myapplication.utils.TocOrder;
+import com.example.myapplication.utils.VolumeDeriver;
+import com.example.myapplication.utils.Hint;
 
+import org.json.JSONArray;
+
+import java.util.ArrayList;
 import java.util.List;
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -43,6 +69,9 @@ import retrofit2.Response;
 
 //书籍详情页
 public class BookDetailActivity extends BaseActivity{
+
+    /** 状态行最多展示的子分类个数（超出的用「…」收尾） */
+    private static final int MAX_STATUS_SUBS = 3;
     private ImageView ivCover;
     private TextView tvBookName, tvAuthor, tvIntro, tvStatus, tvLastRead, tvAddShelf, tvLatestChapter;
     private ImageView ivShelfIcon;
@@ -52,6 +81,14 @@ public class BookDetailActivity extends BaseActivity{
     private int savedChapterIndex = 0;
     private String savedChapterTitle = "";
     private boolean hasRead = false;
+    /** 外站书是否存在外站阅读记录（决定外站详情页按钮显示"继续阅读"还是"在线阅读"） */
+    private boolean extHasRead = false;
+    /** 上次已同步展示的本地外站记录章节索引；用于判断"本地记录是否又变过" */
+    private int extLocalSyncedIdx = -1;
+    /** 是否已发起过服务器阅读进度查询（避免 onResume 反复请求同一本书的进度） */
+    private boolean serverProgressQueried = false;
+    /** 当前章行背景（淡蓝底 + 左侧竖条），多行复用同一实例 */
+    private Drawable currentChapterBgDrawable;
 
     // 简介折叠相关
     private static final int INTRO_MAX_LINES = 3;
@@ -65,6 +102,24 @@ public class BookDetailActivity extends BaseActivity{
 
     // 外站章节列表内存缓存（sourceType|sourceBookId -> 章节列表），避免重复请求
     private static final java.util.Map<String, List<String[]>> ONLINE_CHAPTER_CACHE = new java.util.HashMap<>();
+
+    // ========== 详情页「目录」底部弹窗（替代跳转章节列表页） ==========
+    private PopupWindow chapterSheetPopup;
+    private final TocOrder sheetOrder = new TocOrder();
+    private RecyclerView sheetRv;
+    private TextView sheetSortBtn, sheetInfo;
+    private SheetAdapter sheetAdapter;
+    /** 弹窗面板根视图（收起时做下滑动画 / 跟手拖拽的位移目标） */
+    private View sheetPanelView;
+    /** 防止收起动画期间重复触发 */
+    private boolean sheetDismissing;
+    /** 章节标题（外站为 [title, url]），下标 = 真实章节 index */
+    private List<String[]> sheetChapters = new ArrayList<>();
+    /** 本站分卷（VolumeDeriver 推导；空 → 平铺） */
+    private final List<LocalBookParser.VolumeInfo> sheetVolumes = new ArrayList<>();
+    /** 渲染行：String=卷头 / int[]{realIndex}=章节 */
+    private final List<Object> sheetRows = new ArrayList<>();
+    private int sheetCurrentIndex = -1;
 
     @Override
     @SuppressWarnings("deprecation")
@@ -82,7 +137,7 @@ public class BookDetailActivity extends BaseActivity{
         // 获取传递的Book对象
         currentBook = (Book) getIntent().getSerializableExtra("book");
         if (currentBook == null) {
-            Toast.makeText(this, "书籍信息获取失败", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "书籍信息获取失败");
             finish();
             return;
         }
@@ -110,6 +165,74 @@ public class BookDetailActivity extends BaseActivity{
             checkReadingProgress();
             loadLatestChapter();
             loadBookDetailForShelfStatus();
+            // 阅读量埋点：本站书籍进入详情页 +1（书城「男生/女生」子页按点击量排热门用）
+            trackBookView();
+        }
+    }
+
+    /**
+     * 阅读量埋点：进详情页 POST /api/books/{id}/view。
+     * 只统计本站书籍（外站书没有本地 id，也无需参与本站热门榜）；
+     * 成败都静默处理 —— 计数失败绝不该影响用户看书。
+     */
+    private void trackBookView() {
+        if (currentBook == null || currentBook.getId() == null || currentBook.getId() <= 0) return;
+        RetrofitClient.getApiService().incrementBookView(currentBook.getId())
+                .enqueue(new Callback<ApiResponse<Void>>() {
+                    @Override
+                    public void onResponse(Call<ApiResponse<Void>> call, Response<ApiResponse<Void>> response) {
+                        // 无需处理
+                    }
+
+                    @Override
+                    public void onFailure(Call<ApiResponse<Void>> call, Throwable t) {
+                        // 静默：埋点失败不影响阅读
+                    }
+                });
+    }
+
+    /**
+     * 返回详情页（resume）时刷新阅读记录，使"读完返回"后按钮文案与"上次读到"立即正确。
+     * 外站书走 refreshExternalProgressOnResume()（只读本地）；本站书走 syncLocalReadingProgress()。
+     * 服务器进度不在此每次都查：本地未命中且尚未成功查过服务器时才查一次，避免频繁请求。
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (currentBook == null) return;
+        if (isExternalBook()) {
+            // 外站书：返回详情页后刷新本地外站记录（只读本地，不打接口）
+            refreshExternalProgressOnResume();
+            return;
+        }
+        if (currentBook.getId() == null) return;
+        boolean localHit = syncLocalReadingProgress();
+        if (!localHit && !serverProgressQueried) {
+            queryServerReadingProgress();
+        }
+    }
+
+    /**
+     * 返回详情页（resume）时刷新外站本地阅读记录：只读本地，不回退已显示的更靠后进度。
+     * 阅读时本地记录已写入，足够让"返回即刷新"正确，故不发网络请求。
+     */
+    private void refreshExternalProgressOnResume() {
+        if (currentBook == null) return;
+        String sourceType = currentBook.getSourceType();
+        String sourceBookId = currentBook.getSourceUrl();
+        if (sourceType == null || sourceBookId == null || sourceBookId.isEmpty()) return;
+        String recordKey = "ext_" + sourceType + "|" + sourceBookId;
+        SharedPreferences sp = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
+        int localIdx = sp.getInt(recordKey + "_chapterIndex", -1);
+        String localTitle = sp.getString(recordKey + "_chapterTitle", "");
+        // 本地记录"变了"（用户又读了新章，或往回跳读了旧章）→ 立即刷新；
+        // 本地记录没变 → 保持已显示的进度（可能是服务器更靠后的值），不回退
+        if (localIdx >= 0 && (localIdx != extLocalSyncedIdx || !extHasRead)) {
+            hasRead = true;
+            savedChapterIndex = localIdx;
+            savedChapterTitle = localTitle;
+            extLocalSyncedIdx = localIdx;
+            showExternalContinueReading(localTitle);   // 内部会置 extHasRead=true 并更新按钮文案与"上次读到"
         }
     }
 
@@ -195,7 +318,7 @@ public class BookDetailActivity extends BaseActivity{
             tvIntro.post(this::refreshIntroToggle);
         }
 
-        // 显示书籍状态（分类·状态·字数）
+        // 显示书籍状态（详细分类·状态·字数）
         updateStatusDisplay();
 
         // 直接用接口返回的 isInShelf 字段初始化书架按钮状态
@@ -215,7 +338,12 @@ public class BookDetailActivity extends BaseActivity{
         btnAddShelf.setEnabled(true);
 
         btnRead.setEnabled(true);
-        btnRead.setText(isExternalBook() ? "在线阅读" : "开始阅读");
+        if (isExternalBook()) {
+            // 外站书：按是否存在外站阅读记录决定文案（避免异步回调 displayBookInfo 覆盖"继续阅读"）
+            btnRead.setText(extHasRead ? "继续阅读" : "在线阅读");
+        } else {
+            btnRead.setText(hasRead ? "继续阅读" : "开始阅读");
+        }
         btnRead.setAlpha(1.0f);
     }
 
@@ -340,13 +468,12 @@ public class BookDetailActivity extends BaseActivity{
     }
 
     /**
-     * 更新状态栏显示（分类·状态·字数）
+     * 更新状态栏显示（详细分类 · 状态 · 字数）
+     *
+     * <p>分类一栏显示的是<b>子分类</b>（后台可多选），不再显示主分类；没有子分类时该栏整体省略。
      */
     private void updateStatusDisplay() {
-        String category = currentBook.getCategory();
-        if (category == null || category.isEmpty()) {
-            category = "未知";
-        }
+        String category = joinSubCategories(currentBook.getSubCategories());
 
         String statusText;
         int auditStatus = currentBook.getAuditStatus();
@@ -378,40 +505,116 @@ public class BookDetailActivity extends BaseActivity{
             wordCountText = "暂无字数";
         }
 
-        tvStatus.setText(category + " · " + statusText + " · " + wordCountText);
+        StringBuilder sb = new StringBuilder();
+        if (!category.isEmpty()) {
+            sb.append(category).append(" · ");
+        }
+        sb.append(statusText).append(" · ").append(wordCountText);
+        tvStatus.setText(sb.toString());
         tvStatus.setTextColor(0xFF8E8E93); // iOS 次文字
     }
 
     /**
-     * 检查是否有阅读记录
+     * 子分类（后端存的是 JSON 数组串，如 {@code ["玄幻","都市"]}）→ 展示文本 {@code 玄幻 · 都市}。
+     *
+     * <p>最多展示 {@value #MAX_STATUS_SUBS} 个，多的用「…」收尾，避免状态行被撑成多行；
+     * 空/解析失败都返回空串（调用方据此省略分类这一栏）。
+     */
+    private String joinSubCategories(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        List<String> names = new ArrayList<>();
+        String s = raw.trim();
+        if (s.isEmpty()) {
+            return "";
+        }
+        try {
+            JSONArray arr = new JSONArray(s);
+            for (int i = 0; i < arr.length(); i++) {
+                String n = arr.optString(i, "").trim();
+                if (!n.isEmpty() && !names.contains(n)) {
+                    names.add(n);
+                }
+            }
+        } catch (Exception ignored) {
+            // 兼容非标准 JSON 的老数据：去掉括号引号后按逗号切
+            for (String n : s.replaceAll("[\\[\\]\"]", "").split("[,，]")) {
+                String v = n.trim();
+                if (!v.isEmpty() && !names.contains(v)) {
+                    names.add(v);
+                }
+            }
+        }
+        if (names.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        int shown = Math.min(names.size(), MAX_STATUS_SUBS);
+        for (int i = 0; i < shown; i++) {
+            if (i > 0) {
+                sb.append(" · ");
+            }
+            sb.append(names.get(i));
+        }
+        if (names.size() > shown) {
+            sb.append(" …");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 检查阅读进度：先同步本地记录（所有用户，含未登录游客）；
+     * 本地未命中且已登录时，再从服务器查询（游客仅用本地记录）。
      */
     private void checkReadingProgress() {
-        String userIdStr = getSharedPreferences("user_info", MODE_PRIVATE).getString("userId", "");
-        long userId = userIdStr.isEmpty() ? 0 : Long.parseLong(userIdStr);
-        if (userId == 0) return;
+        if (currentBook == null || currentBook.getId() == null) return;
+        boolean localHit = syncLocalReadingProgress();
+        if (localHit) return;
+        queryServerReadingProgress();
+    }
 
-        // 先从本地缓存检查
+    /**
+     * 扫描本地 reading_records，命中当前书籍则刷新 hasRead / savedChapterIndex / savedChapterTitle
+     * 并更新 UI（"继续阅读" + "上次读到：xxx"），返回 true；未命中返回 false。
+     * 未命中时**不清空**已有状态，避免把从服务器查到的进度抹掉。
+     * 仅在主线程调用（内部 runOnUiThread 更新 UI 安全）。
+     */
+    private boolean syncLocalReadingProgress() {
+        if (currentBook == null || currentBook.getId() == null) return false;
+        long bookId = currentBook.getId();
         SharedPreferences sp = getSharedPreferences("reading_records", MODE_PRIVATE);
         int count = sp.getInt("record_count", 0);
         for (int i = 0; i < count; i++) {
-            long bookId = sp.getLong("record_bookId_" + i, 0);
-            if (bookId == currentBook.getId()) {
+            long recBookId = sp.getLong("record_bookId_" + i, 0);
+            if (recBookId == bookId) {
                 hasRead = true;
                 savedChapterIndex = sp.getInt("record_chapterIndex_" + i, 0);
                 savedChapterTitle = sp.getString("record_chapterTitle_" + i, "");
-
+                if (savedChapterTitle == null) savedChapterTitle = "";
                 runOnUiThread(() -> {
                     btnRead.setText("继续阅读");
-                    if (!savedChapterTitle.isEmpty()) {
+                    if (savedChapterTitle != null && !savedChapterTitle.isEmpty()) {
                         tvLastRead.setText("上次读到：" + savedChapterTitle);
                         tvLastRead.setVisibility(View.VISIBLE);
                     }
                 });
-                return;
+                return true;
             }
         }
+        return false;
+    }
 
-        // 本地没有，从服务器查
+    /**
+     * 已登录用户从服务器查询阅读进度并更新状态/UI；游客（userId==0）直接返回。
+     * 成功发起请求后置 serverProgressQueried=true，避免 onResume 反复请求。
+     */
+    private void queryServerReadingProgress() {
+        if (currentBook == null || currentBook.getId() == null) return;
+        String userIdStr = getSharedPreferences("user_info", MODE_PRIVATE).getString("userId", "");
+        long userId = userIdStr.isEmpty() ? 0 : Long.parseLong(userIdStr);
+        if (userId == 0) return;
+        serverProgressQueried = true;
         RetrofitClient.getApiService().getProgress(userId, currentBook.getId())
                 .enqueue(new Callback<ApiResponse<ReadingProgress>>() {
                     @Override
@@ -469,12 +672,15 @@ public class BookDetailActivity extends BaseActivity{
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     Book updated = response.body().getData();
                     if (updated != null) {
-                        // 更新 currentBook 的所有字段（包含 wordCount、category 等）
+                        // 更新 currentBook 的所有字段（包含 wordCount、category、subCategories 等）
                         if (updated.getWordCount() != null) {
                             currentBook.setWordCount(updated.getWordCount());
                         }
                         if (updated.getCategory() != null) {
                             currentBook.setCategory(updated.getCategory());
+                        }
+                        if (updated.getSubCategories() != null) {
+                            currentBook.setSubCategories(updated.getSubCategories());
                         }
                         currentBook.setStatus(updated.getStatus());
 
@@ -518,21 +724,25 @@ public class BookDetailActivity extends BaseActivity{
             }
         });
 
-        // 章节目录
+        // 章节目录：底部弹窗（从底部滑出），不再跳转章节列表页
         btnChapterList.setOnClickListener(v -> {
             if (isExternalBook()) {
                 // 外站书籍：直接从后端 API 获取章节列表，不导入
                 loadOnlineChapters();
             } else {
-                Intent intent = new Intent(this, ChapterListActivity.class);
-                intent.putExtra("book", currentBook);
-                startActivity(intent);
+                showServerChapterSheet();
             }
         });
 
         // 加入书架
         btnAddShelf.setOnClickListener(v -> {
             if (isExternalBook()) {
+                // 外站书籍：与网络书一致，未登录不可导入/移出书架，弹登录提醒
+                if (!LoginHelper.isLoggedIn(BookDetailActivity.this)) {
+                    LoginHelper.requireLogin(BookDetailActivity.this,
+                            "加入书架需要登录后操作", null);
+                    return;
+                }
                 // 外站书籍：仅本地保存/移除，不调服务器
                 if (isInShelf) {
                     removeExternalBookFromLocal();
@@ -544,7 +754,9 @@ public class BookDetailActivity extends BaseActivity{
             String userIdStr = getSharedPreferences("user_info", MODE_PRIVATE).getString("userId", "");
             long userId = userIdStr.isEmpty() ? 0 : Long.parseLong(userIdStr);
             if (userId == 0) {
-                Toast.makeText(this, "请先登录", Toast.LENGTH_SHORT).show();
+                // 未登录：弹登录提醒，用户同意则跳转登录页（不直接加入书架）
+                LoginHelper.requireLogin(BookDetailActivity.this,
+                        "加入书架需要登录后操作", null);
                 return;
             }
 
@@ -563,7 +775,7 @@ public class BookDetailActivity extends BaseActivity{
                                         tvAddShelf.setText("加入书架");
                                         ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
                                         btnAddShelf.setEnabled(true);
-                                        Toast.makeText(BookDetailActivity.this, "已移出书架", Toast.LENGTH_SHORT).show();
+                                        Hint.show(BookDetailActivity.this, "已移出书架");
                                     });
                                 } else {
                                     runOnUiThread(() -> {
@@ -597,7 +809,7 @@ public class BookDetailActivity extends BaseActivity{
                                         tvAddShelf.setText("已在书架");
                                         ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
                                         btnAddShelf.setEnabled(true);
-                                        Toast.makeText(BookDetailActivity.this, "已加入书架", Toast.LENGTH_SHORT).show();
+                                        Hint.show(BookDetailActivity.this, "已加入书架");
                                     });
                                 } else {
                                     String errorMsg;
@@ -610,7 +822,7 @@ public class BookDetailActivity extends BaseActivity{
                                         btnAddShelf.setEnabled(true);
                                         tvAddShelf.setText("加入书架");
                                         ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
-                                        Toast.makeText(BookDetailActivity.this, errorMsg, Toast.LENGTH_SHORT).show();
+                                        Hint.show(BookDetailActivity.this, errorMsg);
                                     });
                                 }
                             }
@@ -620,7 +832,7 @@ public class BookDetailActivity extends BaseActivity{
                                     btnAddShelf.setEnabled(true);
                                     tvAddShelf.setText("加入书架");
                                     ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
-                                    Toast.makeText(BookDetailActivity.this, "网络连接失败，请检查网络", Toast.LENGTH_SHORT).show();
+                                    Hint.show(BookDetailActivity.this, "网络连接失败，请检查网络");
                                 });
                             }
                         });
@@ -648,16 +860,19 @@ public class BookDetailActivity extends BaseActivity{
         String sourceType = currentBook.getSourceType();
         String sourceBookId = currentBook.getSourceUrl();
         if (sourceType == null || sourceBookId == null || sourceBookId.isEmpty()) {
-            Toast.makeText(this, "书源信息缺失", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "书源信息缺失");
             return;
         }
 
-        SharedPreferences sp = getSharedPreferences("external_bookshelf", MODE_PRIVATE);
+        // 旧版全局外站数据迁移到当前登录用户命名空间（幂等）
+        ExternalPrefs.migrateIfNeeded(this);
+
+        SharedPreferences sp = getSharedPreferences(ExternalPrefs.shelfName(this), MODE_PRIVATE);
         String key = sourceType + "|" + sourceBookId;
 
         // 检查是否已在本地书架
         if (sp.contains(key)) {
-            Toast.makeText(this, "已在书架", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "已在书架");
             return;
         }
 
@@ -672,7 +887,10 @@ public class BookDetailActivity extends BaseActivity{
         isInShelf = true;
         tvAddShelf.setText("已在书架");
         ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
-        Toast.makeText(this, "已加入书架", Toast.LENGTH_SHORT).show();
+        Hint.show(this, "已加入书架");
+
+        // 立即同步外站书架到服务器（用户主动操作，期望即时入库）
+        ExternalSyncManager.getInstance(this).flushShelfOnly();
     }
 
     private static String safe(String s) { return s == null ? "" : s; }
@@ -684,8 +902,10 @@ public class BookDetailActivity extends BaseActivity{
         String sourceType = currentBook.getSourceType();
         String sourceUrl = currentBook.getSourceUrl();
         if (sourceType == null || sourceUrl == null) return false;
+        // 旧版全局外站数据迁移到当前登录用户命名空间（幂等）
+        ExternalPrefs.migrateIfNeeded(this);
         String key = sourceType + "|" + sourceUrl;
-        return getSharedPreferences("external_bookshelf", MODE_PRIVATE).contains(key);
+        return getSharedPreferences(ExternalPrefs.shelfName(this), MODE_PRIVATE).contains(key);
     }
 
     /**
@@ -697,12 +917,12 @@ public class BookDetailActivity extends BaseActivity{
         if (sourceType == null || sourceUrl == null) return;
         String key = sourceType + "|" + sourceUrl;
 
-        getSharedPreferences("external_bookshelf", MODE_PRIVATE)
+        getSharedPreferences(ExternalPrefs.shelfName(this), MODE_PRIVATE)
                 .edit().remove(key).apply();
 
         // 同步移除外站阅读记录（键格式与 BookShelfFragment/ReadActivity 一致）
         String recordKey = "ext_" + sourceType + "|" + sourceUrl;
-        getSharedPreferences("external_reading_records", MODE_PRIVATE)
+        getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE)
                 .edit()
                 .remove(recordKey + "_chapterIndex")
                 .remove(recordKey + "_chapterTitle")
@@ -714,10 +934,14 @@ public class BookDetailActivity extends BaseActivity{
         getSharedPreferences("shelf_group_assign", MODE_PRIVATE)
                 .edit().remove("ext_" + sourceType + "_" + sourceUrl).apply();
 
+        // 同步删除服务器侧外站书架 + 阅读记录（离散主动操作，立即同步，避免服务器残留/被 pullAll 拉回）
+        ExternalSyncManager.getInstance(this).removeShelfRemote(sourceType, sourceUrl);
+        ExternalSyncManager.getInstance(this).deleteReadingRecordRemote(sourceType, sourceUrl);
+
         isInShelf = false;
         tvAddShelf.setText("导入书架");
         ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
-        Toast.makeText(this, "已移出书架", Toast.LENGTH_SHORT).show();
+        Hint.show(this, "已移出书架");
     }
 
     private String externalCacheKey() {
@@ -725,7 +949,7 @@ public class BookDetailActivity extends BaseActivity{
     }
 
     /**
-     * 外站章节列表共享缓存：供 ReadActivity / OnlineChapterListActivity 读取。
+     * 外站章节列表共享缓存：供 ReadActivity 读取。
      * 背景：大书（如斗破苍穹 1663 章 × ~1.7KB/章 ≈ 2.9MB）经 Intent 传递会超过
      * Binder 1MB 限制，导致接收方 getSerializableExtra("chapters") 返回 null，
      * 阅读器回退到本地书路径一直"加载中"。改为不传 chapters，由目标页从此缓存读取
@@ -822,14 +1046,16 @@ public class BookDetailActivity extends BaseActivity{
      * 进度合并策略：取读到更靠后的一方（max(本地, 服务器)），避免弱网下本地进度被服务器旧值覆盖。
      */
     private void checkExternalReadingProgress() {
+        extHasRead = false; // 重新检查前先复位，避免陈旧的"继续阅读"状态残留
         String sourceType = currentBook.getSourceType();
         String sourceBookId = currentBook.getSourceUrl();
         if (sourceType == null || sourceBookId == null || sourceBookId.isEmpty()) return;
 
         String recordKey = "ext_" + sourceType + "|" + sourceBookId;
-        SharedPreferences sp = getSharedPreferences("external_reading_records", MODE_PRIVATE);
+        SharedPreferences sp = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
         int localIdx = sp.getInt(recordKey + "_chapterIndex", -1);
         String localTitle = sp.getString(recordKey + "_chapterTitle", "");
+        extLocalSyncedIdx = localIdx;   // 记录本次已同步的本地值
         if (localIdx >= 0) {
             hasRead = true;
             savedChapterIndex = localIdx;
@@ -873,6 +1099,7 @@ public class BookDetailActivity extends BaseActivity{
     }
 
     private void showExternalContinueReading(String chapterTitle) {
+        extHasRead = true; // 标记存在外站阅读记录，避免被后续 displayBookInfo() 覆盖回"在线阅读"
         btnRead.setText("继续阅读");
         if (chapterTitle != null && !chapterTitle.isEmpty()) {
             tvLastRead.setText("上次读到：" + chapterTitle);
@@ -881,12 +1108,12 @@ public class BookDetailActivity extends BaseActivity{
     }
 
     /**
-     * 外站书籍：加载章节列表并跳转 OnlineChapterListActivity 展示。
+     * 外站书籍：加载章节列表并以底部弹窗（BottomSheet）展示。
      * 使用统一的 fetchOnlineChapters（内存 → 持久化 → 网络），失败时给出书源失效兜底。
      */
     private void loadOnlineChapters() {
         if (currentBook.getSourceType() == null || currentBook.getSourceUrl() == null) {
-            Toast.makeText(this, "书源信息缺失", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "书源信息缺失");
             return;
         }
         btnChapterList.setEnabled(false);
@@ -898,16 +1125,7 @@ public class BookDetailActivity extends BaseActivity{
             @Override
             public void onSuccess(List<String[]> chapters) {
                 btnChapterList.setEnabled(true);
-                Intent intent = new Intent(BookDetailActivity.this, OnlineChapterListActivity.class);
-                intent.putExtra("book", currentBook);
-                putChaptersExtra(BookDetailActivity.this, intent, currentBook, chapters);
-                try { startActivity(intent); }
-                catch (RuntimeException te) {
-                    Intent fallback = new Intent(BookDetailActivity.this, OnlineChapterListActivity.class);
-                    fallback.putExtra("book", currentBook);
-                    fallback.putExtra("chaptersViaCache", true);
-                    startActivity(fallback);
-                }
+                showExternalChapterSheet(chapters);
             }
             @Override
             public void onFail(String msg, boolean sourceMayDown) {
@@ -916,10 +1134,591 @@ public class BookDetailActivity extends BaseActivity{
                 if (sourceMayDown) {
                     showSourceUnavailableDialog(msg);
                 } else {
-                    Toast.makeText(BookDetailActivity.this, msg, Toast.LENGTH_SHORT).show();
+                    Hint.show(BookDetailActivity.this, msg);
                 }
             }
         });
+    }
+
+    // ==================== 详情页「目录」底部弹窗 ====================
+
+    /** 本站/本地书目录弹窗：先弹出面板显示加载中，再异步拉章节与分卷 */
+    private void showServerChapterSheet() {
+        if (currentBook == null) return;
+        showChapterSheetFrame();
+        sheetInfo.setVisibility(View.VISIBLE);
+        sheetInfo.setText("加载中...");
+        sheetChapters = new ArrayList<>();
+        sheetVolumes.clear();
+        // 必须同步重建渲染行：第二次打开时 sheetRows 还留着上次的旧行，
+        // 而 sheetChapters 已清空 → RecyclerView 立即布局绑定 → sheetChapters.get(realIndex) 越界崩溃
+        rebuildSheetRows();
+        if (sheetAdapter != null) sheetAdapter.notifyDataSetChanged();
+
+        long bookId = currentBook.getId();
+        // 本地导入书：章节仅存在本地 SP
+        if (isLocalImportedBook(bookId)) {
+            loadLocalChaptersIntoSheet(bookId);
+            return;
+        }
+
+        final List<ChapterDto> dtoHolder = new ArrayList<>();
+        final List<MajorChapter> majorHolder = new ArrayList<>();
+        final boolean[] chapterReady = {false};
+        final boolean[] majorReady = {false};
+
+        Runnable render = () -> runOnUiThread(() -> {
+            if (!chapterReady[0] || !isSheetShowing()) return;
+            sheetChapters = new ArrayList<>();
+            List<String> sortKeys = new ArrayList<>();
+            for (ChapterDto dto : dtoHolder) {
+                String t = dto.getTitle() == null ? "" : dto.getTitle();
+                sheetChapters.add(new String[]{t});
+                sortKeys.add(dto.getSortKey());
+            }
+            sheetVolumes.clear();
+            sheetVolumes.addAll(majorReady[0]
+                    ? VolumeDeriver.derive(sortKeys, majorHolder)
+                    : new ArrayList<>());
+            sheetInfo.setText(sheetChapters.isEmpty() ? "暂无章节" : "共 " + sheetChapters.size() + " 章");
+            rebuildSheetRows();
+            if (sheetAdapter != null) sheetAdapter.notifyDataSetChanged();
+            TocOrder.scrollToFirstRow(sheetRv);
+            scrollToSheetCurrent();
+        });
+
+        RetrofitClient.getApiService().getChapters(bookId)
+                .enqueue(new Callback<ApiResponse<List<ChapterDto>>>() {
+                    @Override
+                    public void onResponse(@NonNull Call<ApiResponse<List<ChapterDto>>> call,
+                                           @NonNull Response<ApiResponse<List<ChapterDto>>> response) {
+                        if (response.isSuccessful() && response.body() != null
+                                && response.body().isSuccess() && response.body().getData() != null) {
+                            dtoHolder.addAll(response.body().getData());
+                        }
+                        chapterReady[0] = true;
+                        render.run();
+                    }
+
+                    @Override
+                    public void onFailure(@NonNull Call<ApiResponse<List<ChapterDto>>> call, @NonNull Throwable t) {
+                        chapterReady[0] = true;
+                        render.run();
+                    }
+                });
+
+        RetrofitClient.getApiService().getMajorChapters(bookId)
+                .enqueue(new Callback<ApiResponse<List<MajorChapter>>>() {
+                    @Override
+                    public void onResponse(@NonNull Call<ApiResponse<List<MajorChapter>>> call,
+                                           @NonNull Response<ApiResponse<List<MajorChapter>>> response) {
+                        if (response.isSuccessful() && response.body() != null
+                                && response.body().isSuccess() && response.body().getData() != null) {
+                            majorHolder.addAll(response.body().getData());
+                        }
+                        majorReady[0] = true;
+                        render.run();
+                    }
+
+                    @Override
+                    public void onFailure(@NonNull Call<ApiResponse<List<MajorChapter>>> call, @NonNull Throwable t) {
+                        majorReady[0] = true;
+                        render.run();
+                    }
+                });
+    }
+
+    /** 外站书目录弹窗：数据已就绪（fetchOnlineChapters 回调），直接展示 */
+    private void showExternalChapterSheet(List<String[]> chapters) {
+        if (chapters == null || chapters.isEmpty()) {
+            Hint.show(this, "章节列表为空");
+            return;
+        }
+        showChapterSheetFrame();
+        sheetChapters = new ArrayList<>(chapters);
+        sheetVolumes.clear();
+        sheetInfo.setVisibility(View.VISIBLE);
+        // 信息行对齐截图：复用详情页的连载信息（如「连载至1160章 连续更新280天」）；
+        // 已被「共X章」覆盖时显示章节总数
+        String cur = tvLatestChapter.getText().toString();
+        sheetInfo.setText(cur.startsWith("共") ? "共 " + sheetChapters.size() + " 章" : cur);
+        rebuildSheetRows();
+        if (sheetAdapter != null) sheetAdapter.notifyDataSetChanged();
+        TocOrder.scrollToFirstRow(sheetRv);
+        scrollToSheetCurrent();
+    }
+
+    /** 本地导入书判定：id 在 local_books SP 有记录 */
+    private boolean isLocalImportedBook(long bookId) {
+        if (bookId <= 0 || currentBook == null) return false;
+        if (currentBook.getSourceType() != null || currentBook.getSourceUrl() != null) return false;
+        SharedPreferences sp = getSharedPreferences("local_books", MODE_PRIVATE);
+        int count = sp.getInt("count", 0);
+        for (int i = 0; i < count; i++) {
+            if (sp.getLong("book_id_" + i, 0) == bookId) return true;
+        }
+        return false;
+    }
+
+    /** 本地导入书：从 local_books SP 读章节标题 */
+    private void loadLocalChaptersIntoSheet(long bookId) {
+        SharedPreferences sp = getSharedPreferences("local_books", MODE_PRIVATE);
+        int count = sp.getInt("count", 0);
+        List<String[]> titles = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            if (sp.getLong("book_id_" + i, 0) == bookId) {
+                int chCount = sp.getInt("chapter_count_" + i, 0);
+                for (int j = 0; j < chCount; j++) {
+                    titles.add(new String[]{sp.getString("chapter_title_" + i + "_" + j, "第" + (j + 1) + "章")});
+                }
+                break;
+            }
+        }
+        if (!isSheetShowing()) return;
+        sheetChapters = titles;
+        sheetInfo.setText(sheetChapters.isEmpty() ? "暂无章节" : "共 " + sheetChapters.size() + " 章");
+        rebuildSheetRows();
+        if (sheetAdapter != null) sheetAdapter.notifyDataSetChanged();
+        TocOrder.scrollToFirstRow(sheetRv);
+        scrollToSheetCurrent();
+    }
+
+    /** 构建并展示弹窗骨架（面板贴底、高约 82% 屏高、从底部滑入；点外部/收起箭头关闭） */
+    private void showChapterSheetFrame() {
+        if (isSheetShowing()) return;
+        View content = LayoutInflater.from(this).inflate(R.layout.popup_chapter_sheet, null);
+        sheetSortBtn = content.findViewById(R.id.btn_sheet_sort);
+        sheetInfo = content.findViewById(R.id.tv_sheet_info);
+        sheetRv = content.findViewById(R.id.rv_sheet_chapters);
+        sheetSortBtn.setText(TocOrder.label(sheetOrder.isDescending()));
+        sheetSortBtn.setOnClickListener(v -> toggleSheetSort());
+        content.findViewById(R.id.iv_sheet_close).setOnClickListener(v -> dismissChapterSheet());
+        sheetRv.setLayoutManager(new LinearLayoutManager(this));
+        sheetAdapter = new SheetAdapter();
+        sheetRv.setAdapter(sheetAdapter);
+
+        // 列表跟手：目录滚到顶部（无法再上滚）后继续下拉，弹窗跟随手指；
+        // 松手下拉超面板高 30% → 收起，否则弹回。列表未到顶时正常滚动不受影响。
+        sheetRv.setOnTouchListener(new View.OnTouchListener() {
+            float downRawY;
+            boolean tracking;
+            @Override
+            public boolean onTouch(View v, MotionEvent ev) {
+                switch (ev.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        downRawY = ev.getRawY();
+                        tracking = false;
+                        return false;   // 先放行给列表，保持其滚动能力
+                    case MotionEvent.ACTION_MOVE: {
+                        float dy = ev.getRawY() - downRawY;
+                        if (!tracking) {
+                            int slop = android.view.ViewConfiguration
+                                    .get(BookDetailActivity.this).getScaledTouchSlop();
+                            if (dy > slop && !sheetRv.canScrollVertically(-1)) {
+                                tracking = true;
+                                downRawY = ev.getRawY();   // 以接管点为基准，避免跳变
+                                if (content.animate() != null) content.animate().cancel();
+                            }
+                            return tracking;   // 接管后拦下事件，列表停止响应
+                        }
+                        if (dy > 0) content.setTranslationY(dy);
+                        return true;
+                    }
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        if (!tracking) return false;
+                        tracking = false;
+                        float released = Math.max(0f, ev.getRawY() - downRawY);
+                        float h = content.getHeight() > 0 ? content.getHeight() : 1f;
+                        if (released > h * 0.30f) {
+                            dismissChapterSheet();   // 从当前位置继续滑出
+                        } else {
+                            content.animate().translationY(0f).setDuration(200)
+                                    .setInterpolator(new AccelerateDecelerateInterpolator()).start();
+                        }
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        });
+
+        sheetPanelView = content;
+
+        // 顶栏跟手拖拽：按住标题栏下拉，松手超过阈值（面板高 30%）即收起，否则弹回
+        View titleBar = content.findViewById(R.id.popup_title_bar);
+        titleBar.setOnTouchListener(new View.OnTouchListener() {
+            float downRawY;
+            @Override
+            public boolean onTouch(View v, MotionEvent ev) {
+                switch (ev.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        downRawY = ev.getRawY();
+                        if (content.animate() != null) content.animate().cancel();
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        float dy = ev.getRawY() - downRawY;
+                        if (dy > 0) content.setTranslationY(dy);
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        float released = Math.max(0f, ev.getRawY() - downRawY);
+                        float h = content.getHeight() > 0 ? content.getHeight() : 1f;
+                        if (released > h * 0.30f) {
+                            dismissChapterSheet();  // 从当前位置继续滑出
+                        } else {
+                            content.animate().translationY(0f).setDuration(200)
+                                    .setInterpolator(new AccelerateDecelerateInterpolator()).start();
+                        }
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        });
+
+        int panelH = (int) (getResources().getDisplayMetrics().heightPixels * 0.82f);
+        android.widget.FrameLayout host = new android.widget.FrameLayout(this);
+        android.widget.FrameLayout.LayoutParams lp = new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, panelH, Gravity.BOTTOM);
+        content.setLayoutParams(lp);
+        host.addView(content);
+
+        chapterSheetPopup = new PopupWindow(host,
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, true);
+        chapterSheetPopup.setAnimationStyle(0);
+        chapterSheetPopup.setBackgroundDrawable(
+                new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        // 点面板外：拦截 ACTION_OUTSIDE，走带滑出动画的关闭（否则焦点弹窗会瞬时 dismiss）
+        chapterSheetPopup.setTouchInterceptor((v, ev) -> {
+            if (ev.getAction() == MotionEvent.ACTION_OUTSIDE) {
+                dismissChapterSheet();
+                return true;
+            }
+            return false;
+        });
+        chapterSheetPopup.setOnDismissListener(() -> {
+            chapterSheetPopup = null;
+            sheetPanelView = null;
+            sheetDismissing = false;
+        });
+        chapterSheetPopup.showAtLocation(getWindow().getDecorView(), Gravity.BOTTOM, 0, 0);
+
+        // 入场：首帧绘制前把面板移到屏幕下沿之外，再滑入（避免首帧闪现）
+        content.setVisibility(View.INVISIBLE);
+        host.getViewTreeObserver().addOnPreDrawListener(
+                new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    @Override
+                    public boolean onPreDraw() {
+                        float h = content.getHeight() > 0 ? content.getHeight() : panelH;
+                        if (h <= 0) return true;
+                        host.getViewTreeObserver().removeOnPreDrawListener(this);
+                        content.setVisibility(View.VISIBLE);
+                        content.setTranslationY(h);
+                        content.animate().translationY(0f).setDuration(240)
+                                .setInterpolator(new AccelerateDecelerateInterpolator()).start();
+                        return true;
+                    }
+                });
+
+        // 打开目录前先同步本地记录，确保用的是最新进度（从阅读器返回详情页后状态可能陈旧）
+        if (!isExternalBook()) {
+            syncLocalReadingProgress();
+        }
+        sheetCurrentIndex = hasRead ? savedChapterIndex : -1;
+    }
+
+    private boolean isSheetShowing() {
+        return chapterSheetPopup != null && chapterSheetPopup.isShowing();
+    }
+
+    /** 收起弹窗：面板从当前位置向下滑出屏幕后再 dismiss（与入场滑入对称） */
+    private void dismissChapterSheet() {
+        if (chapterSheetPopup == null || !chapterSheetPopup.isShowing()) return;
+        if (sheetDismissing) return;
+        View panel = sheetPanelView;
+        if (panel == null) {
+            chapterSheetPopup.dismiss();
+            return;
+        }
+        sheetDismissing = true;
+        float h = panel.getHeight() > 0 ? panel.getHeight()
+                : getResources().getDisplayMetrics().heightPixels;
+        panel.animate().translationY(h).setDuration(220)
+                .setInterpolator(new AccelerateDecelerateInterpolator())
+                .withEndAction(() -> {
+                    if (chapterSheetPopup != null) chapterSheetPopup.dismiss();
+                })
+                .start();
+    }
+
+    /** 正序/倒序切换：正序有卷头分组（覆盖完整时），倒序整表反转（卷头仅在正序展示） */
+    private void toggleSheetSort() {
+        sheetOrder.toggle();
+        sheetSortBtn.setText(TocOrder.label(sheetOrder.isDescending()));
+        rebuildSheetRows();
+        if (sheetAdapter != null) sheetAdapter.notifyDataSetChanged();
+        TocOrder.scrollToFirstRow(sheetRv);
+    }
+
+    /** 按当前排序与分卷构建渲染行；分卷不能完整覆盖全部章节时退回平铺，绝不丢章 */
+    private void rebuildSheetRows() {
+        sheetRows.clear();
+        boolean desc = sheetOrder.isDescending();
+        int n = sheetChapters.size();
+        if (!desc && !sheetVolumes.isEmpty() && n > 0) {
+            int covered = 0;
+            for (LocalBookParser.VolumeInfo v : sheetVolumes) {
+                if (v.end >= v.childStart) covered += v.end - v.childStart + 1;
+            }
+            if (covered == n) {
+                for (LocalBookParser.VolumeInfo v : sheetVolumes) {
+                    if (v.title != null && !v.title.isEmpty()) sheetRows.add(v.title);
+                    for (int i = v.childStart; i <= v.end && i < n; i++) sheetRows.add(new int[]{i});
+                }
+                return;
+            }
+        }
+        for (int p = 0; p < n; p++) {
+            sheetRows.add(new int[]{desc ? (n - 1 - p) : p});
+        }
+    }
+
+    /** 当前阅读章节在渲染行中的位置（用于打开弹窗后自动定位） */
+    private void scrollToSheetCurrent() {
+        if (sheetCurrentIndex < 0 || sheetRv == null) return;
+        sheetRv.post(() -> {
+            if (!isSheetShowing()) return;
+            int pos = -1;
+            for (int i = 0; i < sheetRows.size(); i++) {
+                Object row = sheetRows.get(i);
+                if (row instanceof int[] && ((int[]) row)[0] == sheetCurrentIndex) {
+                    pos = i;
+                    break;
+                }
+            }
+            if (pos >= 0 && sheetRv.getLayoutManager() instanceof LinearLayoutManager) {
+                ((LinearLayoutManager) sheetRv.getLayoutManager())
+                        .scrollToPositionWithOffset(Math.max(0, pos - 2), 0);
+            }
+        });
+    }
+
+    /** 点击章节：跳转阅读器并关闭弹窗（详情页保留，返回时可回此页）。
+     *  chapterExplicit=true：显式跳章，ReadActivity 直接进入点击章节，不被阅读进度覆盖 */
+    private void openSheetChapter(int realIndex) {
+        dismissChapterSheet();
+        Intent intent = new Intent(this, ReadActivity.class);
+        intent.putExtra("book", currentBook);
+        intent.putExtra("chapterExplicit", true);
+        if (isExternalBook()) {
+            intent.putExtra("isExternal", true);
+            putChaptersExtra(this, intent, currentBook, sheetChapters);
+            intent.putExtra("chapterIndex", realIndex);
+            try { startActivity(intent); }
+            catch (RuntimeException te) {
+                Intent fallback = new Intent(this, ReadActivity.class);
+                fallback.putExtra("book", currentBook);
+                fallback.putExtra("isExternal", true);
+                fallback.putExtra("chaptersViaCache", true);
+                fallback.putExtra("chapterExplicit", true);
+                fallback.putExtra("chapterIndex", realIndex);
+                startActivity(fallback);
+            }
+        } else {
+            intent.putExtra("chapterIndex", realIndex);
+            startActivity(intent);
+        }
+    }
+
+    /** 当前章行背景：淡蓝底 + 左侧 3dp 蓝色竖条（绘制与视图宽度无关，无需测量） */
+    private static class CurrentChapterBg extends Drawable {
+        private final Paint paint = new Paint();
+        private final int baseColor;
+        private final int barColor;
+        private final int barWidth;
+
+        CurrentChapterBg(int baseColor, int barColor, int barWidth) {
+            this.baseColor = baseColor;
+            this.barColor = barColor;
+            this.barWidth = barWidth;
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            Rect b = getBounds();
+            paint.setColor(baseColor);
+            canvas.drawRect(b, paint);
+            paint.setColor(barColor);
+            canvas.drawRect(b.left, b.top, b.left + barWidth, b.bottom, paint);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            paint.setAlpha(alpha);
+        }
+
+        @Override
+        public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            paint.setColorFilter(colorFilter);
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
+    }
+
+    /** 行尾"当前"标记：淡蓝圆角底 + 小号蓝字（ReplacementSpan 自行绘制，字号约 0.75 倍） */
+    private static class CurrentTagSpan extends ReplacementSpan {
+        private final int bgColor;
+        private final int textColor;
+        private final float textSizePx;
+        private final float padH;
+        private final float radius;
+
+        CurrentTagSpan(int bgColor, int textColor, float textSizePx, float padH, float radius) {
+            this.bgColor = bgColor;
+            this.textColor = textColor;
+            this.textSizePx = textSizePx;
+            this.padH = padH;
+            this.radius = radius;
+        }
+
+        @Override
+        public int getSize(@NonNull Paint paint, CharSequence text, int start, int end,
+                           Paint.FontMetricsInt fm) {
+            float oldSize = paint.getTextSize();
+            paint.setTextSize(textSizePx);
+            float w = paint.measureText(text, start, end);
+            paint.setTextSize(oldSize);
+            return (int) (w + padH * 2);
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end,
+                         float x, int top, int y, int bottom, @NonNull Paint paint) {
+            float oldSize = paint.getTextSize();
+            int oldColor = paint.getColor();
+            paint.setTextSize(textSizePx);
+
+            Paint.FontMetricsInt fm = paint.getFontMetricsInt();
+            float textW = paint.measureText(text, start, end);
+            float bgLeft = x;
+            float bgRight = x + textW + padH * 2;
+            float bgTop = y + fm.ascent;
+            float bgBottom = y + fm.descent;
+
+            Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+            bg.setColor(bgColor);
+            canvas.drawRoundRect(new RectF(bgLeft, bgTop, bgRight, bgBottom), radius, radius, bg);
+
+            paint.setColor(textColor);
+            canvas.drawText(text, start, end, x + padH, y, paint);
+
+            paint.setTextSize(oldSize);
+            paint.setColor(oldColor);
+        }
+    }
+
+    /** 当前章行背景单例（复用同一实例，避免每次绑定都新建） */
+    private Drawable getCurrentChapterBg() {
+        if (currentChapterBgDrawable == null) {
+            float d = getResources().getDisplayMetrics().density;
+            int barW = Math.max(1, Math.round(3 * d));
+            currentChapterBgDrawable = new CurrentChapterBg(0x14007AFF, 0xFF007AFF, barW);
+        }
+        return currentChapterBgDrawable;
+    }
+
+    /**
+     * 构造当前章标题文案：章节标题 + 行尾小号"当前"标记（淡蓝圆角底 + 蓝字，字号约 0.75 倍）。
+     * 仅当前章行调用；非当前章行用纯文本 setText 即可清除所有 span。
+     */
+    private CharSequence buildCurrentChapterTitle(TextView tv, String title) {
+        String tag = "当前";
+        String full = title + "  " + tag;
+        SpannableString ss = new SpannableString(full);
+        float d = getResources().getDisplayMetrics().density;
+        float smallSize = tv.getTextSize() * 0.75f;
+        float padH = 5 * d;
+        float radius = 3 * d;
+        int tagStart = full.length() - tag.length();
+        ss.setSpan(new CurrentTagSpan(0x1F007AFF, 0xFF007AFF, smallSize, padH, radius),
+                tagStart, full.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return ss;
+    }
+
+    /** 目录弹窗列表适配器：卷头（灰字）+ 章节行（当前章高亮） */
+    private class SheetAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+        private static final int TYPE_HEADER = 0;
+        private static final int TYPE_CHAPTER = 1;
+
+        @Override
+        public int getItemViewType(int position) {
+            return sheetRows.get(position) instanceof String ? TYPE_HEADER : TYPE_CHAPTER;
+        }
+
+        @NonNull
+        @Override
+        public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            TextView tv = new TextView(BookDetailActivity.this);
+            tv.setLayoutParams(new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            float d = getResources().getDisplayMetrics().density;
+            if (viewType == TYPE_HEADER) {
+                tv.setPadding((int) (20 * d), (int) (12 * d), (int) (20 * d), (int) (6 * d));
+                tv.setTextSize(13);
+                tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            } else {
+                tv.setPadding((int) (20 * d), (int) (13 * d), (int) (20 * d), (int) (13 * d));
+                tv.setTextSize(15);
+                tv.setClickable(true);
+                tv.setFocusable(true);
+                tv.setBackgroundResource(android.R.drawable.list_selector_background);
+            }
+            return new RecyclerView.ViewHolder(tv) {};
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+            TextView tv = (TextView) holder.itemView;
+            Object row = sheetRows.get(position);
+            if (row instanceof String) {
+                tv.setText((String) row);
+                tv.setTextColor(0xFF8E8E93);
+                return;
+            }
+            int realIndex = ((int[]) row)[0];
+            // 防御：数据重置与渲染行短暂不一致时不崩溃，兜底显示章节号
+            String title = "第" + (realIndex + 1) + "章";
+            if (realIndex >= 0 && realIndex < sheetChapters.size()) {
+                String[] ch = sheetChapters.get(realIndex);
+                if (ch != null && ch.length > 0 && ch[0] != null && !ch[0].isEmpty()) {
+                    title = ch[0];
+                }
+            }
+            if (realIndex == sheetCurrentIndex) {
+                // 当前章：淡蓝底 + 左侧蓝色竖条 + 蓝字粗体 + 行尾小号"当前"标记
+                tv.setBackground(getCurrentChapterBg());
+                tv.setTextColor(0xFF007AFF);
+                tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                tv.setText(buildCurrentChapterTitle(tv, title));
+            } else {
+                // 非当前章：彻底重置（纯文本 setText 清除所有 span；背景/字色/字重恢复原样），
+                // 避免 RecyclerView 复用把"当前"标记或竖条串到别的行上
+                tv.setTypeface(android.graphics.Typeface.DEFAULT);
+                tv.setTextColor(0xFF1D1D1F);
+                tv.setBackgroundColor(0x00000000);
+                tv.setText(title);
+            }
+            tv.setOnClickListener(v -> openSheetChapter(realIndex));
+        }
+
+        @Override
+        public int getItemCount() {
+            return sheetRows.size();
+        }
     }
 
     /**
@@ -929,7 +1728,7 @@ public class BookDetailActivity extends BaseActivity{
      */
     private void startOnlineReading() {
         if (currentBook.getSourceType() == null || currentBook.getSourceUrl() == null) {
-            Toast.makeText(this, "书源信息缺失", Toast.LENGTH_SHORT).show();
+            Hint.show(this, "书源信息缺失");
             return;
         }
 
@@ -970,7 +1769,7 @@ public class BookDetailActivity extends BaseActivity{
                 runOnUiThread(() -> {
                     btnRead.setEnabled(true);
                     btnRead.setText(hasRead ? "继续阅读" : "在线阅读");
-                    Toast.makeText(BookDetailActivity.this, "加载超时，请检查网络后重试", Toast.LENGTH_SHORT).show();
+                    Hint.show(BookDetailActivity.this, "加载超时，请检查网络后重试");
                 });
             }
         };
@@ -1008,7 +1807,7 @@ public class BookDetailActivity extends BaseActivity{
                     if (sourceMayDown) {
                         showSourceUnavailableDialog(msg);
                     } else {
-                        Toast.makeText(BookDetailActivity.this, msg, Toast.LENGTH_SHORT).show();
+                        Hint.show(BookDetailActivity.this, msg);
                     }
                 });
             }

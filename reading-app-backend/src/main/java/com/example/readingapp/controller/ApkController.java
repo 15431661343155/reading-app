@@ -1,6 +1,7 @@
 package com.example.readingapp.controller;
 
 import com.example.readingapp.dto.ApiResponse;
+import com.example.readingapp.entity.ApkPush;
 import com.example.readingapp.service.OperationLogService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -25,6 +26,7 @@ import java.util.List;
 public class ApkController {
 
     private final OperationLogService operationLogService;
+    private final com.example.readingapp.repository.ApkPushRepository apkPushRepository;
 
     @org.springframework.beans.factory.annotation.Value("${apk.upload-dir:/www/app/apk}")
     private String apkDir;
@@ -58,6 +60,7 @@ public class ApkController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(name = "appName", defaultValue = "书阁阅读") String appName,
             @RequestParam(name = "version", required = false) String version,
+            @RequestParam(name = "updateNotes", required = false) String updateNotes,
             HttpServletRequest request) {
         try {
             // 确保目录存在
@@ -105,6 +108,35 @@ public class ApkController {
             // 记录操作日志
             operationLogService.logBook(OperationLogService.TYPE_IMPORT,
                     "上传APK文件：" + safeName, null, getClientIp(request));
+
+            // 落一条「未推送」的 ApkPush 记录：更新内容/版本号在上传时登记，
+            // 推送接口按 fileName 命中此记录，把更新内容一并带给用户
+            try {
+                final String recordName = safeName;
+                final String recordVersion = v;
+                String notes = (updateNotes != null && !updateNotes.trim().isEmpty()) ? updateNotes.trim() : null;
+                ApkPush record = apkPushRepository.findAll().stream()
+                        .filter(a -> recordName.equals(a.getFileName()))
+                        .findFirst()
+                        .orElseGet(ApkPush::new);
+                if (record.getId() == null) {
+                    record.setFileName(recordName);
+                    // 公开下载接口路径（permitAll，App 端 DownloadManager 匿名可下）；
+                    // 勿存服务器本地路径或 /api/admin/...（需登录，匿名 401 → App 内下载失败）
+                    try {
+                        record.setFilePath("/api/app/apk/download/"
+                                + java.net.URLEncoder.encode(recordName, java.nio.charset.StandardCharsets.UTF_8));
+                    } catch (Exception encEx) {
+                        record.setFilePath("/api/app/apk/download/" + recordName);
+                    }
+                    record.setIsPushed(false);
+                }
+                if (recordVersion != null && !recordVersion.isEmpty()) record.setVersion(recordVersion);
+                if (notes != null) record.setUpdateNotes(notes);
+                apkPushRepository.save(record);
+            } catch (Exception recordEx) {
+                // 记录登记失败不影响上传本身；推送时仍可按 fileName+version 重建记录
+            }
 
             String downloadUrl = "/api/admin/apk/download/" + URLEncoder.encode(safeName, StandardCharsets.UTF_8);
             String uploadTime = java.time.LocalDateTime.now().format(
