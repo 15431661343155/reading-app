@@ -500,6 +500,12 @@ public class BookShelfFragment extends Fragment {
         float csx0, csy0;         // 封面初始缩放补偿
         float ctx0, cty0;         // 封面初始位移补偿
         View outBox, inBox;       // 旧/新文字盒
+        boolean outIsList, inIsList;          // 旧/新文字盒是否为列表盒（决定内边距/几何）
+        int outLeftPad, outRightPad;         // 旧文字盒左右内边距(px)
+        int inLeftPad, inRightPad;           // 新文字盒左右内边距(px)
+        int outTopMargin, inTopMargin;       // 旧/新文字盒 top margin(px)
+        int outH, inH;                        // 旧/新文字盒名义高(px)
+        int cardMarginTop;                    // 新模式下卡片 top margin(px)
     }
 
     private final android.view.animation.Interpolator morphInterp = new AccelerateDecelerateInterpolator();
@@ -530,6 +536,25 @@ public class BookShelfFragment extends Fragment {
             it.outBox = isGridView ? h.listTextBox : h.gridTextBox;
             it.inBox = isGridView ? h.gridTextBox : h.listTextBox;
             it.hasFrom = r0 != null && c0 != null && it.r1.width() > 0 && it.r1.height() > 0;
+
+            // 预计算文字盒内边距/几何（px），供 applyMorphState 每帧把宽度钳在卡片当前渲染宽内。
+            // 列表盒：左内边距 dp100(编辑 134)/右 dp14/高 96；宫格盒：左右各 dp12/top dp158/高 33。
+            it.outIsList = (it.outBox == h.listTextBox);
+            it.inIsList = (it.inBox == h.listTextBox);
+            boolean editAdj = adapter.isEditMode();
+            int dp4b = Math.round(4 * d), dp6b = Math.round(6 * d), dp12b = Math.round(12 * d),
+                dp14b = Math.round(14 * d), dp18b = Math.round(18 * d), dp33b = Math.round(33 * d),
+                dp96b = Math.round(96 * d), dp158b = Math.round(158 * d);
+            int dp100b = Math.round((100f + (editAdj ? 34f : 0f)) * d);
+            it.outLeftPad = it.outIsList ? dp100b : dp12b;
+            it.outRightPad = it.outIsList ? dp14b : dp12b;
+            it.outTopMargin = it.outIsList ? dp18b : dp158b;
+            it.outH = it.outIsList ? dp96b : dp33b;
+            it.inLeftPad = it.inIsList ? dp100b : dp12b;
+            it.inRightPad = it.inIsList ? dp14b : dp12b;
+            it.inTopMargin = it.inIsList ? dp18b : dp158b;
+            it.inH = it.inIsList ? dp96b : dp33b;
+            it.cardMarginTop = isGridView ? dp4b : dp6b;
 
             if (it.hasFrom) {
                 it.r0 = r0;
@@ -628,17 +653,27 @@ public class BookShelfFragment extends Fragment {
         float rty = by - child.getTop();
         child.setTranslationX(rtx);
         child.setTranslationY(rty);
-        // 文字盒/多选框随根刚性位移（只淡化不缩放 → 字形永不变形）；
-        // 可见性每帧重申（rebind 的 applyMode 会把旧盒设回 INVISIBLE）
+        // 文字盒/多选框只随 child（item 根）平移即可，不再叠加 rtx/rty；
+        // 此前多叠一份 rtx → 文字盒相对卡片被推出「卡片自身位移量」、随 rtx→0 归位，
+        // 表现为「书籍信息从卡片外飞入」。去掉额外位移后，信息始终锁定在卡片内浮现。
+        // 仅交叉淡化、不缩放 → 字形永不变形。可见性每帧重申（rebind 的 applyMode 会把旧盒设回 INVISIBLE）
         it.outBox.setVisibility(View.VISIBLE);
         it.inBox.setVisibility(View.VISIBLE);
-        it.outBox.setTranslationX(rtx);
-        it.outBox.setTranslationY(rty);
-        it.inBox.setTranslationX(rtx);
-        if (h.ivCheckbox != null) {
-            h.ivCheckbox.setTranslationX(rtx);
-            h.ivCheckbox.setTranslationY(rty);
-        }
+        // 文字盒宽度逐帧跟随「卡片当前渲染宽」：左/右内边距按各自模式（编辑模式列表左内边距 100→134dp），
+        // 不再钉死在 rvW 全宽 → 列表→宫格卡片收窄时文字盒右缘恒等于卡右缘减内边距，从右向左被裁掉；
+        // 下缘上吸保证文字盒底不越过卡片渲染下缘（终帧自动归 0，无跳变）。
+        float cardW = it.r0.width() + (it.r1.width() - it.r0.width()) * e;
+        float cardH = it.r0.height() + (it.r1.height() - it.r0.height()) * e;
+        ViewGroup.MarginLayoutParams olp = (ViewGroup.MarginLayoutParams) it.outBox.getLayoutParams();
+        olp.width = Math.max(6, Math.round(cardW - it.outLeftPad - it.outRightPad));
+        it.outBox.setLayoutParams(olp);
+        float outOver = (it.outTopMargin - it.cardMarginTop) + it.outH - cardH;
+        it.outBox.setTranslationY(outOver > 0f ? -outOver : 0f);
+        ViewGroup.MarginLayoutParams ilp = (ViewGroup.MarginLayoutParams) it.inBox.getLayoutParams();
+        ilp.width = Math.max(6, Math.round(cardW - it.inLeftPad - it.inRightPad));
+        it.inBox.setLayoutParams(ilp);
+        float inOver = (it.inTopMargin - it.cardMarginTop) + it.inH - cardH;
+        it.inBox.setTranslationY((1f - e) * inShiftY + (inOver > 0f ? -inOver : 0f));
         // 卡片：缩放归一（pivot 左上角）
         h.cardBg.setPivotX(0f);
         h.cardBg.setPivotY(0f);
@@ -654,17 +689,9 @@ public class BookShelfFragment extends Fragment {
         h.coverBox.setTranslationX(it.ctx0 * (1 - e));
         h.coverBox.setTranslationY(it.cty0 * (1 - e));
         adapter.applyCoverMatrix(h, csx, csy);
-        // 无封面书名蒙版：宫格切入时随形变进度淡入（applyMode 已按模式点亮可见性，
-        // 这里只管 alpha；结束回调/取消路径由 applyMode 复位 alpha=1）
-        if (h.tvCoverTitle != null && h.tvCoverTitle.getVisibility() == View.VISIBLE) {
-            h.tvCoverTitle.setAlpha(e);
-        }
-        // 文字交叉淡化（旧字 25%~60% 退场、新字 30%~65% 滑入 —— 有重叠、无空档）
-        float outA = 1f - Math.max(0f, Math.min(1f, (e - 0.25f) / 0.35f));
-        float inA = Math.max(0f, Math.min(1f, (e - 0.30f) / 0.35f));
-        it.outBox.setAlpha(outA);
-        it.inBox.setAlpha(inA);
-        it.inBox.setTranslationY(rty + (1 - inA) * inShiftY);
+        // 文字连续交叉淡化：旧字随缓动进度 1→0、新字 0→1（宽度已跟随卡片，信息随卡片收拢/展开，无空白空档）
+        it.outBox.setAlpha(1f - e);
+        it.inBox.setAlpha(e);
     }
 
     private void cancelMorph() {

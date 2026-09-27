@@ -524,6 +524,19 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
             tvCoverTitle = itemView.findViewById(R.id.tv_cover_title);
             cardBg = itemView.findViewById(R.id.card_bg);
             coverBox = itemView.findViewById(R.id.cover_box);
+            // ⚠️ 书城/分类/搜索/本地书城走的 item_book.xml 没有 cover_box 节点（那类封面走圆角
+            // transform，不依赖 matrix 裁切），coverBox 会返回 null —— 必须判空，否则
+            // addOnLayoutChangeListener 直接 NPE，整页 RecyclerView 渲染崩溃（点击书城即闪退）。
+            if (coverBox != null) {
+                // 关键修复：封面盒每次真正完成布局（拿到真实尺寸）时用真实尺寸重算静止态 Matrix。
+                // 彻底摆脱「绑定时机 / 隐藏态 getWidth=0 / 复用 holder 历史宽度 / 多次 notifyDataSetChanged」
+                // 导致矩阵用错尺寸或干脆没算（新书封面缩到左上角 = identity 矩阵）的问题。
+                coverBox.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                    if (r - l > 0 && b - t > 0) {
+                        BookAdapter.this.applyCoverMatrix(BookHolder.this, 1f, 1f);
+                    }
+                });
+            }
             listTextBox = itemView.findViewById(R.id.list_text_box);
             gridTextBox = itemView.findViewById(R.id.grid_text_box);
             tvNameGrid = itemView.findViewById(R.id.tv_book_name_grid);
