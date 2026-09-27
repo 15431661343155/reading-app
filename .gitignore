@@ -80,5 +80,9 @@ yb_config.json
 _reading_records.xml
 _reading_records_test.xml
 _ui.xml
+# ============ 历史垃圾产物（从版本库移除，保留本地，不再提交） ============
+/ppt_work/
+/verify_kaiti/
+/legado-ref/
 # AI 工具产物目录
 文档/
