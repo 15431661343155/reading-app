@@ -142,6 +142,17 @@ public class BookDetailActivity extends BaseActivity{
             return;
         }
 
+        // ✅ 外站书归一化：从书架进入的外站书带有合成负数 id（BookShelfFragment.loadExternalBooks
+        //    生成，供书架进度匹配用，status=-2）。下方 isExternalBook() 以「id==null」为外站判据，
+        //    不归一化会被误判成本站书 → 走 id 键的本站接口（假 id 必然查不到）→ 简介/目录/最新章节全部无数据。
+        //    这里把「携带书源信息且 id 为负」的书统一置空 id，与「书城→详情页」的外站书形态完全一致，
+        //    使外站分支（preloadOnlineChapters / fetchExternalBookDetail / checkExternalReadingProgress）正常生效。
+        Long syntheticId = currentBook.getId();
+        if (syntheticId != null && syntheticId < 0
+                && (currentBook.getSourceType() != null || currentBook.getSourceUrl() != null)) {
+            currentBook.setId(null);
+        }
+
         initView();
         setupToolbar(currentTheme);
         displayBookInfo();
@@ -720,6 +731,11 @@ public class BookDetailActivity extends BaseActivity{
                 if (hasRead) {
                     intent.putExtra("chapterIndex", savedChapterIndex);
                 }
+                // ✅ 栈内复用：返回栈中已有同书阅读器时（阅读器→书籍详情→再进阅读器），
+                //    复用栈内实例并清掉其上的详情页，不再叠出第二个 ReadActivity。
+                //    否则新实例会把复用池里唯一的共享 WebView 从旧实例上抢走，
+                //    旧阅读器返回后正文空白、无法唤出导航栏、停在旧章节。
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 startActivity(intent);
             }
         });
@@ -1504,13 +1520,17 @@ public class BookDetailActivity extends BaseActivity{
         });
     }
 
-    /** 点击章节：跳转阅读器并关闭弹窗（详情页保留，返回时可回此页）。
+    /** 点击章节：跳转阅读器并关闭弹窗。若返回栈里已有同书阅读器（阅读器→书籍详情→目录选章），
+     *  通过 CLEAR_TOP|SINGLE_TOP 复用栈内实例并清掉其上的详情页——阅读器点返回直接回到
+     *  最初进入阅读器的页面，阅读记录为最新章节；不会叠出第二个阅读器实例。
      *  chapterExplicit=true：显式跳章，ReadActivity 直接进入点击章节，不被阅读进度覆盖 */
     private void openSheetChapter(int realIndex) {
         dismissChapterSheet();
         Intent intent = new Intent(this, ReadActivity.class);
         intent.putExtra("book", currentBook);
         intent.putExtra("chapterExplicit", true);
+        // ✅ 栈内复用，见 openSheetChapter 注释
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         if (isExternalBook()) {
             intent.putExtra("isExternal", true);
             putChaptersExtra(this, intent, currentBook, sheetChapters);
@@ -1523,6 +1543,7 @@ public class BookDetailActivity extends BaseActivity{
                 fallback.putExtra("chaptersViaCache", true);
                 fallback.putExtra("chapterExplicit", true);
                 fallback.putExtra("chapterIndex", realIndex);
+                fallback.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 startActivity(fallback);
             }
         } else {
@@ -1745,6 +1766,8 @@ public class BookDetailActivity extends BaseActivity{
             Intent intent = new Intent(BookDetailActivity.this, ReadActivity.class);
             intent.putExtra("book", currentBook);
             intent.putExtra("isExternal", true);
+            // ✅ 栈内复用：返回栈中已有同书阅读器时复用栈内实例（避免共享 WebView 被新实例抢走）
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             putChaptersExtra(BookDetailActivity.this, intent, currentBook, cached); // 小书走Intent，大书走缓存
             if (hasRead) intent.putExtra("chapterIndex", savedChapterIndex);
             try { startActivity(intent); }
@@ -1754,6 +1777,7 @@ public class BookDetailActivity extends BaseActivity{
                 fallback.putExtra("book", currentBook);
                 fallback.putExtra("isExternal", true);
                 fallback.putExtra("chaptersViaCache", true);
+                fallback.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 if (hasRead) fallback.putExtra("chapterIndex", savedChapterIndex);
                 startActivity(fallback);
             }
@@ -1785,6 +1809,8 @@ public class BookDetailActivity extends BaseActivity{
                     Intent intent = new Intent(BookDetailActivity.this, ReadActivity.class);
                     intent.putExtra("book", currentBook);
                     intent.putExtra("isExternal", true);
+                    // ✅ 栈内复用：返回栈中已有同书阅读器时复用栈内实例（避免共享 WebView 被新实例抢走）
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     putChaptersExtra(BookDetailActivity.this, intent, currentBook, chapters);
                     if (hasRead) intent.putExtra("chapterIndex", savedChapterIndex);
                     try { startActivity(intent); }
@@ -1793,6 +1819,7 @@ public class BookDetailActivity extends BaseActivity{
                         fallback.putExtra("book", currentBook);
                         fallback.putExtra("isExternal", true);
                         fallback.putExtra("chaptersViaCache", true);
+                        fallback.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                         if (hasRead) fallback.putExtra("chapterIndex", savedChapterIndex);
                         startActivity(fallback);
                     }

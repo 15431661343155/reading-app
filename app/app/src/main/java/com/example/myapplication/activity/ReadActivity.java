@@ -6201,6 +6201,113 @@ public class ReadActivity extends BaseActivity {
     }
 
     // ==================== 生命周期 ====================
+
+    /**
+     * ✅ 栈内复用入口：书籍详情页启动阅读器时带 FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_SINGLE_TOP，
+     * 当返回栈里已存在同书阅读器实例（典型路径：阅读器→书籍详情→目录选章）时，不再叠出第二个
+     * ReadActivity，而是把新 Intent 投递给栈内实例。
+     * 背景：复用池里只有一个共享 WebView，第二个阅读器实例 initView 时会把它从旧实例视图树上抢走，
+     * 旧阅读器返回后正文空白、无法唤出导航栏、停在旧章节 —— 本方法配合详情页的 flags 从根上消除双实例。
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleReuseIntent(intent);
+    }
+
+    /** 处理栈内复用时投递的新 Intent：同书→按需跳章；异书（防御）→按新意图整体重载 */
+    private void handleReuseIntent(Intent intent) {
+        try {
+            if (intent == null) return;
+            Book newBook = (Book) intent.getSerializableExtra("book");
+            boolean newIsExternal = intent.getBooleanExtra("isExternal", false);
+            int targetIndex = intent.getIntExtra("chapterIndex", -1);
+            boolean explicit = intent.getBooleanExtra("chapterExplicit", false);
+
+            if (!isSameBookInstance(newBook, newIsExternal)) {
+                // 防御：正常路径书籍详情只会启动同一本书；若真的换了书，清空旧书状态整体重载
+                applyNewBookExtras(intent, newBook, newIsExternal);
+                setChapterLoading(true);
+                loadChaptersFromServer();
+                return;
+            }
+
+            if (explicit) {
+                // 目录显式跳章：与阅读器内目录弹窗（PopupChapterFragment 回调）同一条跳章路径
+                if (targetIndex >= 0 && targetIndex < chapterList.size()) {
+                    if (targetIndex != currentChapterIndex) {
+                        loadChapterContent(targetIndex);
+                    }
+                } else {
+                    // 章节列表尚未就绪等异常情况：把目标写回字段后整体重载
+                    // （loadChaptersFromServer 内部会消费 explicitChapterJump / currentChapterIndex）
+                    explicitChapterJump = true;
+                    if (targetIndex >= 0) currentChapterIndex = targetIndex;
+                    setChapterLoading(true);
+                    loadChaptersFromServer();
+                }
+            }
+            // 非 explicit（"开始阅读/继续阅读"）：本实例刚在 onPause 时保存过阅读记录，
+            // 当前状态即最新进度，保持原位即可，不做跳转。
+        } catch (Throwable t) {
+            android.util.Log.e("ReadActivity", "onNewIntent 复用处理异常", t);
+        }
+    }
+
+    /** 判断投递来的 Intent 是否指向当前正在阅读的同一本书（外站书以 书源类型+书源URL 标识，其 id 可能为 null） */
+    private boolean isSameBookInstance(Book newBook, boolean newIsExternal) {
+        if (currentBook == null || newBook == null) return false;
+        if (isExternalBook != newIsExternal) return false;
+        if (isExternalBook) {
+            String aType = currentBook.getSourceType(), bType = newBook.getSourceType();
+            String aUrl = currentBook.getSourceUrl(), bUrl = newBook.getSourceUrl();
+            return (aType == null ? bType == null : aType.equals(bType))
+                    && (aUrl == null ? bUrl == null : aUrl.equals(bUrl));
+        }
+        return currentBook.getId() != null && currentBook.getId().equals(newBook.getId());
+    }
+
+    /** 异书复用（防御路径）：按新 Intent 重置书籍相关状态（解析逻辑与 onCreate 保持一致） */
+    private void applyNewBookExtras(Intent intent, Book newBook, boolean newIsExternal) {
+        if (newBook != null) currentBook = newBook;
+        isExternalBook = newIsExternal;
+        isLocalBook = intent.getBooleanExtra("isLocal", false);
+        explicitChapterJump = intent.getBooleanExtra("chapterExplicit", false);
+        currentChapterIndex = intent.getIntExtra("chapterIndex", 0);
+        Object chapters = intent.getSerializableExtra("chapters");
+        externalChapters = (chapters instanceof String[][]) ? (String[][]) chapters : null;
+
+        // 与 onCreate 一致：即使 intent 没传对，也从 local_books 检测是否为本地书
+        if (!isLocalBook && !isExternalBook && currentBook.getId() != null && currentBook.getId() > 0) {
+            SharedPreferences spLocal = getSharedPreferences("local_books", MODE_PRIVATE);
+            int localCount = spLocal.getInt("count", 0);
+            for (int i = 0; i < localCount; i++) {
+                if (spLocal.getLong("book_id_" + i, 0) == currentBook.getId()) {
+                    isLocalBook = true;
+                    currentBook.setStatus(-1);
+                    break;
+                }
+            }
+        }
+
+        // 清空旧书的章节状态，避免串书
+        chapterList.clear();
+        chapterContents.clear();
+        chapterHtmlContents.clear();
+        localVolumes.clear();
+        serverMajorChapters.clear();
+        chapterRestoredFromCache = false;
+        hasRestoredFromLocal = false;
+        positionRestored = false;
+        restoreTargetPage = 1;
+
+        if (tvToolbarTitle != null && currentBook.getBookName() != null) {
+            tvToolbarTitle.setText(currentBook.getBookName());
+        }
+        updateChapterButtons();
+    }
+
     @Override protected void onPause() {
         super.onPause();
         activityResumed = false;
