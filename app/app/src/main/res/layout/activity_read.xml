@@ -4,6 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:clipChildren="false"
     android:background="@color/ios_bg">
 
     <!-- 阅读内容区域（嵌套 FrameLayout 防止导航栏显隐导致 WebView 高度变化） -->
@@ -134,13 +135,14 @@
 
     </LinearLayout>
 
-    <!-- 下导航栏（iOS 毛玻璃观感） -->
+    <!-- 下导航栏（iOS 毛玻璃观感）；clipChildren=false 允许液态滑块浮窗向上溢出导航栏绘制 -->
     <LinearLayout
         android:id="@+id/layout_bottom_nav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:orientation="vertical"
+        android:clipChildren="false"
         android:background="@color/ios_tab_bar"
         android:elevation="10dp"
         android:visibility="gone">
@@ -151,13 +153,16 @@
             android:layout_height="0.5dp"
             android:background="@color/ios_separator"/>
 
-        <!-- 第一行：上一章、进度条、下一章 -->
+        <!-- 第一行：上一章、进度条、下一章（滑轨与两侧按钮文字同线居中；
+             clipToPadding/clipChildren=false 允许浮窗向上溢出本行绘制） -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="60dp"
             android:orientation="horizontal"
-            android:paddingHorizontal="8dp"
+            android:paddingHorizontal="22dp"
             android:paddingVertical="4dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:gravity="center_vertical">
 
             <!-- 上一章 -->
@@ -182,31 +187,28 @@
                     android:textColor="@color/black" />
             </LinearLayout>
 
-            <!-- 进度条区域 -->
-            <LinearLayout
+            <!-- 进度条区域：滑轨居中与按钮文字同线，章节名小字叠放在滑轨下缘空白处 -->
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingHorizontal="6dp">
+                android:clipChildren="false">
 
-                <SeekBar
+                <com.example.myapplication.view.LiquidSlider
                     android:id="@+id/seekbar_progress"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="100"
-                    android:progressTint="@color/ios_blue"
-                    android:thumbTint="@color/ios_blue" />
+                    android:layout_height="26dp"
+                    android:layout_gravity="center_vertical" />
 
                 <TextView
                     android:id="@+id/tv_progress_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="1/8章"
-                    android:textSize="12sp"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:layout_marginBottom="1dp"
+                    android:textSize="11sp"
                     android:textColor="@color/ios_text_secondary" />
-            </LinearLayout>
+            </FrameLayout>
 
             <!-- 下一章 -->
             <LinearLayout

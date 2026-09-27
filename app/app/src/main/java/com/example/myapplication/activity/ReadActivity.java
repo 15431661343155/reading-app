@@ -102,7 +102,7 @@ public class ReadActivity extends BaseActivity {
     private View btnPrevChapter, btnNextChapter, btnCatalog, btnNightMode, btnSettings;
     private ImageView ivNightModeIcon;
     private TextView tvNightModeText;
-    private SeekBar seekBarProgress;
+    private com.example.myapplication.view.LiquidSlider liquidSlider;
 
     // ========== 弹窗 ==========
     private PopupWindow chapterPopupWindow, moreMenuPopupWindow, settingsPopupWindow, moreSettingsPopupWindow, bgColorsPopupWindow, fontsPopupWindow;
@@ -589,7 +589,7 @@ public class ReadActivity extends BaseActivity {
         btnSettings = findViewById(R.id.btn_settings);
         ivNightModeIcon = findViewById(R.id.iv_night_mode_icon);
         tvNightModeText = findViewById(R.id.tv_night_mode_text);
-        seekBarProgress = findViewById(R.id.seekbar_progress);
+        liquidSlider = findViewById(R.id.seekbar_progress);
         tvProgressText = findViewById(R.id.tv_progress_text);
         tvToolbarTitle.setText(currentBook.getBookName());
 
@@ -2535,22 +2535,18 @@ public class ReadActivity extends BaseActivity {
     // ==================== UI 更新 ====================
     @SuppressLint("SetTextI18n")
     private void updateProgressDisplay() {
-        // 获取当前章节的实际标题
-        String chapterTitle = "";
+        // 下方仅显示章节名；页码由滑块浮窗与正文页脚呈现，不再重复显示
+        tvProgressText.setText(resolveChapterTitle());
+        liquidSlider.setProgressInfo(currentPageInChapter, totalPagesInChapter);
+    }
+
+    /** 当前章节的展示标题（特殊章节如作者的话用真实标题，否则用“第X章”） */
+    private String resolveChapterTitle() {
         if (currentChapterIndex >= 0 && currentChapterIndex < chapterList.size()) {
-            chapterTitle = chapterList.get(currentChapterIndex).getTitle();
+            String t = chapterList.get(currentChapterIndex).getTitle();
+            if (t != null && !t.isEmpty()) return t;
         }
-        
-        // 显示实际章节标题，而不是“第X章”，避免特殊章节（如作者的话、第x章(上)等）显示错误
-        if (chapterTitle != null && !chapterTitle.isEmpty()) {
-            tvProgressText.setText(chapterTitle + " " + currentPageInChapter + "/" + totalPagesInChapter + "页");
-        } else {
-            tvProgressText.setText("第" + (currentChapterIndex + 1) + "章 " + currentPageInChapter + "/" + totalPagesInChapter + "页");
-        }
-        
-        int max = totalPagesInChapter > 1 ? totalPagesInChapter - 1 : 0;
-        seekBarProgress.setMax(max);
-        seekBarProgress.setProgress(currentPageInChapter - 1);
+        return "第" + (currentChapterIndex + 1) + "章";
     }
 
     private void updateChapterButtons() {
@@ -2867,14 +2863,19 @@ public class ReadActivity extends BaseActivity {
             showSettingsDialog();
         });
 
-        seekBarProgress.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser && totalPagesInChapter > 1) {
-                    webView.evaluateJavascript("jumpToPage(" + (progress + 1) + ")", null);
+        // 液态滑块：拖动中仅轻量更新页码文字（浮窗/滑钮由控件自绘跟随），松手才真正跳页一次，
+        // 替代旧 SeekBar 每帧 evaluateJavascript 造成的 WebView 逐帧重排卡顿
+        liquidSlider.setListener(new com.example.myapplication.view.LiquidSlider.Listener() {
+            @Override public void onDragStart() { mainHandler.removeCallbacks(hideNavRunnable); }
+            @Override public void onDragPage(int page) {
+                // 拖动中章节名不变、页码由滑块浮窗实时显示，此处无需更新文字
+            }
+            @Override public void onDragEnd(int page) {
+                resetAutoHideTimer();
+                if (totalPagesInChapter > 1 && page != currentPageInChapter) {
+                    webView.evaluateJavascript("jumpToPage(" + page + ")", null);
                 }
             }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) { mainHandler.removeCallbacks(hideNavRunnable); }
-            @Override public void onStopTrackingTouch(SeekBar seekBar) { resetAutoHideTimer(); }
         });
     }
 
@@ -3648,10 +3649,9 @@ public class ReadActivity extends BaseActivity {
             View sep = ((ViewGroup) layoutBottomNav).getChildAt(0);
             if (sep != null) sep.setBackgroundColor(line);
         }
-        // 章节进度条跟随强调色
+        // 章节进度条（液态滑块）：从面板底色派生中性配色，随日/夜平滑渐变逐帧刷新
         try {
-            seekBarProgress.setProgressTintList(ColorStateList.valueOf(accent));
-            seekBarProgress.setThumbTintList(ColorStateList.valueOf(accent));
+            liquidSlider.setChrome(chrome1, text1, dark);
         } catch (Throwable ignored) { }
 
         ivNightModeIcon.setImageResource(dark ? R.drawable.ic_day : R.drawable.ic_night);
