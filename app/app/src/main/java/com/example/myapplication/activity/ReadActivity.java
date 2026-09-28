@@ -2271,6 +2271,17 @@ public class ReadActivity extends BaseActivity {
             // 设置已在 onPageFinished 中通过 applySettingsToWebView 预先应用
             // 仅需在加载新内容后重新设置翻页模式（仿真模式需要重建 flipbook）
             webView.evaluateJavascript("setPageTurnMode('" + pageTurnMode + "')", null);
+
+            // ✅ 关键修复（覆盖全部主题模式）：从排版缓存恢复章节时，loadContent 直接把「上次分页时固化的文字色/
+            //    背景」赋值给 pages 并立即绘制；而 onPageFinished 里的 applySettingsToWebView 在 loadContent 之前调用
+            //    （彼时 pages 尚为空，setNightMode/setTextColor 遍历空数组无效），chapterRestoredFromCache 分支又跳过了
+            //    applySettingsToWebView_inner（含 setNightMode / applyBackgroundColorToWebView）。
+            //    因此必须在 loadContent 之后（evaluateJavascript 按提交顺序在 JS 单线程顺序执行，此时 pages 已存在）
+            //    重新应用完整主题 —— 夜间走 setNightMode(true)，日间/自定义纯色/纹理走 applyBackgroundColorToWebView，
+            //    把缓存页的固化色覆盖为当前主题并重绘，彻底解决「退出重进正文消失 / 颜色不符」。
+            webView.evaluateJavascript("beginSettingsBatch()", null);
+            applySettingsToWebView_inner();
+            webView.evaluateJavascript("finishSettingsBatch()", null);
         } catch (Throwable t) {
             android.util.Log.e("ReadActivity", "renderChapterContent 崩溃: index=" + chapterIndex
                     + ", title.len=" + (title == null ? 0 : title.length())
