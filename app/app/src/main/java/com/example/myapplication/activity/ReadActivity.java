@@ -4591,6 +4591,11 @@ public class ReadActivity extends BaseActivity {
             final int idx = i;
             bgSwatches[i].setOnClickListener(v -> {
                 currentBgColor = idx;
+                // ✅ 关键修复：选中自定义背景即退出夜间模式。夜间模式与自定义背景互斥
+                // （夜间关时由 applyBackgroundColorToWebView(currentBgColor) 恢复背景），
+                // 若不置 false，夜间下选背景时 night_mode 仍存 true，重进阅读器会被 setNightMode(true)
+                // 覆盖回夜间、显示不出用户切换的背景。
+                isNightMode = false;
                 applyBackgroundColorToWebView(idx);
                 applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景
                 updateBgColorHighlight(bgSwatches, bgRings);
@@ -4748,6 +4753,8 @@ public class ReadActivity extends BaseActivity {
             final int idx = i;
             swatch.setOnClickListener(v -> {
                 currentBgColor = idx;
+                // ✅ 关键修复：选中自定义背景即退出夜间模式（详见主面板纯色处理器说明）
+                isNightMode = false;
                 applyBackgroundColorToWebView(idx);
                 applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景
                 saveReadingPreferences();
@@ -4813,6 +4820,8 @@ public class ReadActivity extends BaseActivity {
             final int texIdx = texModeIdx;
             swatch.setOnClickListener(v -> {
                 currentBgColor = texIdx;
+                // ✅ 关键修复：选中纹理背景即退出夜间模式（详见主面板纯色处理器说明）
+                isNightMode = false;
                 applyBackgroundColorToWebView(texIdx);
                 applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景（纹理取预览底色）
                 saveReadingPreferences();
