@@ -975,7 +975,9 @@ public class BookDetailActivity extends BaseActivity{
         return safe(book.getSourceType()) + "|" + safe(book.getSourceUrl());
     }
 
-    /** 读取外站章节列表：先静态内存，后磁盘持久化缓存。命中返回非空 List，未命中返回 null。 */
+    /** 读取外站章节列表：先静态内存，后磁盘持久化缓存。命中返回非空 List，未命中返回 null。
+     *  ⚠️ 磁盘兜底分支可能同步读数 MB 的 SP 文件，勿在主线程调用（主线程请用
+     *  {@link #getExternalChaptersMemoryOnly}，或放到后台线程再调本方法）。 */
     public static List<String[]> getExternalChapters(android.content.Context ctx, Book book) {
         if (book == null) return null;
         String key = externalCacheKeyFor(book);
@@ -1000,6 +1002,13 @@ public class BookDetailActivity extends BaseActivity{
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    /** 只查进程内静态内存缓存（不做任何磁盘 IO，可在主线程安全调用）；未命中返回 null。 */
+    public static List<String[]> getExternalChaptersMemoryOnly(android.content.Context ctx, Book book) {
+        if (book == null) return null;
+        List<String[]> cached = ONLINE_CHAPTER_CACHE.get(externalCacheKeyFor(book));
+        return (cached != null && !cached.isEmpty()) ? cached : null;
     }
 
     /** 写入外站章节列表到静态内存 + 磁盘（供异步拉取到章节后回填缓存）。 */

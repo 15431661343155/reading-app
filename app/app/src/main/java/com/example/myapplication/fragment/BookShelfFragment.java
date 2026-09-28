@@ -211,6 +211,14 @@ public class BookShelfFragment extends Fragment {
                 // 本地 / 服务器书籍：原有逻辑 + Long/Integer 自动拆箱 NPE 兜底
                 Long idObj = book.getId();
                 long bookId = idObj == null ? 0L : idObj;
+                // ✅ 进书前后台预热章节缓存 SP：SharedPreferences 首次访问会在「当前线程」
+                //    同步整文件读 + XML 解析，章节多的书正文缓存（chapter_content_<bookId>）
+                //    可达数 MB，冷启动后首次点书曾在主线程卡住数秒，表现为
+                //    「点击书籍无反应，过一会才进阅读器」。SP 是进程级单例，
+                //    在后台线程触发加载后，主线程再访问即命中内存缓存。
+                if (st != -1) {
+                    prewarmReaderCaches(bookId);
+                }
                 if (progressMap.containsKey(bookId)) {
                     intent.putExtra("chapterIndex", progressMap.get(bookId));
                 }
@@ -237,40 +245,43 @@ public class BookShelfFragment extends Fragment {
     }
 
     /**
-     * 外站书籍：复用书城可靠的"章节列表获取"逻辑（内存缓存 → 持久化缓存 → 网络），
-     * 拿到章节列表后再带进阅读器。这样阅读器不再需要在内部异步拉取章节列表（该路径偶发卡在"正在加载"），
-     * 与书城"在线阅读"表现一致：缓存命中即时进入，未命中先拉取再进入。
+     * 后台预热阅读器章节缓存 SP（chapter_list / chapter_meta / chapter_content_<bookId>）。
+     * 只触发加载即可（任意一次 get* 调用会阻塞该后台线程直至整文件加载完成），
+     * 之后 ReadActivity.onCreate 在主线程访问同名字 SP 时直接命中进程级单例的内存缓存。
+     */
+    private void prewarmReaderCaches(long bookId) {
+        if (getActivity() == null || bookId <= 0) return;
+        final android.content.Context appCtx = getActivity().getApplicationContext();
+        final long bid = bookId;
+        new Thread(() -> {
+            try {
+                appCtx.getSharedPreferences("chapter_list_" + bid, Context.MODE_PRIVATE).getInt("count", 0);
+                appCtx.getSharedPreferences("chapter_meta_" + bid, Context.MODE_PRIVATE).getInt("count", 0);
+                appCtx.getSharedPreferences("chapter_content_" + bid, Context.MODE_PRIVATE).getString("content_0", null);
+            } catch (Throwable ignored) {}
+        }, "reader-sp-prewarm").start();
+    }
+
+    /**
+     * 外站书籍：立即进入阅读器。章节列表由阅读器内部异步加载
+     * （内存缓存 → 持久化缓存 → 书城同款 fetchOnlineChapters 网络拉取），
+     * 加载期间阅读器显示整页「章节加载中」动画，加载完成自动进入正文。
+     * 此前版本在书架页后台等缓存就绪再跳转，会先弹「加载章节列表...」并停顿一会才进入，体验割裂。
      */
     private void openExternalBook(Book book) {
         if (getActivity() == null) return;
-        List<String[]> cached = BookDetailActivity.getExternalChapters(getActivity(), book);
-        if (cached != null && !cached.isEmpty()) {
-            launchExternalRead(book, cached);
-            return;
-        }
-        // 缓存未命中：先可靠拉取章节列表（与书城在线阅读同一套逻辑），成功后再进入阅读器
-        Hint.show(getActivity(), "加载章节列表...");
-        BookDetailActivity.fetchOnlineChapters(getActivity(), book, new BookDetailActivity.ChaptersCallback() {
-            @Override
-            public void onSuccess(List<String[]> chapters) {
-                if (getActivity() != null) launchExternalRead(book, chapters);
-            }
-            @Override
-            public void onFail(String msg, boolean sourceMayDown) {
-                if (getActivity() != null) {
-                    Hint.show(getActivity(), sourceMayDown ? "书源暂不可用，请稍后重试" : msg);
-                }
-            }
-        });
+        launchExternalRead(book, null);
     }
 
-    /** 带章节列表进入阅读器（小书走 Intent，大书走共享缓存，与书城一致）。 */
+    /** 带章节列表进入阅读器（小书走 Intent，大书走共享缓存，与书城一致）；chapters 为 null 时由阅读器自行加载。 */
     private void launchExternalRead(Book book, List<String[]> chapters) {
         Intent intent = new Intent(getActivity(), ReadActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         intent.putExtra("book", book);
         intent.putExtra("isExternal", true);
-        BookDetailActivity.putChaptersExtra(getActivity(), intent, book, chapters);
+        if (chapters != null && !chapters.isEmpty()) {
+            BookDetailActivity.putChaptersExtra(getActivity(), intent, book, chapters);
+        }
         startActivity(intent);
     }
 

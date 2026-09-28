@@ -1095,22 +1095,62 @@ public class ReadActivity extends BaseActivity {
                 .show();
     }
 
+    /**
+     * 外站书章节列表兜底拉取（书城同款 fetchOnlineChapters：内存缓存 → 持久化缓存 → 网络）。
+     * ⚠️ 内部含磁盘兜底读（缓存文件可达数 MB），必须在后台线程执行——本方法自带起线程。
+     * 结果统一回 UI 线程处理：成功回填 externalChapters + 写缓存 + buildExternalChapterListAndLoad；
+     * 失败弹 showExternalLoadErrorDialog；成功/失败都会撤下超时保护 timeoutTask。
+     */
+    private void fetchExternalChaptersAsync(Runnable timeoutTask) {
+        new Thread(() -> BookDetailActivity.fetchOnlineChapters(this, currentBook, new BookDetailActivity.ChaptersCallback() {
+            @Override
+            public void onSuccess(java.util.List<String[]> chapters) {
+                runOnUiThread(() -> {
+                    mainHandler.removeCallbacks(timeoutTask);
+                    if (isFinishing() || isDestroyed()) return;
+                    if (externalChapters != null && externalChapters.length > 0) return;   // 已由其他途径就绪
+                    if (chapters == null || chapters.isEmpty()) {
+                        showExternalLoadErrorDialog("获取章节失败", true);
+                        return;
+                    }
+                    externalChapters = chapters.toArray(new String[0][]);
+                    BookDetailActivity.putExternalChapters(ReadActivity.this, currentBook, chapters);
+                    buildExternalChapterListAndLoad();
+                });
+            }
+            @Override
+            public void onFail(String msg, boolean sourceMayDown) {
+                runOnUiThread(() -> {
+                    mainHandler.removeCallbacks(timeoutTask);
+                    if (isFinishing() || isDestroyed()) return;
+                    if (externalChapters != null && externalChapters.length > 0) return;
+                    String show = sourceMayDown ? "书源暂不可用，请稍后重试"
+                            : (msg == null || msg.isEmpty() ? "获取章节失败" : msg);
+                    showExternalLoadErrorDialog(show, sourceMayDown);
+                });
+            }
+        }), "ext-chapter-fetch").start();
+    }
+
     private void loadChaptersFromServer() {
         positionRestored = false;
 
-        // ===== 外站书籍：Intent extra 优先 → 共享缓存兜底 → 网络异步拉取 =====
+        // ===== 外站书籍：Intent extra 优先 → 内存缓存 → 占位+加载动画 → 后台(持久化缓存→网络) =====
         if (isExternalBook) {
             if (externalChapters == null || externalChapters.length == 0) {
-                java.util.List<String[]> cached = BookDetailActivity.getExternalChapters(this, currentBook);
-                if (cached != null && !cached.isEmpty()) {
-                    externalChapters = cached.toArray(new String[0][]);
+                // ✅ 主线程只查内存缓存（无 IO，可安全调用）
+                java.util.List<String[]> mem = BookDetailActivity.getExternalChaptersMemoryOnly(this, currentBook);
+                if (mem != null && !mem.isEmpty()) {
+                    externalChapters = mem.toArray(new String[0][]);
                 }
             }
             if (externalChapters != null && externalChapters.length > 0) {
                 buildExternalChapterListAndLoad();
                 return;
             }
-            // Intent 和缓存都未命中：占位显示 + 异步 API 拉取；失败弹对话框，不白屏
+            // Intent 和内存都未命中：立即占位显示（整页「章节加载中」动画已由 onCreate 开启），
+            // 持久化缓存→网络的完整拉取链放到后台线程——磁盘缓存文件可达数 MB，禁在主线程读。
+            // 点击书架即刻进书，不再在书架页弹提示等待；列表到达后自动进入正文。
             if (currentBook.getSourceType() == null || currentBook.getSourceUrl() == null) {
                 showExternalLoadErrorDialog("书源信息缺失", true);
                 return;
@@ -1130,42 +1170,14 @@ public class ReadActivity extends BaseActivity {
             //    否则 WebView 就绪前的延迟重试会把 currentChapterIndex 覆盖回 0，用户停在第一章
             renderChapterContent(currentChapterIndex, tempChapter.getTitle(), "【正在加载章节列表...】");
             tvToolbarTitle.setText(currentBook.getTitle());
-            final String st = currentBook.getSourceType();
-            final String sb = currentBook.getSourceUrl();
-            // 启动章节列表加载超时保护
+            // 启动章节列表加载超时保护（覆盖后台磁盘读 + 网络拉取全程）
             final Runnable timeoutTask = () -> {
                 if (externalChapters == null || externalChapters.length == 0) {
                     runOnUiThread(() -> showExternalLoadErrorDialog("加载超时，请检查网络后重试", false));
                 }
             };
             mainHandler.postDelayed(timeoutTask, 20000);
-            RetrofitClient.getApiService().getOnlineChapterList(st, sb).enqueue(new Callback<ApiResponse<java.util.List<String[]>>>() {
-                @Override
-                public void onResponse(@NonNull Call<ApiResponse<java.util.List<String[]>>> call,
-                                       @NonNull Response<ApiResponse<java.util.List<String[]>>> response) {
-                    mainHandler.removeCallbacks(timeoutTask);
-                    boolean ok = response.isSuccessful() && response.body() != null
-                            && response.body().isSuccess() && response.body().getData() != null
-                            && !response.body().getData().isEmpty();
-                    if (ok) {
-                        java.util.List<String[]> list = response.body().getData();
-                        externalChapters = list.toArray(new String[0][]);
-                        BookDetailActivity.putExternalChapters(ReadActivity.this, currentBook, list);
-                        runOnUiThread(() -> buildExternalChapterListAndLoad());
-                    } else {
-                        String msg = response.body() != null ? response.body().getMessage() : "获取章节失败";
-                        if (msg == null || msg.isEmpty()) msg = "获取章节失败";
-                        final String fmsg = msg;
-                        runOnUiThread(() -> showExternalLoadErrorDialog(fmsg, true));
-                    }
-                }
-                @Override
-                public void onFailure(@NonNull Call<ApiResponse<java.util.List<String[]>>> call, @NonNull Throwable t) {
-                    mainHandler.removeCallbacks(timeoutTask);
-                    final String emsg = "网络错误：" + t.getMessage();
-                    runOnUiThread(() -> showExternalLoadErrorDialog(emsg, false));
-                }
-            });
+            fetchExternalChaptersAsync(timeoutTask);
             return;
         }
 
@@ -1229,7 +1241,7 @@ public class ReadActivity extends BaseActivity {
         android.util.Log.d("ReadActivity", "Starting optimized parallel loading...");
         
         // ✅ 步骤1：尝试从本地缓存恢复完整的章节列表
-        boolean hasFullCache = restoreFullChapterListFromCache(bookId);
+        boolean hasFullCache = restoreFullChapterListFromCache(bookId, targetChapter);
         
         if (hasFullCache) {
             android.util.Log.d("ReadActivity", "Restored full chapter list from cache: " + chapterList.size() + " chapters");
@@ -1377,7 +1389,7 @@ public class ReadActivity extends BaseActivity {
      * ✅ 新增：从缓存恢复完整的章节列表
      * @return true 如果成功恢复完整列表
      */
-    private boolean restoreFullChapterListFromCache(long bookId) {
+    private boolean restoreFullChapterListFromCache(long bookId, int targetChapter) {
         SharedPreferences sp = getSharedPreferences("chapter_list_" + bookId, MODE_PRIVATE);
         int count = sp.getInt("count", 0);
         
@@ -1401,7 +1413,15 @@ public class ReadActivity extends BaseActivity {
                 ch.setSortKey(getChapterSortKeyCache(bookId, i));
                 chapterList.add(ch);
                 
-                String content = getChapterContentCache(bookId, i);
+                // ✅ 性能修复：不再逐章把全部正文读进内存。此前对最多数千章每章做一次
+                //    getChapterContentCache（chapter_content_<bookId> SP 冷启动首次访问
+                //    还是主线程同步整文件读 + 解析），进书卡顿数秒，表现为
+                //    「书架点击书籍无反应，过一会才进阅读器」。
+                //    现在只读「目标章 ±1」的正文保证即时渲染与顺滑翻页，
+                //    其余章填空占位（命中 isChapterContentPending → 翻到时按需拉取/回填，
+                //    与服务器刷新 mergeServerData 的重建行为一致）。
+                String content = (i >= targetChapter - 1 && i <= targetChapter + 1)
+                        ? getChapterContentCache(bookId, i) : null;
                 chapterContents.add(content != null ? content : "");
             }
         }
@@ -6018,9 +6038,30 @@ public class ReadActivity extends BaseActivity {
     private String getChapterTitleCache(long bookId, int index) {
         return getSharedPreferences("chapter_meta_" + bookId, MODE_PRIVATE).getString("title_" + index, null);
     }
+    /** mergeServerData 代数守卫：后台缓存回填只作用于自己那次 merge 产出的列表；
+     *  期间若又发生一次 merge（章节列表整体重建），旧回填快照直接作废。 */
+    private final java.util.concurrent.atomic.AtomicInteger mergeGeneration =
+            new java.util.concurrent.atomic.AtomicInteger();
+
     private void mergeServerData(List<ChapterDto> serverList) {
+        final int gen = mergeGeneration.incrementAndGet();
+        final long bid = safeBookId();
+        // ✅ 外站书不走 chapter_content_ SP 缓存（bookId=0 时 key 全都重名）；
+        //    仅服务器/本地书 bookId>0 才走 SP 缓存
+        final boolean contentCacheable = !isExternalBook && bid > 0;
+
         android.util.Log.d("ReadActivity", "mergeServerData: BEFORE clear, currentChapterIndex=" + currentChapterIndex);
-        
+
+        // ✅ 性能修复：重建前先把「当前章 ±1」的正文从旧 chapterContents 内存捕获下来
+        //    （零 IO），重建后原位放回。此前这里逐章 getChapterContentCache 把全部缓存
+        //    正文在主线程重读一遍（几千章 = 几千次查找 + 大字符串重建），进书后服务器
+        //    列表一到就瞬卡一下。
+        final int oldSize = chapterContents.size();
+        final int cur = currentChapterIndex;
+        final String keepPrev = (cur - 1 >= 0 && cur - 1 < oldSize) ? chapterContents.get(cur - 1) : null;
+        final String keepCur  = (cur     >= 0 && cur     < oldSize) ? chapterContents.get(cur)     : null;
+        final String keepNext = (cur + 1 >= 0 && cur + 1 < oldSize) ? chapterContents.get(cur + 1) : null;
+
         chapterList.clear();
         chapterContents.clear();
         for (int i = 0; i < serverList.size(); i++) {
@@ -6033,23 +6074,64 @@ public class ReadActivity extends BaseActivity {
             // 保留分卷键：目录浮窗据此按「最新 chapterList」实时推导分卷，保证下标一致
             ch.setSortKey(dto.getSortKey());
             chapterList.add(ch);
-            // 使用循环索引 i 作为缓存键，与 chapterList 索引保持一致
-            // ✅ 外站书不走 chapter_content_ SP 缓存（bookId=0 时 key 全都重名）；
-            //    仅服务器/本地书 bookId>0 才走 SP 缓存
-            long bid = safeBookId();
-            if (isExternalBook || bid <= 0) {
-                chapterContents.add("");
-            } else {
-                String cached = getChapterContentCache(bid, i);
-                chapterContents.add(cached != null ? cached : "");
-            }
-            
+            // 一律先占位：当前章 ±1 由上面捕获的旧内容立即回填（保证恢复渲染/顺滑翻页），
+            // 其余章节的缓存正文由下方后台线程回填（离线也能翻到读过的章），
+            // 未缓存的章翻到时按需拉取（isChapterContentPending 空串=true）
+            chapterContents.add("");
+
             // ✅ 新增：调试日志，检查章节ID
             if (i < 5 || dto.getId() <= 0) {
                 android.util.Log.d("ReadActivity", "mergeServerData: index=" + i + ", id=" + dto.getId() + ", title=" + dto.getTitle());
             }
         }
-        
+
+        // 当前章 ±1 原位回填（仅位置有效且旧内容是真实正文时才回填）
+        final int newSize = chapterContents.size();
+        if (contentCacheable && newSize > 0) {
+            if (cur - 1 >= 0 && cur - 1 < newSize && !isChapterContentPending(keepPrev)) {
+                chapterContents.set(cur - 1, keepPrev);
+            }
+            if (cur >= 0 && cur < newSize && !isChapterContentPending(keepCur)) {
+                chapterContents.set(cur, keepCur);
+            }
+            if (cur + 1 >= 0 && cur + 1 < newSize && !isChapterContentPending(keepNext)) {
+                chapterContents.set(cur + 1, keepNext);
+            }
+        }
+
+        // ✅ 其余章节的缓存正文改为后台批量回填（主线程零 SP 读）：
+        //    1) 回填绝不覆盖真实内容——用户翻到某章触发按需拉取、网络正文先到时跳过该章；
+        //    2) 代数守卫——期间若又发生一次 merge，本次快照整体作废；
+        //    3) 一次性批量应用到 UI 线程，避免逐章 post。
+        if (contentCacheable && newSize > 0) {
+            final int snapshotGen = gen;
+            final long fBid = bid;
+            final List<int[]> backfillIdx = new ArrayList<>();
+            final List<String> backfillContent = new ArrayList<>();
+            new Thread(() -> {
+                try {
+                    SharedPreferences sp = getSharedPreferences("chapter_content_" + fBid, MODE_PRIVATE);
+                    for (int i = 0; i < newSize; i++) {
+                        if (Math.abs(i - cur) <= 1) continue;   // 已同步回填过
+                        String c = sp.getString("content_" + i, null);
+                        if (c == null || c.isEmpty()) continue;
+                        backfillIdx.add(new int[]{i});
+                        backfillContent.add(c);
+                    }
+                    runOnUiThread(() -> {
+                        if (mergeGeneration.get() != snapshotGen) return;
+                        int limit = Math.min(newSize, chapterContents.size());
+                        for (int k = 0; k < backfillIdx.size(); k++) {
+                            int idx = backfillIdx.get(k)[0];
+                            if (idx >= limit) continue;
+                            if (!isChapterContentPending(chapterContents.get(idx))) continue;
+                            chapterContents.set(idx, backfillContent.get(k));
+                        }
+                    });
+                } catch (Throwable ignored) {}
+            }, "merge-content-backfill").start();
+        }
+
         android.util.Log.d("ReadActivity", "mergeServerData: AFTER rebuild, currentChapterIndex=" + currentChapterIndex);
         
         // ✅ 新增：统计无效ID的章节数量
