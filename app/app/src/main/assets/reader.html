@@ -2352,6 +2352,25 @@ function _finishLoadContent(p) {
         } else {
             currentPage = 0;
         }
+        // ✅ 关键修复（覆盖全部主题模式）：从排版缓存恢复章节时，pages 携带「上次分页时固化的文字色/背景」，
+        //    与当前主题（夜间 / 日间纯色 / 护眼绿 / 羊皮纸 / 纹理）不符，会导致正文消失或颜色错乱。
+        //    此处用当前主题的色值重新对齐缓存页：夜间走 setNightMode(true)，其余走 setTextColor/setBackgroundColor
+        //    （setNightMode/setTextColor 会遍历 pages 改 color 并重绘，与阅读中切换主题的行为一致）；
+        //    纹理模式额外用 _pendingTexture 重新拉起纹理。覆盖「WebView 宽度就绪晚于 loadContent」的重进路径；
+        //    宽度就绪早于 loadContent 的路径由 ReadActivity.renderChapterContent 在 loadContent 之后调用
+        //    applySettingsToWebView_inner() 覆盖。
+        if (pagesRestoredFromCache) {
+            if (isNightMode) {
+                setNightMode(true);
+            } else {
+                setTextColor(textColor);
+                setBackgroundColor(bgColor);
+                if (typeof _pendingTexture !== 'undefined' && _pendingTexture) {
+                    setBackgroundTexture(_pendingTexture);
+                }
+            }
+        }
+
         console.log('reader.html 开始绘制第 ' + (currentPage + 1) + ' 页');
 
         // ✅ 仿真模式：跳过 canvas 直接渲染为翻页页（canvas 已隐藏）
