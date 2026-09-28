@@ -114,6 +114,9 @@ public class ReadActivity extends BaseActivity {
     private boolean followSystemBrightness = false;
     private boolean autoPageEnabled = false;
     private int autoPageInterval = 5000; // 自动翻页间隔(ms)，可配置：慢10s/中5s/快3s
+    // 阅读亮屏时间：0=跟随系统（不加 KEEP_SCREEN_ON），-1=阅读时常亮，
+    // >0=阅读时保持亮屏、无操作超过该毫秒数后允许熄屏（任意触摸重新计时）
+    private long screenOnTimeoutMs = 0;
     private int currentBgColor = 0;  // 0-9:纯色（0-3保持旧值兼容）
     // 页面「实际显示」的背景基准色：纯色即自身，纹理取其预览底色，夜间模式为 #1A1A1A。
     // 导航栏/浮窗的派生配色以它为输入，保证与 WebView 里看到的一致。
@@ -255,7 +258,9 @@ public class ReadActivity extends BaseActivity {
      */
     private static final String LOCAL_CHAPTER_PLACEHOLDER = "【章节加载中...】";
     /** 本地书已加载正文的保留半径：只留当前章前后各 N 章，避免长时间阅读把全书正文堆进内存 */
-    private static final int LOCAL_CONTENT_KEEP_RADIUS = 2;
+    private static final int LOCAL_CONTENT_KEEP_RADIUS = 5;
+    /** 各类书籍统一的章节预取窗口：当前章前后各 N 章（由近及远），预取结果落盘供下次秒开 */
+    private static final int CHAPTER_PREFETCH_RADIUS = 5;
 
     /**
      * 章节正文是否仍处于「占位 / 未加载」状态（而不是真实正文）。
@@ -483,6 +488,8 @@ public class ReadActivity extends BaseActivity {
         effectiveBgBase = isNightMode ? Color.parseColor("#1A1A1A")
                 : resolveBaseForMode(currentBgColor);
         applyChromeTheme();
+        // ✅ 应用阅读亮屏策略（跟随系统 / 定时 / 常亮）
+        applyScreenKeepAlive();
 
         setupWebView();
         setupClickListeners();
@@ -1272,6 +1279,8 @@ public class ReadActivity extends BaseActivity {
                 // ✅ 关键修复：直接渲染到 savedPage，避免"先显示第1页再翻页"的动画
                 renderChapterContent(targetChapter, chapterList.get(targetChapter).getTitle(), cachedContent, savedPage);
                 updateChapterButtons();
+                // ✅ 恢复自缓存后触发预取：窗口内缺失的章由后台补齐并落盘（下次秒开）
+                prefetchServerChaptersAround(targetChapter);
                 hasRestoredFromLocal = true;
                 chapterRestoredFromCache = true;
                 positionRestored = true;
@@ -1285,6 +1294,8 @@ public class ReadActivity extends BaseActivity {
                 currentChapterIndex = targetChapter;
                 renderChapterContent(targetChapter, chapterList.get(targetChapter).getTitle(), "【正在加载章节内容...】");
                 fetchChapterContent(targetChapter);
+                // ✅ 当前章走网络时同样预取窗口内其余缺失章（不与当前章加载抢主链路）
+                prefetchServerChaptersAround(targetChapter);
             }
 
             long cacheLoadTime = System.currentTimeMillis() - startTime;
@@ -1417,10 +1428,11 @@ public class ReadActivity extends BaseActivity {
                 //    getChapterContentCache（chapter_content_<bookId> SP 冷启动首次访问
                 //    还是主线程同步整文件读 + 解析），进书卡顿数秒，表现为
                 //    「书架点击书籍无反应，过一会才进阅读器」。
-                //    现在只读「目标章 ±1」的正文保证即时渲染与顺滑翻页，
+                //    现在只读「目标章 ±CHAPTER_PREFETCH_RADIUS」的正文保证即时渲染与顺滑翻页，
                 //    其余章填空占位（命中 isChapterContentPending → 翻到时按需拉取/回填，
                 //    与服务器刷新 mergeServerData 的重建行为一致）。
-                String content = (i >= targetChapter - 1 && i <= targetChapter + 1)
+                //    SP 整文件只加载一次（书架点击已后台预热），窗口内逐章取只是内存哈希查找。
+                String content = (i >= targetChapter - CHAPTER_PREFETCH_RADIUS && i <= targetChapter + CHAPTER_PREFETCH_RADIUS)
                         ? getChapterContentCache(bookId, i) : null;
                 chapterContents.add(content != null ? content : "");
             }
@@ -1665,6 +1677,9 @@ public class ReadActivity extends BaseActivity {
                 android.util.Log.d("ReadActivity", "positionRestored set to true after successful render");
             }
         }
+
+        // ✅ 当前章就绪后，后台由近及远预取前后各 5 章并落盘缓存（下次打开秒开）
+        prefetchServerChaptersAround(chapterIndex);
     }
 
     /**
@@ -1893,18 +1908,38 @@ public class ReadActivity extends BaseActivity {
      * 预加载下一章：仅在内存/磁盘都未命中时异步拉取，不渲染当前页（loadExternalChapterContent 内部
      * 通过 currentChapterIndex != chapterIndex 的判断自动跳过渲染）。
      */
+    /** 外站预取去重（15 秒自动过期，防止网络慢时重复入队）。 */
+    private final java.util.Set<Integer> externalPrefetchInFlight =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
     private void preloadNextExternalChapter(int currentIndex) {
-        int next = currentIndex + 1;
-        if (next >= chapterList.size() || externalChapters == null || next >= externalChapters.length) return;
-        String[] np = externalChapters[next];
-        if (np == null) return;
-        String nextUrl = np.length > 1 ? np[1] : "";
-        String nextKey = next + "|" + nextUrl;
-        // 已在内存或磁盘，无需重复请求
-        if (externalContentCache.get(nextKey) != null) return;
-        if (readExternalContentFromDisk(nextKey) != null) return;
-        // 异步预取（不会渲染，因为 currentChapterIndex 仍为 currentIndex）
-        loadExternalChapterContent(next);
+        // ✅ 由近及远预取当前章前后各 CHAPTER_PREFETCH_RADIUS 章（同距离先「下一章」）；
+        //    内存/磁盘已命中的自动跳过，成功结果落盘（writeExternalContentToDisk），
+        //    第二次打开本书或翻回已读章即点即看。
+        for (int d = 1; d <= CHAPTER_PREFETCH_RADIUS; d++) {
+            tryPreloadExternalChapter(currentIndex + d);
+            tryPreloadExternalChapter(currentIndex - d);
+        }
+    }
+
+    private void tryPreloadExternalChapter(int idx) {
+        if (idx < 0 || idx >= chapterList.size() || idx == currentChapterIndex) return;
+        if (externalChapters == null || idx >= externalChapters.length) return;
+        if (idx == pendingChapterIndex) return;   // 在途跳转由正常加载链路负责
+        String[] p = externalChapters[idx];
+        if (p == null) return;
+        String url = p.length > 1 ? p[1] : "";
+        String key = idx + "|" + url;
+        if (externalContentCache.get(key) != null) return;   // 内存已命中
+        if (idx < chapterContents.size()) {
+            String existing = chapterContents.get(idx);
+            if (!isChapterContentPending(existing) && !isExternalFailureContent(existing)) return;   // 已有正文
+        }
+        if (readExternalContentFromDisk(key) != null) return;   // 磁盘已命中
+        if (!externalPrefetchInFlight.add(idx)) return;         // 在途
+        mainHandler.postDelayed(() -> externalPrefetchInFlight.remove(idx), 15_000L);
+        // 异步预取（loadExternalChapterContent 内部对非当前章不渲染，成功即写内存+磁盘缓存）
+        loadExternalChapterContent(idx);
     }
 
     // ========== 章节正文磁盘持久化（支持离线阅读） ==========
@@ -2419,6 +2454,8 @@ public class ReadActivity extends BaseActivity {
         if (!positionRestored) {
             positionRestored = true;
         }
+        // ✅ 章节边界翻页到位后同样触发预取（前后各 5 章，后台落盘）
+        prefetchServerChaptersAround(chapterIndex);
     }
 
     /**
@@ -3457,6 +3494,67 @@ public class ReadActivity extends BaseActivity {
     }
 
     // ==================== 阅读偏好与设置 ====================
+
+    // ========== 阅读亮屏控制（「更多设置 → 屏幕亮屏时间」） ==========
+    /** 定时模式是否已处于「到期熄屏」状态（背光已压 0）。 */
+    private boolean screenBlackoutApplied = false;
+
+    /**
+     * 定时亮屏模式到期：主动把本窗口背光压到 0（真正的物理熄屏，无需任何权限）。
+     * ⚠️ 不能只 clearFlags(FLAG_KEEP_SCREEN_ON) 放行系统熄屏——系统熄屏时点从「最后一次
+     * 触摸」起算（vivo 的该值很长且实测不执行短超时），结果只会进入系统压暗阶段迟迟不灭，
+     * 用户感知为「到点不熄屏只压暗」。这里保留 KEEP_SCREEN_ON 让屏幕处于「亮着但背光为 0」
+     * 的黑屏态：触摸任意位置由 onUserInteraction 恢复，按电源键则真熄屏。
+     */
+    private final Runnable screenOffRunnable = () -> setReaderBacklight(false);
+
+    /** 恢复/压灭本窗口背光（on=true 正常亮度，off=黑屏）。 */
+    private void setReaderBacklight(boolean on) {
+        if (isFinishing()) return;
+        android.view.Window w = getWindow();
+        android.view.WindowManager.LayoutParams lp = w.getAttributes();
+        float target = on
+                ? android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                : android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF;
+        // BRIGHTNESS_OVERRIDE_NONE = -1 表示「不覆盖」，直接比较设置避免每帧写 attributes
+        if (lp.screenBrightness != target) {
+            lp.screenBrightness = target;
+            w.setAttributes(lp);
+        }
+        screenBlackoutApplied = !on;
+    }
+
+    /** 按当前 screenOnTimeoutMs 应用亮屏策略（进书/切换设置/回到前台时调用）。 */
+    private void applyScreenKeepAlive() {
+        mainHandler.removeCallbacks(screenOffRunnable);
+        // 任何策略（重）应用时先恢复正常背光（清除可能残留的黑屏态）
+        setReaderBacklight(true);
+        if (screenOnTimeoutMs == 0) {
+            // 跟随系统：交还系统熄屏节奏
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            // 定时 / 常亮：保持亮屏；定时模式到期后由 screenOffRunnable 主动压灭背光
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            if (screenOnTimeoutMs > 0) {
+                mainHandler.postDelayed(screenOffRunnable, screenOnTimeoutMs);
+            }
+        }
+    }
+
+    @Override
+    public void onUserInteraction() {
+        super.onUserInteraction();
+        // 定时亮屏模式下：① 已黑屏则触摸立即恢复背光（模拟「点亮屏幕」）；
+        // ② 任意触摸/按键都重新计时。常亮与跟随系统无需处理。
+        if (screenOnTimeoutMs > 0 && !isFinishing()) {
+            if (screenBlackoutApplied) {
+                setReaderBacklight(true);
+            }
+            mainHandler.removeCallbacks(screenOffRunnable);
+            mainHandler.postDelayed(screenOffRunnable, screenOnTimeoutMs);
+        }
+    }
+
     private void loadReadingPreferencesNoApply() {
         SharedPreferences sp = getSharedPreferences("read_settings", MODE_PRIVATE);
         currentFontSize = sp.getFloat("font_size", 28f);
@@ -3474,6 +3572,8 @@ public class ReadActivity extends BaseActivity {
         // ✅ 加载自动翻页设置（间隔与开关状态都持久化）
         autoPageEnabled = sp.getBoolean("auto_page", false);
         autoPageInterval = sp.getInt("auto_page_interval", 5000);
+        // ✅ 加载阅读亮屏时间设置
+        screenOnTimeoutMs = sp.getLong("screen_on_timeout", 0L);
         // 展示名也要持久化：否则重启后未打开字体弹窗时只能回退到 cssName
         currentFontDisplay = sp.getString("font_display", "默认字体");
         downloadedFonts = new java.util.HashSet<>(sp.getStringSet("downloaded_fonts", new java.util.HashSet<>()));
@@ -3501,6 +3601,8 @@ public class ReadActivity extends BaseActivity {
                 .putInt("auto_page_interval", autoPageInterval)
                 .putString("font_display", currentFontDisplay)
                 .putStringSet("downloaded_fonts", downloadedFonts)
+                // ✅ 保存阅读亮屏时间设置
+                .putLong("screen_on_timeout", screenOnTimeoutMs)
                 .apply();
         uploadProgressToServer();
     }
@@ -5507,6 +5609,38 @@ public class ReadActivity extends BaseActivity {
             saveReadingPreferences();
         });
 
+        // ===== 屏幕亮屏时间（跟随系统 / 1分钟 / 5分钟 / 常亮）=====
+        // 复用自动翻页速度同款胶囊选中高亮（ios_blue / 灰底）
+        TextView tvScreenSystem = popupView.findViewById(R.id.tv_screen_system);
+        TextView tvScreen1Min = popupView.findViewById(R.id.tv_screen_1min);
+        TextView tvScreen5Min = popupView.findViewById(R.id.tv_screen_5min);
+        TextView tvScreenAlways = popupView.findViewById(R.id.tv_screen_always);
+        final TextView[] screenViews = {tvScreenSystem, tvScreen1Min, tvScreen5Min, tvScreenAlways};
+        final long[] screenValues = {0L, 60_000L, 300_000L, -1L};
+        int screenSel = 0;
+        for (int i = 0; i < screenValues.length; i++) {
+            if (screenValues[i] == screenOnTimeoutMs) { screenSel = i; break; }
+        }
+        final int[] screenSelRef = {screenSel};
+        updateAutoSpeedUI(screenViews, screenSelRef[0]);
+        for (int i = 0; i < screenViews.length; i++) {
+            final int idx = i;
+            screenViews[i].setOnClickListener(v -> {
+                screenSelRef[0] = idx;
+                screenOnTimeoutMs = screenValues[idx];
+                updateAutoSpeedUI(screenViews, idx);
+                applyScreenKeepAlive();
+                saveReadingPreferences();
+                if (idx == 0) {
+                    Hint.show(ReadActivity.this, "亮屏：跟随系统");
+                } else if (idx == 3) {
+                    Hint.show(ReadActivity.this, "阅读时屏幕常亮");
+                } else {
+                    Hint.show(ReadActivity.this, "阅读亮屏：" + (screenValues[idx] / 60000) + " 分钟（无操作后熄屏）");
+                }
+            });
+        }
+
         // ===== 自动翻页速度（慢10s / 中5s / 快3s）=====
         TextView tvAutoSlow = popupView.findViewById(R.id.tv_auto_slow);
         TextView tvAutoNormal = popupView.findViewById(R.id.tv_auto_normal);
@@ -6038,6 +6172,80 @@ public class ReadActivity extends BaseActivity {
     private String getChapterTitleCache(long bookId, int index) {
         return getSharedPreferences("chapter_meta_" + bookId, MODE_PRIVATE).getString("title_" + index, null);
     }
+    // ========== 服务器书章节预取（当前章前后各 CHAPTER_PREFETCH_RADIUS 章，由近及远） ==========
+
+    /** 预取去重：在途章节不重复请求。 */
+    private final java.util.Set<String> serverPrefetchInFlight =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+    /** 预取失败冷却：同一章 60 秒内不重试（离线/弱网时避免无效轮询）。 */
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> serverPrefetchFailAt =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    /** 单线程串行预取：由近及远排队，不与正文加载抢并发。 */
+    private final java.util.concurrent.ExecutorService serverPrefetchExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "server-chapter-prefetch");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /**
+     * 服务器书预取：以 center 为中心、由近及远把前后 CHAPTER_PREFETCH_RADIUS 章补齐到内存并落盘
+     * （chapter_content_<bookId> SP）。第二次打开本书时 restoreFullChapterListFromCache 直接命中
+     * 窗口内缓存正文，点击即看、翻章零等待。全程后台执行，不渲染、不覆盖真实内容。
+     */
+    private void prefetchServerChaptersAround(int center) {
+        if (isExternalBook || isLocalBook) return;
+        final long bookId = (currentBook == null) ? 0 : currentBook.getId();
+        if (bookId <= 0 || chapterList.isEmpty()) return;
+        final int size = Math.min(chapterList.size(), chapterContents.size());
+        final long now = System.currentTimeMillis();
+        for (int d = 1; d <= CHAPTER_PREFETCH_RADIUS; d++) {
+            // 同距离先「下一章」后「上一章」（向后读是主路径）
+            tryPrefetchServerChapter(bookId, center + d, size, now);
+            tryPrefetchServerChapter(bookId, center - d, size, now);
+        }
+    }
+
+    private void tryPrefetchServerChapter(long bookId, int idx, int size, long now) {
+        if (idx < 0 || idx >= size) return;
+        long chapterId = chapterList.get(idx).getId();
+        if (chapterId <= 0) return;
+        if (!isChapterContentPending(chapterContents.get(idx))) return;   // 已有正文
+        final String key = bookId + ":" + idx;
+        if (!serverPrefetchInFlight.add(key)) return;                     // 在途
+        Long failAt = serverPrefetchFailAt.get(key);
+        if (failAt != null && now - failAt < 60_000L) {                   // 失败冷却中
+            serverPrefetchInFlight.remove(key);
+            return;
+        }
+        serverPrefetchExecutor.execute(() -> {
+            try {
+                retrofit2.Response<ApiResponse<com.example.myapplication.bean.Chapter>> resp =
+                        RetrofitClient.getApiService().getChapterContent(chapterId).execute();
+                if (resp.isSuccessful() && resp.body() != null && resp.body().isSuccess()
+                        && resp.body().getData() != null) {
+                    String raw = resp.body().getData().getContent();
+                    final String content = (raw == null || raw.trim().isEmpty() || raw.equals("\uFEFF"))
+                            ? "【本章节内容暂缺】" : raw;
+                    serverPrefetchFailAt.remove(key);
+                    runOnUiThread(() -> {
+                        // 守卫：期间用户可能已翻到该章触发按需拉取 / merge 回填——绝不覆盖真实内容
+                        if (idx < chapterContents.size() && isChapterContentPending(chapterContents.get(idx))) {
+                            chapterContents.set(idx, content);
+                            cacheChapterContent(bookId, idx, content);
+                        }
+                    });
+                } else {
+                    serverPrefetchFailAt.put(key, System.currentTimeMillis());
+                }
+            } catch (Throwable ignored) {
+                serverPrefetchFailAt.put(key, System.currentTimeMillis());
+            } finally {
+                serverPrefetchInFlight.remove(key);
+            }
+        });
+    }
+
     /** mergeServerData 代数守卫：后台缓存回填只作用于自己那次 merge 产出的列表；
      *  期间若又发生一次 merge（章节列表整体重建），旧回填快照直接作废。 */
     private final java.util.concurrent.atomic.AtomicInteger mergeGeneration =
@@ -6058,9 +6266,15 @@ public class ReadActivity extends BaseActivity {
         //    列表一到就瞬卡一下。
         final int oldSize = chapterContents.size();
         final int cur = currentChapterIndex;
-        final String keepPrev = (cur - 1 >= 0 && cur - 1 < oldSize) ? chapterContents.get(cur - 1) : null;
-        final String keepCur  = (cur     >= 0 && cur     < oldSize) ? chapterContents.get(cur)     : null;
-        final String keepNext = (cur + 1 >= 0 && cur + 1 < oldSize) ? chapterContents.get(cur + 1) : null;
+        // ✅ 性能修复：重建前先把「当前章 ±CHAPTER_PREFETCH_RADIUS」的正文从旧 chapterContents
+        //    内存捕获下来（零 IO），重建后原位放回。此前这里逐章 getChapterContentCache 把全部缓存
+        //    正文在主线程重读一遍（几千章 = 几千次查找 + 大字符串重建），进书后服务器
+        //    列表一到就瞬卡一下。
+        final String[] keep = new String[CHAPTER_PREFETCH_RADIUS * 2 + 1];
+        for (int k = -CHAPTER_PREFETCH_RADIUS; k <= CHAPTER_PREFETCH_RADIUS; k++) {
+            int oi = cur + k;
+            if (oi >= 0 && oi < oldSize) keep[k + CHAPTER_PREFETCH_RADIUS] = chapterContents.get(oi);
+        }
 
         chapterList.clear();
         chapterContents.clear();
@@ -6085,17 +6299,15 @@ public class ReadActivity extends BaseActivity {
             }
         }
 
-        // 当前章 ±1 原位回填（仅位置有效且旧内容是真实正文时才回填）
+        // 当前章 ±CHAPTER_PREFETCH_RADIUS 原位回填（仅位置有效且旧内容是真实正文时才回填）
         final int newSize = chapterContents.size();
         if (contentCacheable && newSize > 0) {
-            if (cur - 1 >= 0 && cur - 1 < newSize && !isChapterContentPending(keepPrev)) {
-                chapterContents.set(cur - 1, keepPrev);
-            }
-            if (cur >= 0 && cur < newSize && !isChapterContentPending(keepCur)) {
-                chapterContents.set(cur, keepCur);
-            }
-            if (cur + 1 >= 0 && cur + 1 < newSize && !isChapterContentPending(keepNext)) {
-                chapterContents.set(cur + 1, keepNext);
+            for (int k = -CHAPTER_PREFETCH_RADIUS; k <= CHAPTER_PREFETCH_RADIUS; k++) {
+                int ni = cur + k;
+                String kept = keep[k + CHAPTER_PREFETCH_RADIUS];
+                if (ni >= 0 && ni < newSize && !isChapterContentPending(kept)) {
+                    chapterContents.set(ni, kept);
+                }
             }
         }
 
@@ -6112,7 +6324,7 @@ public class ReadActivity extends BaseActivity {
                 try {
                     SharedPreferences sp = getSharedPreferences("chapter_content_" + fBid, MODE_PRIVATE);
                     for (int i = 0; i < newSize; i++) {
-                        if (Math.abs(i - cur) <= 1) continue;   // 已同步回填过
+                        if (Math.abs(i - cur) <= CHAPTER_PREFETCH_RADIUS) continue;   // 已同步回填过
                         String c = sp.getString("content_" + i, null);
                         if (c == null || c.isEmpty()) continue;
                         backfillIdx.add(new int[]{i});
@@ -6127,6 +6339,8 @@ public class ReadActivity extends BaseActivity {
                             if (!isChapterContentPending(chapterContents.get(idx))) continue;
                             chapterContents.set(idx, backfillContent.get(k));
                         }
+                        // ✅ merge 就绪后触发一轮预取：窗口内缺失的章由后台补齐并落盘
+                        prefetchServerChaptersAround(cur);
                     });
                 } catch (Throwable ignored) {}
             }, "merge-content-backfill").start();
@@ -6429,6 +6643,10 @@ public class ReadActivity extends BaseActivity {
         saveReadingRecord();
         mainHandler.removeCallbacks(hideNavRunnable);
         timeUpdateHandler.removeCallbacks(timeUpdateRunnable);
+        // 离开前台时撤销黑屏态与到期计时：用户按电源键灭屏再回来时，
+        // 背光必须已恢复正常（黑屏态只属于「定时到期」这一种前台场景）
+        mainHandler.removeCallbacks(screenOffRunnable);
+        setReaderBacklight(true);
     }
     @Override protected void onResume() {
         super.onResume();
@@ -6437,6 +6655,8 @@ public class ReadActivity extends BaseActivity {
         sActiveInstance = this;
         readStartTime = System.currentTimeMillis();
         mainHandler.postDelayed(hideNavRunnable, 3000);
+        // 回到前台重新应用亮屏策略（定时模式重新计时）
+        applyScreenKeepAlive();
         if (showBatteryTime && showHeaderFooter) {
             updateBatteryAndTime();
             timeUpdateHandler.postDelayed(timeUpdateRunnable, 60000);
@@ -6449,6 +6669,8 @@ public class ReadActivity extends BaseActivity {
     private Thread.UncaughtExceptionHandler savedUncaughtHandler;
 
     @Override protected void onDestroy() {
+        // ✅ 清理亮屏计时回调（窗口销毁后触发无意义）
+        mainHandler.removeCallbacks(screenOffRunnable);
         // ✅ 兜底：移除仍挂在复用 WebView 上的「布局就绪」监听（防止 observer 随 detach 失效后崩溃）
         if (layoutReadyListener != null) {
             try {

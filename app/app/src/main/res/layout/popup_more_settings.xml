@@ -232,6 +232,102 @@
                 android:layout_height="0.5dp"
                 android:background="@color/ios_separator" />
 
+            <!-- 屏幕亮屏时间（阅读时） -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="屏幕亮屏时间"
+                    android:textSize="14sp"
+                    android:textColor="@color/ios_text_primary" />
+
+                <LinearLayout
+                    android:id="@+id/layout_screen_timeout"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tv_screen_system"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="跟随系统"
+                        android:textSize="13sp"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="5dp"
+                        android:gravity="center"
+                        android:background="@drawable/bg_capsule_gray"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                    <TextView
+                        android:id="@+id/tv_screen_1min"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="1分钟"
+                        android:textSize="13sp"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="5dp"
+                        android:gravity="center"
+                        android:background="@drawable/bg_capsule_gray"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:layout_marginStart="6dp" />
+
+                    <TextView
+                        android:id="@+id/tv_screen_5min"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="5分钟"
+                        android:textSize="13sp"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="5dp"
+                        android:gravity="center"
+                        android:background="@drawable/bg_capsule_gray"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:layout_marginStart="6dp" />
+
+                    <TextView
+                        android:id="@+id/tv_screen_always"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="常亮"
+                        android:textSize="13sp"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="5dp"
+                        android:gravity="center"
+                        android:background="@drawable/bg_capsule_gray"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 提示文字 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="阅读时保持亮屏；定时模式下无操作超时后正常熄屏"
+                android:textSize="11sp"
+                android:textColor="@color/ios_text_secondary"
+                android:paddingHorizontal="20dp" />
+
+            <!-- 分隔线 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="@color/ios_separator" />
+
             <!-- 自动翻页速度 -->
             <LinearLayout
                 android:layout_width="match_parent"
