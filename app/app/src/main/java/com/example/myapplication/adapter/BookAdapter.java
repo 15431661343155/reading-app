@@ -332,11 +332,15 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
         BookHolder h = (BookHolder) vh;
         if (h.cardBg == null) return; // 书城 item 无双模式结构
         float d = context.getResources().getDisplayMetrics().density;
-        int dp4 = Math.round(4 * d), dp6 = Math.round(6 * d), dp8 = Math.round(8 * d);
-        int dp12 = Math.round(12 * d), dp14 = Math.round(14 * d), dp18 = Math.round(18 * d);
-        int dp34 = Math.round(34 * d), dp48 = Math.round(48 * d), dp54 = Math.round(54 * d);
+        int dp3 = Math.round(3 * d);
+        int dp2 = Math.round(2 * d), dp4 = Math.round(4 * d), dp8 = Math.round(8 * d);
+        int dp12 = Math.round(12 * d), dp14 = Math.round(14 * d), dp15 = Math.round(15 * d),
+            dp18 = Math.round(18 * d);
+        int dp16 = Math.round(16 * d), dp20 = Math.round(20 * d), dp34 = Math.round(34 * d),
+            dp60 = Math.round(60 * d);
         int dp72 = Math.round(72 * d), dp96 = Math.round(96 * d), dp114 = Math.round(114 * d);
-        int dp138 = Math.round(138 * d), dp158 = Math.round(158 * d);
+        int dp146 = Math.round(146 * d);
+        int dp100Const = Math.round(100 * d);
 
         View root = h.itemView;
         boolean grid = isGridMode;
@@ -375,55 +379,76 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
 
         // 根：高度 + 首尾边距
         ViewGroup.MarginLayoutParams rp = (ViewGroup.MarginLayoutParams) root.getLayoutParams();
-        rp.height = Math.round((grid ? 198f : 132f) * d);
+        rp.height = Math.round((grid ? 194f : 128f) * d);
         rp.topMargin = (!grid && position == 0) ? Math.round(5 * d) : 0;
         rp.bottomMargin = (!grid && position == bookList.size() - 1) ? Math.round(20 * d) : 0;
         root.setLayoutParams(rp);
+        // 波纹挂根节点（有完整按压态与触点 hotspot），inset 按模式对齐卡面可视矩形，
+        // mask 圆角裁切 —— 波纹止步于卡面，不漫出柔影区（旧 selectableItemBackground 铺满整个 view）
+        root.setForeground(androidx.appcompat.content.res.AppCompatResources.getDrawable(context,
+                grid ? R.drawable.fg_card_ripple_grid : R.drawable.fg_card_ripple_list));
 
-        // 白卡片边距：列表(0,6,0,6) / 宫格(4,4,4,4)
+        // 白卡片边距：列表(0,6,0,6) / 宫格海报卡(左右10、上下4)——卡面可视宽恰=封面宽
         ViewGroup.MarginLayoutParams cp = (ViewGroup.MarginLayoutParams) h.cardBg.getLayoutParams();
-        cp.setMargins(0, grid ? dp4 : dp6, 0, grid ? dp4 : dp6);
+        int dp10 = Math.round(10 * d);
+        cp.setMargins(grid ? dp10 : 0, grid ? dp4 : dp2, grid ? dp10 : 0, grid ? dp4 : dp2);
         h.cardBg.setLayoutParams(cp);
 
-        // 封面盒：列表 14/18 处 72×96；宫格 12/12 处 (spanW-24)×138
+        // 封面盒：列表 14/15 处 72×96；宫格海报卡 (spanW-24)×133 @ (12,7)——封面贴满卡面顶/左/右。
+        // ⚠️ ②列表编辑态封面不再右移让位（选择框已移到卡片右侧），恒 14dp。
+        // 宫格卡面可视边界 = 白卡 margin(左右10) + drawable 内缩(左右2/上3) → 卡面恰为 (spanW-24) 宽，
+        // 封面同宽同位即「贴边海报」；封面盒宽高与二次修正版完全一致，Matrix 等比裁切取景不变。
+        int dp133 = Math.round(133 * d);
         int coverW = grid ? spanW - 2 * dp12 : dp72;
-        int coverH = grid ? dp138 : dp96;
-        int coverLeft = grid ? dp12 : (editAdj ? dp48 : dp14);
-        int coverTop = grid ? dp12 : dp18;
+        int coverH = grid ? dp133 : dp96;
+        int coverLeft = grid ? dp12 : dp14;
+        int coverTop = grid ? (dp4 + dp3) : dp15;
         FrameLayout.LayoutParams cvp = (FrameLayout.LayoutParams) h.coverBox.getLayoutParams();
         cvp.width = coverW;
         cvp.height = coverH;
         cvp.setMargins(coverLeft, coverTop, 0, 0);
+        // ⚠️ XML 里 cover_box 带 layout_marginStart=14dp：MarginLayoutParams 按方向解析时
+        // startMargin 会覆盖 setMargins 写入的 leftMargin（实测封面左侧多留 4dp、右侧戳出卡面 2dp）。
+        // 必须显式同步 marginStart，宫格贴边与列表编辑位移才真正生效。
+        cvp.setMarginStart(coverLeft);
         h.coverBox.setLayoutParams(cvp);
+        // 封面圆角：宫格海报卡封面贴满卡面顶角 → 顶部圆角须与卡面 12dp 一致、底部直角；
+        // 列表为 8dp 全角（与 bg_cover_rounded 占位底一致）。形变动画按帧在两套值间插值。
+        h.applyCoverCorners(grid ? 12f : 8f, grid ? 0f : 8f);
 
         // 文字盒（两套几何各自布置，且始终按「各自模式」的绝对尺寸——
         // 飞出的文字盒在当前模式 root 里仍落在旧位置上，形变时原位淡出，不出现竖排挤压）
-        // 列表文字：left=100(+34) top=18 h=96 w=rvW-114(-34)
+        // 列表文字：left=100 top=15 h=96——编辑态左距恒 100dp（封面不再让位），
+        // 仅宽度在编辑态右侧收缩 34dp 给选择框让位（选择框距卡右缘 14dp + 间隙）
         FrameLayout.LayoutParams ltp = (FrameLayout.LayoutParams) h.listTextBox.getLayoutParams();
         ltp.width = rvW - dp114 - (editAdj ? dp34 : 0);
         ltp.height = dp96;
-        ltp.setMargins(dp100(editAdj), dp18, 0, 0);
+        ltp.setMargins(dp100Const, dp15, 0, 0);
         h.listTextBox.setLayoutParams(ltp);
-        // 宫格文字：left=12 top=158 w=宫格span-24
+        // 宫格文字：随海报卡内缩——left=18 top=146 w=span-36（距封面 6dp、距卡面底 ≥6dp 不贴边）
         FrameLayout.LayoutParams gtp = (FrameLayout.LayoutParams) h.gridTextBox.getLayoutParams();
-        gtp.width = Math.max(1, rvW / 3) - 2 * dp12;
+        gtp.width = Math.max(1, rvW / 3) - 2 * dp18;
         gtp.height = FrameLayout.LayoutParams.WRAP_CONTENT;
-        gtp.setMargins(dp12, dp158, 0, 0);
+        gtp.setMargins(dp18, dp146, 0, 0);
         h.gridTextBox.setLayoutParams(gtp);
 
         // 可见性（静止态：只显示当前模式文字盒）
         h.listTextBox.setVisibility(grid ? View.INVISIBLE : View.VISIBLE);
         h.gridTextBox.setVisibility(grid ? View.VISIBLE : View.INVISIBLE);
 
-        // 多选框：列表=封面左侧垂直居中(14,54)；宫格=封面右下角
+        // 多选框：列表=卡片右侧垂直居中（距卡右缘 14dp），封面原位不再让位；
+        // 宫格=海报卡右下角内缩——相对 item_root 为右 20/下 60，即距海报卡右下角 8/6dp，
+        // 圆框完整落在卡面内（修复圆框骑出卡片外的溢出）。
+        // ⚠️ XML 的 layout_marginStart 会覆盖 setMargins 写入的 leftMargin（同封面盒注释的坑），显式清零。
         FrameLayout.LayoutParams cbp = (FrameLayout.LayoutParams) h.ivCheckbox.getLayoutParams();
         if (grid) {
             cbp.gravity = android.view.Gravity.END | android.view.Gravity.BOTTOM;
-            cbp.setMargins(0, 0, dp18, dp54);
+            cbp.setMargins(0, 0, dp20, dp60);
         } else {
-            cbp.gravity = android.view.Gravity.START | android.view.Gravity.TOP;
-            cbp.setMargins(dp14, dp54, 0, 0);
+            cbp.gravity = android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL;
+            cbp.setMargins(0, 0, dp16, 0);
         }
+        cbp.setMarginStart(0);
         h.ivCheckbox.setLayoutParams(cbp);
 
         // 无封面遮罩：宫格显示书名蒙版、列表不显示。
@@ -441,11 +466,6 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
         // post 再校正一次（布局实测尺寸就绪后）
         h.applyCoverMatrixNow();
         h.postApplyCoverMatrix();
-    }
-
-    private int dp100(boolean editAdj) {
-        float d = context.getResources().getDisplayMetrics().density;
-        return Math.round((100 + (editAdj ? 34 : 0)) * d);
     }
 
     private int rvWidthFallback() {
@@ -541,6 +561,31 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
             gridTextBox = itemView.findViewById(R.id.grid_text_box);
             tvNameGrid = itemView.findViewById(R.id.tv_book_name_grid);
             tvProgressGrid = itemView.findViewById(R.id.tv_read_progress_grid);
+        }
+
+        // 封面圆角（dp）：列表 = 8dp 全角（与 bg_cover_rounded 一致）；宫格海报卡 = 顶 12dp（与
+        // bg_ios_card 卡面圆角一致）/ 底 0。形变动画逐帧在两套值间插值，消除切换首尾的圆角跳变。
+        float coverCornerTopDp = 8f, coverCornerBottomDp = 8f;
+        final android.view.ViewOutlineProvider coverCornerOutline = new android.view.ViewOutlineProvider() {
+            @Override
+            public void getOutline(android.view.View view, android.graphics.Outline outline) {
+                float dd = view.getResources().getDisplayMetrics().density;
+                float rT = coverCornerTopDp * dd, rB = coverCornerBottomDp * dd;
+                android.graphics.Path p = new android.graphics.Path();
+                p.addRoundRect(0, 0, Math.max(view.getWidth(), 1), Math.max(view.getHeight(), 1),
+                        new float[]{rT, rT, rT, rT, rB, rB, rB, rB}, android.graphics.Path.Direction.CW);
+                outline.setConvexPath(p);
+            }
+        };
+
+        /** 设置封面四角圆角并立即生效（applyMode 静止态 / 形变逐帧共用） */
+        public void applyCoverCorners(float topDp, float bottomDp) {
+            if (coverBox == null) return;
+            coverCornerTopDp = topDp;
+            coverCornerBottomDp = bottomDp;
+            coverBox.setOutlineProvider(coverCornerOutline);
+            coverBox.setClipToOutline(true);
+            coverBox.invalidateOutline();
         }
 
         /** 布局完成后重设封面静止态 Matrix（尺寸就绪后调用） */

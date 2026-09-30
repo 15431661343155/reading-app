@@ -1,69 +1,126 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--编辑态底栏：置顶/移动至/删除 三竖排按钮（图标上、文字下）+
+    底部白色垫高区（v_edit_bottom_filler，高度由 BookShelfFragment 按导航卡实测计算），
+    完整盖住 App 底部导航 → 编辑期间导航不可点-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:gravity="center"
+    android:orientation="vertical"
     android:background="@color/ios_bg"
-    android:elevation="12dp"
-    android:paddingHorizontal="24dp">
+    android:elevation="12dp">
 
-    <!-- 删除 -->
+    <!-- 按钮行：三等分，中间 0.5dp 分隔线 -->
     <LinearLayout
-        android:id="@+id/btn_edit_delete"
-        android:layout_width="0dp"
-        android:layout_height="58dp"
-        android:layout_weight="1"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
         android:orientation="horizontal"
-        android:gravity="center"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true">
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp">
 
-        <ImageView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:src="@drawable/ic_delete"
-            android:contentDescription="删除" />
+        <!-- 置顶 -->
+        <LinearLayout
+            android:id="@+id/btn_edit_pin"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="删除"
-            android:textSize="14sp"
-            android:textColor="#FF4444"
-            android:layout_marginStart="8dp" />
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_pin"
+                android:tint="@color/ios_text_primary"
+                android:contentDescription="置顶" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="置顶"
+                android:textSize="11sp"
+                android:textColor="@color/ios_text_primary"
+                android:layout_marginTop="3dp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="0.5dp"
+            android:layout_height="match_parent"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:background="@color/ios_separator" />
+
+        <!-- 移动至分组 -->
+        <LinearLayout
+            android:id="@+id/btn_edit_move_group"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_category"
+                android:tint="@color/ios_text_primary"
+                android:contentDescription="移动至" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="移动至"
+                android:textSize="11sp"
+                android:textColor="@color/ios_text_primary"
+                android:layout_marginTop="3dp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="0.5dp"
+            android:layout_height="match_parent"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:background="@color/ios_separator" />
+
+        <!-- 删除 -->
+        <LinearLayout
+            android:id="@+id/btn_edit_delete"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_delete"
+                android:contentDescription="删除" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="删除"
+                android:textSize="11sp"
+                android:textColor="#FF4444"
+                android:layout_marginTop="3dp" />
+        </LinearLayout>
     </LinearLayout>
 
+    <!-- 白色垫高：盖住导航卡 + 手势区（高度 = 导航块高 - 按钮行高，运行时计算） -->
     <View
-        android:layout_width="1dp"
-        android:layout_height="30dp"
-        android:background="@color/ios_separator" />
-
-    <!-- 移动到分组 -->
-    <LinearLayout
-        android:id="@+id/btn_edit_move_group"
-        android:layout_width="0dp"
-        android:layout_height="58dp"
-        android:layout_weight="1"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true">
-
-        <ImageView
-            android:layout_width="22dp"
-            android:layout_height="22dp"
-            android:src="@drawable/ic_category"
-            android:contentDescription="移动分组" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="移动分组"
-            android:textSize="14sp"
-            android:textColor="@color/ios_text_primary"
-            android:layout_marginStart="8dp" />
-    </LinearLayout>
+        android:id="@+id/v_edit_bottom_filler"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@color/ios_bg" />
 </LinearLayout>

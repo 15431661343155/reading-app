@@ -46,6 +46,7 @@ import com.example.myapplication.utils.ExternalPrefs;
 import com.example.myapplication.utils.ExternalSyncManager;
 import com.example.myapplication.utils.Hint;
 import com.example.myapplication.utils.ReadTimeText;
+import com.example.myapplication.utils.ShelfPinStore;
 import com.example.myapplication.utils.ShelfPrefetch;
 import com.example.myapplication.widget.LoadingView;
 import com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView;
@@ -55,6 +56,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -76,6 +78,9 @@ public class BookShelfFragment extends Fragment {
 
     private android.app.Dialog topDialog;
     private android.app.Dialog bottomDialog;
+    // 编辑态顶栏控件引用：计数随勾选实时刷新、全选文案随选中数切换
+    private android.widget.TextView tvSelectedCount;
+    private android.widget.TextView tvSelectAllRef;
     private boolean isGridView = false;
     /** 统一 GridLayoutManager：列表 span=1 / 宫格 span=3，切换时只改 spanCount（不销毁重建节点） */
     private GridLayoutManager shelfLM;
@@ -337,8 +342,23 @@ public class BookShelfFragment extends Fragment {
 
     private void showEditMode() {
         adapter.setEditMode(true);
+        // 选中数变化统一走监听器：刷新「已选择 N 本」计数 + 「全选/取消全选」文案
+        adapter.setOnEditStateListener(n -> {
+            updateSelectedCountText(n);
+            syncSelectAllText(n);
+        });
         showEditTopDialog();
         showEditBottomDialog();
+    }
+
+    private void updateSelectedCountText(int n) {
+        if (tvSelectedCount != null) tvSelectedCount.setText("已选择 " + n + " 本");
+    }
+
+    private void syncSelectAllText(int n) {
+        if (tvSelectAllRef != null) {
+            tvSelectAllRef.setText(n > 0 && n >= shelfBookList.size() ? "取消全选" : "全选");
+        }
     }
 
     @SuppressLint("InflateParams")
@@ -346,17 +366,19 @@ public class BookShelfFragment extends Fragment {
         View topView = LayoutInflater.from(getActivity()).inflate(R.layout.popup_edit_top, null);
         topView.findViewById(R.id.tv_done).setOnClickListener(v -> hideEditMode());
 
+        tvSelectedCount = topView.findViewById(R.id.tv_selected_count);
         TextView tvSelectAll = topView.findViewById(R.id.tv_select_all);
+        tvSelectAllRef = tvSelectAll;
         tvSelectAll.setText("全选");
         tvSelectAll.setOnClickListener(v -> {
             if (adapter.getSelectedCount() == shelfBookList.size()) {
                 adapter.clearSelection();
-                tvSelectAll.setText("全选");
             } else {
                 adapter.selectAll();
-                tvSelectAll.setText("取消全选");
             }
+            // 文案由 setOnEditStateListener 回调统一刷新，不再在此处手写
         });
+        updateSelectedCountText(adapter.getSelectedCount());
 
         topDialog = new android.app.Dialog(requireActivity(), R.style.TopDialogStyle);
         topDialog.setContentView(topView);
@@ -376,6 +398,32 @@ public class BookShelfFragment extends Fragment {
         View bottomView = LayoutInflater.from(getActivity()).inflate(R.layout.popup_edit_bottom, null);
         bottomView.findViewById(R.id.btn_edit_delete).setOnClickListener(v -> deleteSelectedBooks());
         bottomView.findViewById(R.id.btn_edit_move_group).setOnClickListener(v -> showMoveGroupPicker());
+        bottomView.findViewById(R.id.btn_edit_pin).setOnClickListener(v -> togglePinSelectedBooks());
+
+        // ③ 底栏加高：按钮行(64dp) + 白色垫高区，总高 ≥ 导航卡顶(含 8dp 阴影)到窗口底的距离，
+        // 完整盖住底部导航——窗口保持 FLAG_NOT_TOUCH_MODAL（列表仍可点选），
+        // 但导航区域已被底栏窗口覆盖 → 点击落在底栏上，导航不可点，杜绝编辑中误切页。
+        View filler = bottomView.findViewById(R.id.v_edit_bottom_filler);
+        if (filler != null && getActivity() != null) {
+            float d = getResources().getDisplayMetrics().density;
+            int rowH = Math.round(64 * d);
+            View navCard = getActivity().findViewById(R.id.nav_card);
+            View rootLayout = getActivity().findViewById(R.id.root_layout);
+            if (navCard != null && rootLayout != null && navCard.getHeight() > 0) {
+                int[] nl = new int[2];
+                navCard.getLocationOnScreen(nl);
+                int[] rl = new int[2];
+                rootLayout.getLocationOnScreen(rl);
+                int winBottom = rl[1] + rootLayout.getHeight();
+                int navTop = nl[1] - Math.round(8 * d); // 再抬 8dp 盖住导航卡阴影
+                int coverH = Math.max(0, winBottom - navTop);
+                filler.getLayoutParams().height = Math.max(0, coverH - rowH);
+            } else {
+                // 导航卡未布局兜底：按 60dp 行高 + 11dp 底边距 + 8dp 阴影估算
+                filler.getLayoutParams().height = Math.round(79 * d);
+            }
+            filler.setLayoutParams(filler.getLayoutParams());
+        }
 
         bottomDialog = new android.app.Dialog(requireActivity(), R.style.BottomDialogStyle);
         bottomDialog.setContentView(bottomView);
@@ -390,10 +438,32 @@ public class BookShelfFragment extends Fragment {
         bottomDialog.show();
     }
 
+    /** 底栏「置顶」：全部已选已置顶 → 取消置顶；否则置顶。置顶后按「置顶优先」重排并刷新 */
+    private void togglePinSelectedBooks() {
+        List<Book> selected = adapter.getSelectedBooks();
+        if (selected.isEmpty()) { Hint.show(getActivity(), "请选择要置顶的书籍"); return; }
+        long userId = getUserId();
+        boolean allPinned = true;
+        for (Book b : selected) {
+            if (!ShelfPinStore.isPinned(getActivity(), userId, ShelfPinStore.keyOf(b))) { allPinned = false; break; }
+        }
+        if (allPinned) {
+            for (Book b : selected) ShelfPinStore.unpin(getActivity(), userId, ShelfPinStore.keyOf(b));
+            Hint.show(getActivity(), "已取消置顶 " + selected.size() + " 本");
+        } else {
+            for (Book b : selected) ShelfPinStore.pin(getActivity(), userId, ShelfPinStore.keyOf(b));
+            Hint.show(getActivity(), "已置顶 " + selected.size() + " 本");
+        }
+        adapter.clearSelection(); // 触发监听器把计数归零
+        applySortAndNotify();     // 置顶优先重排 + 刷新 UI
+    }
+
     private void hideEditMode() {
         adapter.setEditMode(false);
         if (topDialog != null && topDialog.isShowing()) topDialog.dismiss();
         if (bottomDialog != null && bottomDialog.isShowing()) bottomDialog.dismiss();
+        tvSelectedCount = null;
+        tvSelectAllRef = null;
     }
 
     private void deleteSelectedBooks() {
@@ -416,6 +486,10 @@ public class BookShelfFragment extends Fragment {
             }
             allBooks.remove(book);
             shelfBookList.remove(book);
+        }
+        // 同步清理被删书籍的置顶键，避免残留（书重新加入书架也不应继承旧置顶）
+        for (Book book : selected) {
+            ShelfPinStore.unpin(getActivity(), userId, ShelfPinStore.keyOf(book));
         }
         cancelMorph();
         adapter.refreshList(shelfBookList);
@@ -517,6 +591,7 @@ public class BookShelfFragment extends Fragment {
         int outTopMargin, inTopMargin;       // 旧/新文字盒 top margin(px)
         int outH, inH;                        // 旧/新文字盒名义高(px)
         int cardMarginTop;                    // 新模式下卡片 top margin(px)
+        int cardMarginLeft;                   // 新模式下卡片 left margin(px)（宫格海报卡 10dp，根平移扣减用）
     }
 
     private final android.view.animation.Interpolator morphInterp = new AccelerateDecelerateInterpolator();
@@ -549,23 +624,26 @@ public class BookShelfFragment extends Fragment {
             it.hasFrom = r0 != null && c0 != null && it.r1.width() > 0 && it.r1.height() > 0;
 
             // 预计算文字盒内边距/几何（px），供 applyMorphState 每帧把宽度钳在卡片当前渲染宽内。
-            // 列表盒：左内边距 dp100(编辑 134)/右 dp14/高 96；宫格盒：左右各 dp12/top dp158/高 33。
+            // 列表盒：左内边距恒 dp100（编辑态不再 100→134，封面已不让位）、
+            //         右内边距 dp14（编辑态再让 34dp 给右侧选择框）/top dp15/高 96；
+            // 宫格盒（海报卡）：左右各 dp18/top dp146/高 34。
             it.outIsList = (it.outBox == h.listTextBox);
             it.inIsList = (it.inBox == h.listTextBox);
             boolean editAdj = adapter.isEditMode();
-            int dp4b = Math.round(4 * d), dp6b = Math.round(6 * d), dp12b = Math.round(12 * d),
-                dp14b = Math.round(14 * d), dp18b = Math.round(18 * d), dp33b = Math.round(33 * d),
-                dp96b = Math.round(96 * d), dp158b = Math.round(158 * d);
-            int dp100b = Math.round((100f + (editAdj ? 34f : 0f)) * d);
-            it.outLeftPad = it.outIsList ? dp100b : dp12b;
-            it.outRightPad = it.outIsList ? dp14b : dp12b;
-            it.outTopMargin = it.outIsList ? dp18b : dp158b;
-            it.outH = it.outIsList ? dp96b : dp33b;
-            it.inLeftPad = it.inIsList ? dp100b : dp12b;
-            it.inRightPad = it.inIsList ? dp14b : dp12b;
-            it.inTopMargin = it.inIsList ? dp18b : dp158b;
-            it.inH = it.inIsList ? dp96b : dp33b;
-            it.cardMarginTop = isGridView ? dp4b : dp6b;
+            int dp2b = Math.round(2 * d), dp4b = Math.round(4 * d), dp10b = Math.round(10 * d),
+                dp14b = Math.round(14 * d), dp15b = Math.round(15 * d), dp18b = Math.round(18 * d),
+                dp34b = Math.round(34 * d), dp96b = Math.round(96 * d), dp146b = Math.round(146 * d);
+            int dp100b = Math.round(100f * d);
+            it.outLeftPad = it.outIsList ? dp100b : dp18b;
+            it.outRightPad = it.outIsList ? (editAdj ? dp14b + dp34b : dp14b) : dp18b;
+            it.outTopMargin = it.outIsList ? dp15b : dp146b;
+            it.outH = it.outIsList ? dp96b : dp34b;
+            it.inLeftPad = it.inIsList ? dp100b : dp18b;
+            it.inRightPad = it.inIsList ? (editAdj ? dp14b + dp34b : dp14b) : dp18b;
+            it.inTopMargin = it.inIsList ? dp15b : dp146b;
+            it.inH = it.inIsList ? dp96b : dp34b;
+            it.cardMarginTop = isGridView ? dp4b : dp2b;
+            it.cardMarginLeft = isGridView ? dp10b : 0;
 
             if (it.hasFrom) {
                 it.r0 = r0;
@@ -579,10 +657,14 @@ public class BookShelfFragment extends Fragment {
                 it.sy0 = r0.height() / it.r1.height();
                 it.csx0 = c1.width() > 0 ? c0.width() / c1.width() : 1f;
                 it.csy0 = c1.height() > 0 ? c0.height() / c1.height() : 1f;
+                // 封面位移补偿 = 「新布局偏移 → 旧偏移」的纯平移差（各自相对卡片矩形）。
+                // ⚠️ 旧写法 cl0 - cs*cl1 混入了封面缩放系数：缩放只改尺寸、不动左上角锚点，
+                // 位移补偿与缩放无关。旧宫格封面有大白边遮住误差；海报卡封面贴边后
+                // 宫→列飞行中封面顶出卡面上缘、左移出卡外（2026-09-30 过程帧取证）。
                 float cl0x = c0.left - r0.left, cl0y = c0.top - r0.top;
                 float cl1x = c1.left - it.r1.left, cl1y = c1.top - it.r1.top;
-                it.ctx0 = cl0x - it.csx0 * cl1x;
-                it.cty0 = cl0y - it.csy0 * cl1y;
+                it.ctx0 = cl0x - cl1x;
+                it.cty0 = cl0y - cl1y;
                 // 同步施加初始状态（e=0），杜绝 PreDraw 帧与动画首帧之间「闪跳到新位置」
                 applyMorphState(it, 0f, inShiftY);
             } else {
@@ -656,12 +738,14 @@ public class BookShelfFragment extends Fragment {
     private void applyMorphState(MorphItem it, float e, float inShiftY) {
         BookAdapter.BookHolder h = it.h;
         View child = it.child;
-        // 根：贝塞尔弧线位移（顶角沿二次贝塞尔）
+        // 根：贝塞尔弧线位移（顶角沿二次贝塞尔）。⚠️ 贝塞尔对位目标是「卡片矩形」，须再扣掉
+        // 新模式卡片自身 margin，否则 list→宫格 收尾时整卡停在 margin 偏移上、结束瞬间回跳
+        // （宫格左右 margin 10dp = 30px 跳变、上 margin 4dp = 12px，2026-09-30 海报卡后暴露）。
         float u = 1 - e;
         float bx = u * u * it.r0.left + 2 * u * e * it.cx + e * e * it.r1.left;
         float by = u * u * it.r0.top + 2 * u * e * it.cy + e * e * it.r1.top;
-        float rtx = bx - child.getLeft();
-        float rty = by - child.getTop();
+        float rtx = bx - child.getLeft() - it.cardMarginLeft;
+        float rty = by - child.getTop() - it.cardMarginTop;
         child.setTranslationX(rtx);
         child.setTranslationY(rty);
         // 文字盒/多选框只随 child（item 根）平移即可，不再叠加 rtx/rty；
@@ -670,7 +754,7 @@ public class BookShelfFragment extends Fragment {
         // 仅交叉淡化、不缩放 → 字形永不变形。可见性每帧重申（rebind 的 applyMode 会把旧盒设回 INVISIBLE）
         it.outBox.setVisibility(View.VISIBLE);
         it.inBox.setVisibility(View.VISIBLE);
-        // 文字盒宽度逐帧跟随「卡片当前渲染宽」：左/右内边距按各自模式（编辑模式列表左内边距 100→134dp），
+        // 文字盒宽度逐帧跟随「卡片当前渲染宽」：左/右内边距按各自模式（编辑态列表右侧多让 34dp 给选择框），
         // 不再钉死在 rvW 全宽 → 列表→宫格卡片收窄时文字盒右缘恒等于卡右缘减内边距，从右向左被裁掉；
         // 下缘上吸保证文字盒底不越过卡片渲染下缘（终帧自动归 0，无跳变）。
         float cardW = it.r0.width() + (it.r1.width() - it.r0.width()) * e;
@@ -684,7 +768,11 @@ public class BookShelfFragment extends Fragment {
         ilp.width = Math.max(6, Math.round(cardW - it.inLeftPad - it.inRightPad));
         it.inBox.setLayoutParams(ilp);
         float inOver = (it.inTopMargin - it.cardMarginTop) + it.inH - cardH;
-        it.inBox.setTranslationY((1f - e) * inShiftY + (inOver > 0f ? -inOver : 0f));
+        // 入场下滑量不得把文字底推出卡片底缘：先叠加再整体钳位（旧写法先钳位后加滑入量，
+        // 幽灵文字悬在卡片下缘之外）
+        float inDown = (1f - e) * inShiftY;
+        float inOverAll = inOver + inDown;
+        it.inBox.setTranslationY(inDown - Math.max(0f, inOverAll));
         // 卡片：缩放归一（pivot 左上角）
         h.cardBg.setPivotX(0f);
         h.cardBg.setPivotY(0f);
@@ -700,6 +788,10 @@ public class BookShelfFragment extends Fragment {
         h.coverBox.setTranslationX(it.ctx0 * (1 - e));
         h.coverBox.setTranslationY(it.cty0 * (1 - e));
         adapter.applyCoverMatrix(h, csx, csy);
+        // 封面圆角随形变插值：列表 8dp 全角 ⇄ 宫格海报顶 12dp/底 0（消除切换首尾的圆角突 snap）
+        float outTopR = it.outIsList ? 8f : 12f, outBotR = it.outIsList ? 8f : 0f;
+        float inTopR = it.inIsList ? 8f : 12f, inBotR = it.inIsList ? 8f : 0f;
+        h.applyCoverCorners(outTopR + (inTopR - outTopR) * e, outBotR + (inBotR - outBotR) * e);
         // 文字连续交叉淡化：旧字随缓动进度 1→0、新字 0→1（宽度已跟随卡片，信息随卡片收拢/展开，无空白空档）
         it.outBox.setAlpha(1f - e);
         it.inBox.setAlpha(e);
@@ -896,7 +988,7 @@ public class BookShelfFragment extends Fragment {
     }
 
     /**
-     * 按最后阅读时间排序，并刷新UI
+     * 按最后阅读时间排序（置顶书优先、其余保持时间序），并刷新UI
      */
     private void applySortAndNotify() {
         if (getActivity() == null) return;
@@ -907,6 +999,13 @@ public class BookShelfFragment extends Fragment {
             long timeB = getLastReadTimeFor(sp, spExt, b);
             return Long.compare(timeB, timeA);
         });
+        // 置顶优先：先按时间排好，再对置顶集合做稳定分区（List.sort 稳定 → 其余相对顺序不变）
+        Set<String> pins = ShelfPinStore.load(getActivity(), getUserId());
+        if (!pins.isEmpty()) {
+            shelfBookList.sort((a, b) -> Boolean.compare(
+                    !ShelfPinStore.contains(pins, ShelfPinStore.keyOf(a)),
+                    !ShelfPinStore.contains(pins, ShelfPinStore.keyOf(b))));
+        }
         // 重绑前先终止进行中的形变动画：主时钟若还在跑，会在重绑后的 holder 上
         // 继续盖中途 FLIP 态（封面放大/文字消失），且每帧重申会顶掉 applyMode 复位
         cancelMorph();
