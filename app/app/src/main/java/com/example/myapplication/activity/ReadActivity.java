@@ -14,6 +14,7 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -73,6 +74,7 @@ import com.example.myapplication.fragment.PopupChapterFragment;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.example.myapplication.api.RetrofitClient;
+import com.example.myapplication.view.LiquidSlider;
 import com.bumptech.glide.Glide;
 import com.example.myapplication.bean.ChapterDto;
 import com.example.myapplication.bean.ApiResponse;
@@ -118,6 +120,8 @@ public class ReadActivity extends BaseActivity {
     // >0=阅读时保持亮屏、无操作超过该毫秒数后允许熄屏（任意触摸重新计时）
     private long screenOnTimeoutMs = 0;
     private int currentBgColor = 0;  // 0-9:纯色（0-3保持旧值兼容）
+    /** 设置面板翻页分段的主题重刷（夜间/背景切换后重设指示器底色与文字颜色）；面板未打开时为上次面板遗留，由 isShowing 守卫 */
+    private Runnable settingsPageSegRefresher;
     // 页面「实际显示」的背景基准色：纯色即自身，纹理取其预览底色，夜间模式为 #1A1A1A。
     // 导航栏/浮窗的派生配色以它为输入，保证与 WebView 里看到的一致。
     private int effectiveBgBase = 0xFFFFFFFF;
@@ -177,6 +181,13 @@ public class ReadActivity extends BaseActivity {
     private java.util.List<com.example.myapplication.bean.FontItem> backendFonts = new java.util.ArrayList<>();
 
     private String currentFontFamily = "sans-serif"; // 当前使用的CSS字体族
+
+    // ========== 间距设置（行距倍数 / 段距行数 / 左右边距 dp / 上下边距 dp） ==========
+    // padTB = -1 表示跟随默认公式（JS 侧 topPadding = 左右边距 + 字号行高），保持老用户视觉不变
+    private float lineSpacingRatio = 1.8f;   // 行距倍数（1.2~2.6）
+    private float paraGapRatio = 0.5f;       // 段距（0~1.5 行）
+    private int padLR = 16;                  // 左右边距（8~40 dp）
+    private int padTB = -1;                  // 上下边距（12~56 dp；-1 = 默认公式）
     private String currentFontDisplay = "默认字体";    // 当前字体展示名（选择时记录，用于设置按钮文案）
     private java.util.Set<String> downloadedFonts = new java.util.HashSet<>(); // 已下载的字体cssName
     private java.util.Set<String> downloadingFonts = new java.util.HashSet<>(); // 正在下载的字体cssName
@@ -802,8 +813,15 @@ public class ReadActivity extends BaseActivity {
             if (activity == null) return;
             long now = System.currentTimeMillis();
             // ⚠️ 连击去重：同一手势的重复回调（仿真翻页下 document 级滑动分支与 turn.js boundary
-            // 各可能触发一次）在 700ms 内直接丢弃，避免一次滑动连跳两章。
-            if (now - activity.lastChapterJumpTs < 700) return;
+            //    各可能触发一次，两者间隔 <50ms）直接丢弃。同手势去重主防线在 JS 侧
+            //    （_boundaryPending/_xCrossFlipping 单一入口），此处只是兜底。
+            // ⚠️ 窗口必须是 150ms 而非 700ms：无缝换章的回调在「动画 500ms 结束后」才发出，
+            //    用户「翻过去立刻翻回来」时两次合法回调间隔仅 ~530-650ms——700ms 窗口会把
+            //    第二次合法回调吞掉，JS 已切到目标章而 Java 索引滞留旧章，下一次边界翻页
+            //    就会按旧索引用邻章，把用户抛回刚读过的章节（「换章翻页跳回未翻之前的页」）。
+            //    合法两次翻页最小间隔 ≈ 500ms 动画 + 反应时间 ≫ 150ms；旧流程连击由
+            //    pendingChapterIndex 同目标守卫拦截（与时间窗无关），不受此收紧影响。
+            if (now - activity.lastChapterJumpTs < 150) return;
             activity.lastChapterJumpTs = now;
             activity.runOnUiThread(() -> {
                 try {
@@ -878,8 +896,9 @@ public class ReadActivity extends BaseActivity {
             ReadActivity activity = getActivity();
             if (activity == null) return;
             long now = System.currentTimeMillis();
-            // ⚠️ 连击去重：同上 onChapterEnd，避免一次手势重复触发导致连跳两章。
-            if (now - activity.lastChapterJumpTs < 700) return;
+            // ⚠️ 连击去重：同 onChapterEnd，窗口 150ms（理由见彼处注释——700ms 会吞掉
+            //    无缝换章「立刻折返」的第二次合法回调，造成 Java/JS 索引失步乱跳章）。
+            if (now - activity.lastChapterJumpTs < 150) return;
             activity.lastChapterJumpTs = now;
             activity.runOnUiThread(() -> {
                 try {
@@ -947,6 +966,25 @@ public class ReadActivity extends BaseActivity {
             });
         }
 
+        /**
+         * ✅ 跨章无缝翻页：JS 在章节边界翻页时同步查询邻章正文是否已就绪（预加载/缓存命中）。
+         * 就绪返回 JSON {"index":N,"title":"...","content":"..."}，未就绪返回空串（走原有换章加载流程）。
+         * ⚠️ 绝不发网络请求；⚠️ 服务器书只认内存 chapterContents —— SP 兜底会让 JS 先进入新章
+         * 而 Java 侧 fetchChapterContent 仍走网络滞留旧章，两端索引窗口期错位。
+         */
+        @JavascriptInterface
+        @SuppressWarnings("unused")
+        public String getAdjacentChapterPayload(int dir) {
+            ReadActivity activity = getActivity();
+            if (activity == null) return "";
+            try {
+                return activity.resolveAdjacentChapterPayload(dir);
+            } catch (Throwable t) {
+                android.util.Log.e("ReadActivity", "getAdjacentChapterPayload 崩溃", t);
+                return "";
+            }
+        }
+
         @JavascriptInterface
         @SuppressWarnings("unused")
         public void cacheChapterLayout(String key, String json) {
@@ -954,6 +992,35 @@ public class ReadActivity extends BaseActivity {
             if (activity == null) return;
             if (key == null || json == null || json.length() < 2) return;
             activity.writeLayoutCache(key, json);
+        }
+
+        /**
+         * ✅ 跨章索引重同步：JS 在跨章过渡窗口内收到「过时的 loadContent」（用户已折返、
+         * Java 还在处理上一次换章回调）时会丢弃它并调用本方法，把 Java 的章节索引对齐到
+         * JS 的实际位置，并按正确落点页重发渲染 —— 否则下一次边界翻页会按 Java 的滞后索引
+         * 取错邻章，把用户抛回刚读过的章节（「换章翻页跳回未翻之前的页」）。
+         *
+         * @param index      JS 实际所在章（0 基）
+         * @param atLastPage JS 是否停在该章最后一页（向后跨章的落点）
+         */
+        @JavascriptInterface
+        @SuppressWarnings("unused")
+        public void onChapterResync(int index, boolean atLastPage) {
+            ReadActivity activity = getActivity();
+            if (activity == null) return;
+            activity.runOnUiThread(() -> {
+                try {
+                    if (index < 0 || index >= activity.chapterList.size()) return;
+                    if (activity.currentChapterIndex == index) return;   // 已一致，无需同步
+                    android.util.Log.d("ReadActivity", "onChapterResync: Java=" + activity.currentChapterIndex + " -> JS=" + index + ", atLast=" + atLastPage);
+                    activity.currentChapterIndex = index;
+                    activity.updateChapterButtons();
+                    if (atLastPage) activity.loadChapterContentToLastPage(index);
+                    else activity.loadChapterContent(index);
+                } catch (Throwable t) {
+                    android.util.Log.e("ReadActivity", "onChapterResync 崩溃", t);
+                }
+            });
         }
     }
 
@@ -974,8 +1041,12 @@ public class ReadActivity extends BaseActivity {
         int h = (webView != null) ? webView.getHeight() : 0;
         int fh = (currentFontFamily != null) ? currentFontFamily.hashCode() : 0;
         int chc = (content != null) ? content.hashCode() : 0;
+        // ✅ 间距参数参与签名：行距/段距/左右/上下任一变动都会自然错开缓存 → 自动失效并重排
+        // （padTB=-1 表示默认公式，与显式值天然不同串，不会误命中）
         return bookPart + "_" + chIndex + "_" + ((int) currentFontSize) + "_" + w + "_" + h
-                + "_" + (showHeaderFooter ? 1 : 0) + "_" + fh + "_" + chc;
+                + "_" + (showHeaderFooter ? 1 : 0) + "_" + fh + "_" + chc
+                + "_" + Math.round(lineSpacingRatio * 10) + "_" + Math.round(paraGapRatio * 100)
+                + "_" + padLR + "_" + padTB;
     }
 
     private String readLayoutCache(String key) {
@@ -1828,6 +1899,13 @@ public class ReadActivity extends BaseActivity {
             if (currentChapterIndex == chapterIndex) {
                 final int finalPage = targetPage;
                 runOnUiThread(() -> renderChapterContent(finalChapterIndex, finalTitle, finalCached, finalPage));
+            } else if (pendingChapterIndex == chapterIndex) {
+                // ✅ 跨章在途跳转（外站书）：正文缓存已到位 → 走统一渲染推进索引
+                //    （修复最后一页向后翻第一次没反应、需再翻一次才到下一章）
+                boolean goLast = pendingGoLastPage;
+                int pendingPage = pendingChapterPage;
+                clearPendingChapterJump();
+                runOnUiThread(() -> showPendingChapter(finalChapterIndex, finalCached, goLast, pendingPage));
             }
             // 预加载下一章
             preloadNextExternalChapter(chapterIndex);
@@ -1879,6 +1957,8 @@ public class ReadActivity extends BaseActivity {
                         }
                         chapterContents.set(chapterIndex, content);
                         final String finalContent = content;
+                        final boolean wasPendingJump = pendingChapterIndex == chapterIndex;
+                        if (wasPendingJump) clearPendingChapterJump();
                         if (currentChapterIndex == chapterIndex) {
                             final int finalPage = targetPage;
                             runOnUiThread(() -> {
@@ -1890,6 +1970,17 @@ public class ReadActivity extends BaseActivity {
                                     showLoadFail("加载出错，请稍后再试");
                                 }
                             });
+                        } else if (wasPendingJump && ok) {
+                            // ✅ 跨章在途跳转（外站书）：网络正文到位 → 走统一渲染推进索引
+                            //    （修复最后一页向后翻第一次没反应、需再翻一次才到下一章）
+                            boolean goLast = pendingGoLastPage;
+                            int pendingPage = pendingChapterPage;
+                            runOnUiThread(() -> {
+                                showPendingChapter(chapterIndex, finalContent, goLast, pendingPage);
+                                preloadNextExternalChapter(chapterIndex);
+                            });
+                        } else if (wasPendingJump) {
+                            runOnUiThread(() -> Hint.show(ReadActivity.this, "下一章加载失败，请重试"));
                         }
                     }
 
@@ -1897,8 +1988,12 @@ public class ReadActivity extends BaseActivity {
                     public void onFailure(@NonNull Call<ApiResponse<String>> call, @NonNull Throwable t) {
                         // 失败标记仍写入 chapterContents（缓存守卫依赖），但不再把「【网络错误】…」画进正文
                         chapterContents.set(chapterIndex, "【网络错误】" + t.getMessage());
+                        final boolean wasPendingJump = pendingChapterIndex == chapterIndex;
+                        if (wasPendingJump) clearPendingChapterJump();
                         if (currentChapterIndex == chapterIndex) {
                             runOnUiThread(() -> showLoadFail("网络异常，请检查网络后重试"));
+                        } else if (wasPendingJump) {
+                            runOnUiThread(() -> Hint.show(ReadActivity.this, "下一章加载失败，请重试"));
                         }
                     }
                 });
@@ -2072,7 +2167,11 @@ public class ReadActivity extends BaseActivity {
         try {
         // ===== 外站书籍：走在线 API 获取章节正文 =====
         if (isExternalBook) {
-            if (pendingChapterIndex == chapterIndex) clearPendingChapterJump();   // 由 loadExternalChapterContent 自行渲染
+            // ✅ 跨章在途跳转（pendingChapterIndex==chapterIndex，章节边界翻页触发）必须保留 pending：
+            //    loadExternalChapterContent 在正文到位后按 pending 走 showPendingChapter 统一渲染。
+            //    之前在这里就清掉 pending，而其渲染守卫是 currentChapterIndex==chapterIndex
+            //    （此刻索引还是旧章，守卫永不满足）→ 内容到位只写缓存不渲染，
+            //    表现为「最后一页向后翻第一次没反应，再翻一次才到下一章」。
             loadExternalChapterContent(chapterIndex);
             return;
         }
@@ -2459,6 +2558,64 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
+     * ✅ 跨章无缝翻页（JS 桥）：解析邻章已就绪正文，供边界翻页复用换页动画。
+     * 返回 JSON {"index":N,"title":"...","content":"..."}；未就绪 / 异常一律返回空串。
+     * 运行在 WebView 桥线程：只做只读访问（ArrayList 按索引读不会 CME；SP / LruCache 线程安全）。
+     */
+    String resolveAdjacentChapterPayload(int dir) {
+        int target = currentChapterIndex + (dir > 0 ? 1 : -1);
+        if (target < 0 || target >= chapterList.size()) return "";
+        String content = null;
+        if (target < chapterContents.size()) {
+            String c = chapterContents.get(target);
+            if (!isChapterContentPending(c)) content = c;
+        }
+        if (content == null && isLocalBook) {
+            // 本地书正文在 chapters.bin：同步按需读（与 reloadLocalChapterContent 同源，UI 线程也在用）
+            try {
+                String c = LocalBookParser.readChapterText(this, safeBookId(), target);
+                if (c != null && !c.trim().isEmpty()) content = c;
+            } catch (Throwable ignored) { }
+        }
+        if (content == null && isExternalBook) {
+            // 外站书：内存 Lru → 磁盘 SP（与 tryPreloadExternalChapter 同一套缓存与 key）
+            try {
+                if (externalChapters != null && target < externalChapters.length
+                        && externalChapters[target] != null) {
+                    String[] p = externalChapters[target];
+                    String url = p.length > 1 ? p[1] : "";
+                    if (!url.isEmpty()) {
+                        String key = target + "|" + url;
+                        String c = externalContentCache.get(key);
+                        if (c == null || c.isEmpty() || isExternalFailureContent(c)) {
+                            c = readExternalContentFromDisk(key);
+                        }
+                        if (c != null && !c.isEmpty() && !isExternalFailureContent(c)) content = c;
+                    }
+                }
+            } catch (Throwable ignored) { }
+        }
+        // 服务器书：内存 chapterContents 未就绪不再兜底（fetchChapterContent 的 pending 路径走网络，
+        // SP 兜底会让 JS 先进新章而 Java 滞留旧章）→ 返回空串走原有加载流程。
+        if (content == null) return "";
+        // 本地书邻章带保留样式 HTML：渲染会切到 HTML 模式（版式与纯文本分页完全不同），不做动画
+        if (isLocalBook && target < chapterHtmlContents.size()
+                && chapterHtmlContents.get(target) != null && !chapterHtmlContents.get(target).isEmpty()) {
+            return "";
+        }
+        try {
+            org.json.JSONObject o = new org.json.JSONObject();
+            o.put("index", target);
+            String t = chapterList.get(target).getTitle();
+            o.put("title", t == null ? "" : t);
+            o.put("content", content == null ? "" : content);
+            return o.toString();
+        } catch (Throwable t2) {
+            return "";
+        }
+    }
+
+    /**
      * ✅ 获取当前电量和时间，更新到 WebView
      */
     private void updateBatteryAndTime() {
@@ -2708,6 +2865,9 @@ public class ReadActivity extends BaseActivity {
     /** 内部方法：应用字体、背景等设置（不含 batch 包装和翻页模式） */
     private void applySettingsToWebView_inner() {
         webView.evaluateJavascript("setFontSize(" + currentFontSize + ")", null);
+        // ✅ 间距设置（行距/段距/边距）：与字号同批注入；padTB=-1 时 JS 侧走默认公式保持旧视觉
+        webView.evaluateJavascript("setTypesetting(" + lineSpacingRatio + "," + paraGapRatio
+                + "," + padLR + "," + padTB + ")", null);
         applyFontFamilyToWebView();
         if (isNightMode) {
             webView.evaluateJavascript("setNightMode(true)", null);
@@ -3560,6 +3720,10 @@ public class ReadActivity extends BaseActivity {
         currentFontSize = sp.getFloat("font_size", 28f);
         isNightMode = sp.getBoolean("night_mode", false);
         currentBgColor = sp.getInt("bg_color", 0);
+        // ✅ 黑色背景(#1A1A1A)≡夜间模式，两者统一为一个状态：
+        // 旧版本允许「日间 + 黑色背景」（bg_color=3），会导致日/夜切换按钮动画两端同色、看似无反应。
+        // 加载时把该残留状态归一为夜间模式；退出夜间时由 animateNightModeTo(false) 兜底回退纯白。
+        if (currentBgColor == 3) isNightMode = true;
         // ✅ 加载页眉页脚设置
         showHeaderFooter = sp.getBoolean("show_header_footer", true);
         headerFooterFontSize = sp.getFloat("header_footer_font_size", 12f); // 默认值改为12
@@ -3569,6 +3733,11 @@ public class ReadActivity extends BaseActivity {
         pageTurnMode = sp.getString("page_turn_mode", "cover");
         // ✅ 加载字体设置
         currentFontFamily = sp.getString("font_family", "sans-serif");
+        // ✅ 间距设置（缺省时保持旧行为：行距1.8 / 段距0.5行 / 边距走默认公式）
+        lineSpacingRatio = sp.getFloat("line_spacing_ratio", 1.8f);
+        paraGapRatio = sp.getFloat("para_gap_ratio", 0.5f);
+        padLR = sp.getInt("padding_lr", 16);
+        padTB = sp.getInt("padding_tb", -1);
         // ✅ 加载自动翻页设置（间隔与开关状态都持久化）
         autoPageEnabled = sp.getBoolean("auto_page", false);
         autoPageInterval = sp.getInt("auto_page_interval", 5000);
@@ -3596,6 +3765,11 @@ public class ReadActivity extends BaseActivity {
                 .putString("page_turn_mode", pageTurnMode)
                 // ✅ 保存字体设置
                 .putString("font_family", currentFontFamily)
+                // ✅ 保存间距设置
+                .putFloat("line_spacing_ratio", lineSpacingRatio)
+                .putFloat("para_gap_ratio", paraGapRatio)
+                .putInt("padding_lr", padLR)
+                .putInt("padding_tb", padTB)
                 // ✅ 保存自动翻页设置
                 .putBoolean("auto_page", autoPageEnabled)
                 .putInt("auto_page_interval", autoPageInterval)
@@ -3842,7 +4016,17 @@ public class ReadActivity extends BaseActivity {
      * 浮窗（目录/设置等）在过渡结束后再统一刷新，避免逐帧重染开销。
      */
     private void animateNightModeToggle() {
-        final boolean toNight = !isNightMode;
+        animateNightModeTo(!isNightMode);
+    }
+
+    /**
+     * 带目标态的夜间切换动画。底栏日/夜按钮与背景色块（黑色≡夜间）共用。
+     * 统一语义：黑色背景(#1A1A1A)与夜间模式是同一个状态——
+     * 退出夜间时若日间背景残留为黑色（旧版本数据），回退纯白，
+     * 避免「黑→黑」两端同色导致动画看似无反应。
+     */
+    private void animateNightModeTo(boolean toNight) {
+        if (!toNight && currentBgColor == 3) currentBgColor = 0;
 
         // ---- WebView 阅读区起止颜色 ----
         final String dayBg  = dayWebBgHex();
@@ -4164,6 +4348,10 @@ public class ReadActivity extends BaseActivity {
         themeIfShowing(moreSettingsPopupWindow);
         themeIfShowing(bgColorsPopupWindow);
         themeIfShowing(fontsPopupWindow);
+        // 翻页分段：指示器底色需按新主题重着色（thumb 打了 keep_own_color 不走通用重刷），文字选中恒深需重设
+        if (settingsPopupWindow != null && settingsPopupWindow.isShowing() && settingsPageSegRefresher != null) {
+            settingsPageSegRefresher.run();
+        }
     }
 
     private void themeIfShowing(PopupWindow pw) {
@@ -4427,6 +4615,32 @@ public class ReadActivity extends BaseActivity {
                     }
                 })
                 .start();
+    }
+
+    /** 二级弹窗（间距抽屉/更多阅读设置/选择字体/选择背景）滑出时联动：设置面板收回。
+     *  窗口保持显示（scrim 不动，双层遮罩暗度与旧行为一致），仅面板平移出窗口下沿，
+     *  与二级弹窗的入场滑出同步交叉（同 220ms Accelerate/Decelerate 对偶）。 */
+    private void retractSettingsPanelForSub() {
+        if (settingsPopupWindow == null || !settingsPopupWindow.isShowing()) return;
+        final View panel = settingsPanelView;
+        if (panel == null) return;
+        int h = panel.getHeight();
+        if (h <= 0) return;
+        panel.animate().cancel();
+        panel.animate()
+                .translationY(h)
+                .setDuration(220)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .start();
+    }
+
+    /** 二级弹窗收起时联动：设置面板重新滑出（复用入场动画；整窗正在收回流程中则不抢） */
+    private void restoreSettingsPanelFromSub() {
+        if (settingsPopupWindow == null || !settingsPopupWindow.isShowing()) return;
+        if (settingsPanelDismissing) return;
+        final View panel = settingsPanelView;
+        if (panel == null) return;
+        startSettingsPanelEnter(panel);
     }
 
     @SuppressLint("InflateParams")
@@ -4712,16 +4926,23 @@ public class ReadActivity extends BaseActivity {
             // 点击事件
             final int idx = i;
             bgSwatches[i].setOnClickListener(v -> {
-                currentBgColor = idx;
-                // ✅ 关键修复：选中自定义背景即退出夜间模式。夜间模式与自定义背景互斥
-                // （夜间关时由 applyBackgroundColorToWebView(currentBgColor) 恢复背景），
-                // 若不置 false，夜间下选背景时 night_mode 仍存 true，重进阅读器会被 setNightMode(true)
-                // 覆盖回夜间、显示不出用户切换的背景。
-                isNightMode = false;
-                applyBackgroundColorToWebView(idx);
-                applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景
+                if (idx == 3) {
+                    // ✅ 黑色背景 ≡ 夜间模式（同为 #1A1A1A，统一为一个状态）：
+                    // 点黑块即进入夜间（带渐变动画）；已处于夜间则仅刷新高亮。
+                    // currentBgColor 不写 3，日间背景保持原选择，供退出夜间时恢复。
+                    if (!isNightMode) animateNightModeTo(true);
+                } else {
+                    currentBgColor = idx;
+                    // ✅ 关键修复：选中自定义背景即退出夜间模式。夜间模式与自定义背景互斥
+                    // （夜间关时由 applyBackgroundColorToWebView(currentBgColor) 恢复背景），
+                    // 若不置 false，夜间下选背景时 night_mode 仍存 true，重进阅读器会被 setNightMode(true)
+                    // 覆盖回夜间、显示不出用户切换的背景。
+                    isNightMode = false;
+                    applyBackgroundColorToWebView(idx);
+                    applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景
+                    saveReadingPreferences();
+                }
                 updateBgColorHighlight(bgSwatches, bgRings);
-                saveReadingPreferences();
             });
         }
         // 初始高亮当前选中颜色（如果在主面板范围内）
@@ -4735,7 +4956,7 @@ public class ReadActivity extends BaseActivity {
         tvSwitchFont.setOnClickListener(v -> showFontsDialog());
         updateSwitchFontButton(tvSwitchFont);
 
-        // 翻页动画模式选择
+        // 翻页动画模式选择（与间距抽屉同款分段导航：轨道 + 白色滑动指示器，260ms 减速滑动）
         TextView tvPageCover = view.findViewById(R.id.tv_page_cover);
         TextView tvPageSimulation = view.findViewById(R.id.tv_page_simulation);
         TextView tvPageTranslate = view.findViewById(R.id.tv_page_translate);
@@ -4745,13 +4966,67 @@ public class ReadActivity extends BaseActivity {
         TextView[] pageButtons = {tvPageCover, tvPageSimulation, tvPageTranslate, tvPageUpDown, tvPageFade};
         String[] pageModes = {"cover", "simulation", "slide", "updown", "fade"};
 
-        updatePageTurnButtonHighlight(pageButtons, pageModes);
+        View segTrackPage = view.findViewById(R.id.seg_track_page);
+        final View segThumbPage = view.findViewById(R.id.seg_thumb_page);
+        // 指示器显示真实颜色（日间白 / 夜间按 App 规则混白 88%），不参与跟随背景重着色
+        segThumbPage.setTag(R.id.tag_keep_own_color, true);
+        applySegThumbTheme(segThumbPage);
+
+        final int[] pageSelIdx = {0};
+        for (int i = 0; i < pageModes.length; i++) {
+            if (pageModes[i].equals(pageTurnMode)) { pageSelIdx[0] = i; break; }
+        }
+        final int[] pageCell = {0};
+        final Runnable[] placePageThumb = new Runnable[1];
+        placePageThumb[0] = () -> {
+            int w = segTrackPage.getWidth();
+            if (w <= 0) return;   // 未布局：等 post 回调再定位
+            int cell = Math.max(1, (int) ((w - dp(6)) / 5));
+            pageCell[0] = cell;
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) segThumbPage.getLayoutParams();
+            int th = (int) (segTrackPage.getHeight() - dp(6));
+            if (lp.width != cell || lp.height != th) {
+                lp.width = cell;
+                lp.height = th;
+                segThumbPage.setLayoutParams(lp);
+            }
+            float target = dp(3) + pageSelIdx[0] * cell;
+            if (segThumbPage.getWidth() > 0 && Math.abs(segThumbPage.getTranslationX() - target) > 0.5f) {
+                segThumbPage.animate().translationX(target).setDuration(260)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+            } else {
+                segThumbPage.animate().cancel();
+                segThumbPage.setTranslationX(target);
+            }
+        };
+        Runnable updatePageSegUi = () -> {
+            int pri = getTextPrimaryColor();
+            for (int i = 0; i < pageButtons.length; i++) {
+                boolean on = i == pageSelIdx[0];
+                pageButtons[i].setTypeface(null, on ? Typeface.BOLD : Typeface.NORMAL);
+                // 选中项落在混白 88% 的亮色指示器上：文字恒深色（夜间 textPrimary=白 不可读），
+                // 并打 keep_own_color 防止夜间/背景切换时 themeViewTree 把恒深色重刷成主题白
+                pageButtons[i].setTextColor(on ? 0xFF1D1D1F : pri);
+                pageButtons[i].setTag(R.id.tag_keep_own_color, on ? Boolean.TRUE : null);
+            }
+            placePageThumb[0].run();
+        };
+        segTrackPage.post(placePageThumb[0]);
+        updatePageSegUi.run();
+        // 夜间/背景切换时 themeShowingPopups 会重刷已显示的设置面板：
+        // 重设指示器底色与文字颜色，保证翻页分段在主题切换后依然正确
+        settingsPageSegRefresher = () -> {
+            applySegThumbTheme(segThumbPage);
+            updatePageSegUi.run();
+        };
 
         for (int i = 0; i < pageButtons.length; i++) {
+            final int idx = i;
             final String mode = pageModes[i];
             pageButtons[i].setOnClickListener(v -> {
                 pageTurnMode = mode;
-                updatePageTurnButtonHighlight(pageButtons, pageModes);
+                pageSelIdx[0] = idx;
+                updatePageSegUi.run();
                 if (isWebViewReady) {
                     webView.evaluateJavascript("setPageTurnMode('" + mode + "')", null);
                 }
@@ -4781,18 +5056,320 @@ public class ReadActivity extends BaseActivity {
         }
 
         view.findViewById(R.id.tv_more_settings).setOnClickListener(v -> showMoreSettingsDialog());
+
+        // ✅ 间距行：行段间距 / 页面边距 两个胶囊入口 → 底部抽屉
+        updateSpacingPillTexts(view);
+        view.findViewById(R.id.btn_line_spacing).setOnClickListener(v -> showSpacingDrawer(true));
+        view.findViewById(R.id.btn_page_margin).setOnClickListener(v -> showSpacingDrawer(false));
     }
 
-    private void updatePageTurnButtonHighlight(TextView[] buttons, String[] modes) {
-        for (int i = 0; i < buttons.length; i++) {
-            if (modes[i].equals(pageTurnMode)) {
-                buttons[i].setTextColor(Color.parseColor("#007AFF"));
-                buttons[i].setBackground(getDrawable(R.drawable.bg_search_radius));
-            } else {
-                buttons[i].setTextColor(Color.parseColor("#8E8E93"));
-                buttons[i].setBackground(null);
-            }
+    // ==================== 间距设置（行段间距 / 页面边距） ====================
+
+    /** 行段间距档位：{行距倍数, 段距行数}，默认「适中」=(1.8, 0.5) */
+    private static final float[][] LINE_PRESETS = {{1.5f, 0.25f}, {1.8f, 0.5f}, {2.0f, 0.75f}, {2.2f, 1.0f}};
+    private static final String[] PRESET_NAMES = {"小", "适中", "较大", "大"};
+    /** 页面边距档位：{左右 dp, 上下 dp}，默认「适中」=(16, 22) */
+    private static final int[][] MARGIN_PRESETS = {{10, 14}, {16, 22}, {24, 32}, {32, 42}};
+    /** 滑块值域：{偏移, 档数}（LiquidSlider 值为 1..total，实际值 = 偏移 + (值-1) × 步长） */
+    private static final int SLIDER_LINE_OFF = 12,  SLIDER_LINE_TOTAL = 15;   // 1.2~2.6× step 0.1
+    private static final int SLIDER_PARA_OFF = 0,   SLIDER_PARA_TOTAL = 31;   // 0~1.5 行 step 0.05
+    private static final int SLIDER_LR_OFF = 8,     SLIDER_LR_TOTAL = 33;     // 8~40 dp step 1
+    private static final int SLIDER_TB_OFF = 12,    SLIDER_TB_TOTAL = 45;     // 12~56 dp step 1
+
+    /** 当前值命中的档位索引；未命中任何档位返回 4（=自定义） */
+    private int linePresetIndex() {
+        for (int i = 0; i < LINE_PRESETS.length; i++) {
+            if (Math.abs(LINE_PRESETS[i][0] - lineSpacingRatio) < 0.001f
+                    && Math.abs(LINE_PRESETS[i][1] - paraGapRatio) < 0.001f) return i;
         }
+        return 4;
+    }
+
+    private int marginPresetIndex() {
+        for (int i = 0; i < MARGIN_PRESETS.length; i++) {
+            if (MARGIN_PRESETS[i][0] == padLR && MARGIN_PRESETS[i][1] == padTB) return i;
+        }
+        return 4;
+    }
+
+    /** 更新设置面板「间距」行两个胶囊上的当前档位名 */
+    private void updateSpacingPillTexts(View panel) {
+        if (panel == null) return;
+        TextView tvLine = panel.findViewById(R.id.tv_line_spacing_cur);
+        TextView tvMargin = panel.findViewById(R.id.tv_margin_cur);
+        if (tvLine != null) tvLine.setText(linePresetIndex() < 4 ? PRESET_NAMES[linePresetIndex()] : "自定义");
+        if (tvMargin != null) tvMargin.setText(marginPresetIndex() < 4 ? PRESET_NAMES[marginPresetIndex()] : "自定义");
+    }
+
+    /** 把当前间距参数应用到 WebView（运行中直调 → setTypesetting 立即重排当前章） */
+    private void applySpacingToWebView() {
+        if (isWebViewReady) {
+            webView.evaluateJavascript("setTypesetting(" + lineSpacingRatio + "," + paraGapRatio
+                    + "," + padLR + "," + padTB + ")", null);
+        }
+        updateSpacingPillTexts(settingsPanelView);
+        saveReadingPreferences();
+    }
+
+    private PopupWindow spacingPopup;
+
+    /**
+     * 底部抽屉：行段间距（isLine=true）/ 页面边距（false）。
+     * 复用同一布局，标题/描述/滑块标签按类型参数化；分段 5 档（小/适中/较大/大/自定义），
+     * 自定义显现两个 LiquidSlider（拖动中仅更新数值文字，松手才重排，与导航栏滑块同策略）。
+     * 配色：容器/文字走 themeViewTree 派生（黑白文字），指示器夜间按 App 规则混白 88%。
+     */
+    private void showSpacingDrawer(final boolean isLine) {
+        if (spacingPopup != null && spacingPopup.isShowing()) return;
+        ViewGroup root = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.popup_spacing_drawer, null);
+        root.setClipChildren(false);
+        root.setClipToPadding(false);
+
+        TextView title = root.findViewById(R.id.tv_drawer_title);
+        TextView desc = root.findViewById(R.id.tv_drawer_desc);
+        TextView labelA = root.findViewById(R.id.tv_label_a);
+        TextView labelB = root.findViewById(R.id.tv_label_b);
+        TextView valA = root.findViewById(R.id.tv_val_a);
+        TextView valB = root.findViewById(R.id.tv_val_b);
+        LiquidSlider sliderA = root.findViewById(R.id.slider_a);
+        LiquidSlider sliderB = root.findViewById(R.id.slider_b);
+        View track = root.findViewById(R.id.seg_track);
+        final View thumb = root.findViewById(R.id.seg_thumb);
+        final View customZone = root.findViewById(R.id.custom_zone);
+        final TextView[] segItems = {
+                root.findViewById(R.id.seg_i_0), root.findViewById(R.id.seg_i_1),
+                root.findViewById(R.id.seg_i_2), root.findViewById(R.id.seg_i_3),
+                root.findViewById(R.id.seg_i_4)};
+
+        title.setText(isLine ? "行段间距" : "页面边距");
+        desc.setText(isLine ? "调整正文行距与段落间距，实时生效"
+                            : "选择边距档位，正文留白即时预览；选「自定义」可分别微调");
+        labelA.setText(isLine ? "行距" : "左右边距");
+        labelB.setText(isLine ? "段距" : "上下边距");
+        for (int i = 0; i < segItems.length; i++) {
+            segItems[i].setText(i < 4 ? PRESET_NAMES[i] : "自定义");
+        }
+
+        // 主题派生：容器/文字由 themeViewTree 统一重着色（文字只黑/白）；指示器单独处理
+        themeViewTree(root);
+        thumb.setTag(R.id.tag_keep_own_color, true);
+        applySegThumbTheme(thumb);
+        sliderA.setChrome(getChromeBgColor(), getTextPrimaryColor(), isChromeDark());
+        sliderB.setChrome(getChromeBgColor(), getTextPrimaryColor(), isChromeDark());
+
+        // ===== 分段选择：滑动指示器 + 文字加粗（颜色统一主文字，层级靠字重） =====
+        final int[] selIdx = {isLine ? linePresetIndex() : marginPresetIndex()};
+        final int[] segCell = {0};
+        final Runnable[] placeThumb = new Runnable[1];
+        placeThumb[0] = () -> {
+            int w = track.getWidth();
+            if (w <= 0) return;   // 未布局：等 post 回调再定位
+            int cell = Math.max(1, (int) ((w - dp(6)) / 5));
+            segCell[0] = cell;
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) thumb.getLayoutParams();
+            int th = (int) (track.getHeight() - dp(6));
+            if (lp.width != cell || lp.height != th) {
+                lp.width = cell;
+                lp.height = th;
+                thumb.setLayoutParams(lp);
+            }
+            float target = dp(3) + selIdx[0] * cell;
+            if (thumb.getWidth() > 0 && Math.abs(thumb.getTranslationX() - target) > 0.5f) {
+                thumb.animate().translationX(target).setDuration(260)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+            } else {
+                thumb.animate().cancel();
+                thumb.setTranslationX(target);
+            }
+        };
+        Runnable updateSegUi = () -> {
+            int pri = getTextPrimaryColor();
+            for (int i = 0; i < segItems.length; i++) {
+                boolean on = i == selIdx[0];
+                segItems[i].setTypeface(null, on ? Typeface.BOLD : Typeface.NORMAL);
+                // 选中项落在混白 88% 的亮色指示器上，必须恒深色；夜间 textPrimary(白) 在白块上不可读
+                segItems[i].setTextColor(on ? 0xFF1D1D1F : pri);
+            }
+            customZone.setVisibility(selIdx[0] == 4 ? View.VISIBLE : View.GONE);
+            placeThumb[0].run();
+        };
+        track.post(placeThumb[0]);
+
+        // ===== 滑块：拖动中仅更新数值文字，松手应用（避免逐帧重排卡顿） =====
+        final int offA = isLine ? SLIDER_LINE_OFF : SLIDER_LR_OFF;
+        final int offB = isLine ? SLIDER_PARA_OFF : SLIDER_TB_OFF;
+        final int totalA = isLine ? SLIDER_LINE_TOTAL : SLIDER_LR_TOTAL;
+        final int totalB = isLine ? SLIDER_PARA_TOTAL : SLIDER_TB_TOTAL;
+        if (isLine) {
+            sliderA.setTipFormatter(v -> fmtLineRatio((v - 1 + offA)));
+            sliderB.setTipFormatter(v -> fmtParaGap((v - 1 + offB)));
+        } else {
+            sliderA.setTipFormatter(v -> String.valueOf(v - 1 + offA));
+            sliderB.setTipFormatter(v -> String.valueOf(v - 1 + offB));
+        }
+        sliderA.setProgressInfo(Math.round(lineSpacingRatio * 10) - offA + 1, totalA);
+        sliderB.setProgressInfo(Math.round(paraGapRatio * 20) - offB + 1, totalB);
+
+        Runnable syncVals = () -> {
+            if (isLine) {
+                valA.setText(fmtLineRatio(Math.round(lineSpacingRatio * 10)));
+                valB.setText(fmtParaGap(Math.round(paraGapRatio * 20)));
+            } else {
+                valA.setText(String.valueOf(padLR));
+                valB.setText(String.valueOf(padTB < 0 ? 22 : padTB));
+            }
+        };
+        syncVals.run();
+
+        sliderA.setListener(new LiquidSlider.Listener() {
+            @Override public void onDragStart() { }
+            @Override public void onDragPage(int page) {
+                int v = page - 1 + offA;
+                if (isLine) valA.setText(fmtLineRatio(v));
+                else valA.setText(String.valueOf(v));
+            }
+            @Override public void onDragEnd(int page) {
+                int v = page - 1 + offA;
+                if (isLine) lineSpacingRatio = v / 10f;
+                else padLR = v;
+                selIdx[0] = 4;
+                updateSegUi.run();
+                syncVals.run();
+                applySpacingToWebView();
+            }
+        });
+        sliderB.setListener(new LiquidSlider.Listener() {
+            @Override public void onDragStart() { }
+            @Override public void onDragPage(int page) {
+                int v = page - 1 + offB;
+                if (isLine) valB.setText(fmtParaGap(v));
+                else valB.setText(String.valueOf(v));
+            }
+            @Override public void onDragEnd(int page) {
+                int v = page - 1 + offB;
+                if (isLine) paraGapRatio = v / 20f;
+                else padTB = v;
+                selIdx[0] = 4;
+                updateSegUi.run();
+                syncVals.run();
+                applySpacingToWebView();
+            }
+        });
+
+        // 点击档位：预设档直接赋值生效；「自定义」展开滑块区
+        for (int i = 0; i < segItems.length; i++) {
+            final int idx = i;
+            segItems[i].setOnClickListener(v -> {
+                selIdx[0] = idx;
+                updateSegUi.run();
+                if (idx == 4) {
+                    syncVals.run();
+                    return;
+                }
+                if (isLine) {
+                    lineSpacingRatio = LINE_PRESETS[idx][0];
+                    paraGapRatio = LINE_PRESETS[idx][1];
+                } else {
+                    padLR = MARGIN_PRESETS[idx][0];
+                    padTB = MARGIN_PRESETS[idx][1];
+                }
+                // 滑块同步到预设值，下次展开自定义即为当前值
+                sliderA.setProgressInfo((isLine ? Math.round(lineSpacingRatio * 10) : padLR) - offA + 1, totalA);
+                sliderB.setProgressInfo((isLine ? Math.round(paraGapRatio * 20) : (padTB < 0 ? 22 : padTB)) - offB + 1, totalB);
+                syncVals.run();
+                applySpacingToWebView();
+            });
+        }
+        updateSegUi.run();
+
+        // ===== 容器：SwipeDismissLayout 承载（跟手下拉关闭，与字体/背景弹窗同款）+ 全屏 scrim + 底部面板 =====
+        SwipeDismissLayout host = new SwipeDismissLayout(this);
+        View scrim = new View(this);
+        scrim.setBackgroundColor(Color.argb(0x6B, 0, 0, 0));
+        scrim.setOnClickListener(v -> dismissSpacingDrawer());
+        host.addView(scrim, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        host.addView(root, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM));
+        host.setPanel(root);
+        // 面板滑出（跟手超阈值 / 收起按钮）后：scrim 淡出再关窗；scrim 点击关闭走 dismissSpacingDrawer 自己的动画
+        host.setDismissAction(() -> {
+            scrim.animate().alpha(0f).setDuration(120).withEndAction(() -> {
+                if (spacingPopup != null) { spacingPopup.dismiss(); spacingPopup = null; }
+            }).start();
+        });
+
+        // 收起按钮（左上）：走 SwipeDismissLayout 收回动画，与字体/背景弹窗同款
+        root.findViewById(R.id.btn_drawer_close).setOnClickListener(v -> {
+            SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
+            if (h != null) h.dismissAnimated();
+            else dismissSpacingDrawer();
+        });
+
+        spacingPopup = new PopupWindow(host,
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, true);
+        spacingPopup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        spacingPopup.setAnimationStyle(0);
+        spacingPopup.setOutsideTouchable(true);
+        spacingPopup.setTouchInterceptor((v, event) -> {
+            if (event.getAction() == android.view.MotionEvent.ACTION_OUTSIDE) {
+                dismissSpacingDrawer();
+                return true;
+            }
+            return false;
+        });
+        spacingPopup.showAtLocation(layoutBottomNav, Gravity.NO_GRAVITY, 0, 0);
+        // ✅ 联动：抽屉滑出时设置面板收回；抽屉收起（scrim/返回键/跟手下滑/按钮任一路径 dismiss）时面板重新滑出
+        retractSettingsPanelForSub();
+        spacingPopup.setOnDismissListener(this::restoreSettingsPanelFromSub);
+        // 布局完成后重新定位指示器（首次定位时 track 宽度才就绪）
+        root.post(placeThumb[0]);
+        scrim.setAlpha(0f);
+        scrim.animate().alpha(1f).setDuration(200).start();
+        root.setTranslationY(dp(320));
+        root.post(() -> root.animate().translationY(0f).setDuration(260)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.2f)).start());
+    }
+
+    private void dismissSpacingDrawer() {
+        if (spacingPopup == null || !spacingPopup.isShowing()) return;
+        PopupWindow pw = spacingPopup;
+        spacingPopup = null;
+        View host = pw.getContentView();
+        View panel = ((ViewGroup) host).getChildAt(1);
+        View scrim = ((ViewGroup) host).getChildAt(0);
+        panel.animate().translationY(panel.getHeight() > 0 ? panel.getHeight() : dp(320))
+                .setDuration(220).setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .start();
+        scrim.animate().alpha(0f).setDuration(200).start();
+        panel.postDelayed(() -> {
+            try { pw.dismiss(); } catch (Exception ignore) { }
+        }, 230);
+    }
+
+    /** 分段滑动指示器日/夜配色：日间白块+投影（书架同款 drawable），夜间按 App 规则混白 88% */
+    private void applySegThumbTheme(View thumb) {
+        if (isChromeDark()) {
+            GradientDrawable gd = new GradientDrawable();
+            gd.setCornerRadius(dp(9));
+            gd.setColor(mixColors(getChromeBgColor(), Color.WHITE, 0.88f));
+            thumb.setBackground(gd);
+        } else {
+            thumb.setBackgroundResource(R.drawable.bg_shelf_seg_thumb);
+        }
+    }
+
+    private String fmtLineRatio(int v10) {
+        return String.format(java.util.Locale.US, "%.1f×", v10 / 10f);
+    }
+
+    private String fmtParaGap(int v20) {
+        return String.format(java.util.Locale.US, "%.2f 行", v20 / 20f);
+    }
+
+    private float dp(float v) {
+        return v * getResources().getDisplayMetrics().density;
     }
 
     /**
@@ -4800,7 +5377,9 @@ public class ReadActivity extends BaseActivity {
      */
     private void updateBgColorHighlight(View[] swatches, View[] rings) {
         for (int i = 0; i < swatches.length; i++) {
-            if (i == currentBgColor) {
+            // 黑色背景(index 3) ≡ 夜间模式：夜间态下黑块显示选中
+            boolean on = (i == currentBgColor) || (i == 3 && isNightMode);
+            if (on) {
                 rings[i].setVisibility(View.VISIBLE);
                 swatches[i].setScaleX(1.08f);
                 swatches[i].setScaleY(1.08f);
@@ -4866,7 +5445,7 @@ public class ReadActivity extends BaseActivity {
             ring.setLayoutParams(ringLp);
             ring.setBackgroundResource(R.drawable.bg_color_ring);
             try { GradientDrawable rd = (GradientDrawable) ring.getBackground(); rd.mutate(); rd.setCornerRadius(ringCorner); } catch (Exception ignore) {}
-            ring.setVisibility(i == currentBgColor ? View.VISIBLE : View.GONE);
+            ring.setVisibility((i == currentBgColor || (i == 3 && isNightMode)) ? View.VISIBLE : View.GONE);
 
             frame.addView(swatch);
             frame.addView(ring);
@@ -4874,12 +5453,17 @@ public class ReadActivity extends BaseActivity {
             // 点击选择
             final int idx = i;
             swatch.setOnClickListener(v -> {
-                currentBgColor = idx;
-                // ✅ 关键修复：选中自定义背景即退出夜间模式（详见主面板纯色处理器说明）
-                isNightMode = false;
-                applyBackgroundColorToWebView(idx);
-                applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景
-                saveReadingPreferences();
+                if (idx == 3) {
+                    // ✅ 黑色背景 ≡ 夜间模式（同主面板处理器，统一状态不写 currentBgColor=3）
+                    if (!isNightMode) animateNightModeTo(true);
+                } else {
+                    currentBgColor = idx;
+                    // ✅ 关键修复：选中自定义背景即退出夜间模式（详见主面板纯色处理器说明）
+                    isNightMode = false;
+                    applyBackgroundColorToWebView(idx);
+                    applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景
+                    saveReadingPreferences();
+                }
                 refreshPopupSelection(solidContainer, texContainer);
             });
             currentRow.addView(frame);
@@ -4969,11 +5553,14 @@ public class ReadActivity extends BaseActivity {
 
         // 以全屏透明窗口 + 跟手下滑容器承载面板（面板下移时不会被半屏窗口边界裁掉）
         bgColorsPopupWindow = showSwipeDismissPopup(popupView, bgPopupHeight, "bg");
+        // ✅ 联动：弹窗滑出时设置面板收回；弹窗收起（关闭按钮/跟手下滑任一路径 dismiss）时面板重新滑出
+        retractSettingsPanelForSub();
         suspendAutoPage();
         mainHandler.removeCallbacks(hideNavRunnable);
         bgColorsPopupWindow.setOnDismissListener(() -> {
             resetAutoHideTimer();
             resumeAutoPageIfSuspended();
+            restoreSettingsPanelFromSub();
         });
     }
 
@@ -4988,7 +5575,8 @@ public class ReadActivity extends BaseActivity {
             for (int c = 0; c < row.getChildCount(); c++) {
                 FrameLayout frame = (FrameLayout) row.getChildAt(c);
                 View ring = frame.getChildAt(1);
-                ring.setVisibility(solidIdx == currentBgColor ? View.VISIBLE : View.GONE);
+                // 黑色背景(index 3) ≡ 夜间模式：夜间态下黑块显示选中
+                ring.setVisibility((solidIdx == currentBgColor || (solidIdx == 3 && isNightMode)) ? View.VISIBLE : View.GONE);
                 solidIdx++;
             }
         }
@@ -5050,11 +5638,14 @@ public class ReadActivity extends BaseActivity {
 
         // 以全屏透明窗口 + 跟手下滑容器承载面板
         fontsPopupWindow = showSwipeDismissPopup(popupView, popupHeight, "font");
+        // ✅ 联动：弹窗滑出时设置面板收回；弹窗收起（关闭按钮/跟手下滑任一路径 dismiss）时面板重新滑出
+        retractSettingsPanelForSub();
         suspendAutoPage();
         mainHandler.removeCallbacks(hideNavRunnable);
         fontsPopupWindow.setOnDismissListener(() -> {
             resetAutoHideTimer();
             resumeAutoPageIfSuspended();
+            restoreSettingsPanelFromSub();
         });
     }
 
@@ -5711,12 +6302,15 @@ public class ReadActivity extends BaseActivity {
 
         // 以全屏透明窗口 + 跟手下滑容器承载面板
         moreSettingsPopupWindow = showSwipeDismissPopup(popupView, msPopupHeight, "more");
+        // ✅ 联动：弹窗滑出时设置面板收回；弹窗收起（完成按钮/跟手下滑任一路径 dismiss）时面板重新滑出
+        retractSettingsPanelForSub();
         suspendAutoPage();
 
         mainHandler.removeCallbacks(hideNavRunnable);
         moreSettingsPopupWindow.setOnDismissListener(() -> {
             resetAutoHideTimer();
             resumeAutoPageIfSuspended();
+            restoreSettingsPanelFromSub();
         });
     }
 

@@ -218,6 +218,7 @@ var currentChapterIndex = -1;
 var pages = [];
 var pageStartOffsets = [];
 var pagesRestoredFromCache = false; // ✅ 排版缓存恢复标记：loadContent 从 Java 缓存载入 pages 后置位，resizeCanvas 据此跳过整章重新分页
+var _cachedLayoutViewport = null;   // ✅ 排版缓存分页时的视口尺寸 {w,h}：恢复时与当前视口比对，不一致则丢弃缓存强制重排
 var currentPage = 0;
 var _pendingLoad = null;            // ✅ 复用池修复：视口尺寸未就绪时缓存的 loadContent 渲染意图
 var _resizeScheduled = false;       // ✅ 复用池修复：resizeCanvas 在 0 尺寸时避免重复排队的标记
@@ -225,7 +226,9 @@ var _resizeScheduled = false;       // ✅ 复用池修复：resizeCanvas 在 0 
 // 默认字体大小（根据屏幕宽度动态调整）
 var fontSize = Math.max(14, Math.floor(window.innerWidth / 24));
 var lineHeightRatio = 1.8;
+var paraGapRatio = 0.5;   // 段间距（行）：空行高度 = 行高 × paraGapRatio（默认 0.5 行 = 原半行高）
 var padding = 16; // 左右边距
+var vPadding = -1;        // 上下边距（px）：-1 = 跟随旧公式 padding + fontSize；>=0 = 显式值
 var topPadding = padding + fontSize; // 顶部边距 = 左右边距 + 整行高 = 半行边距 + 半行额外留白
 
 var bgColor = '#FFFFFF';
@@ -256,7 +259,9 @@ function startPendingResources() {
                 _pendingFontPath = null;
                 _pendingFontName = null;
                 // ✅ 与 loadCustomFont 一致：用 document.fonts.load 显式等待该具体字体就绪再重绘
+                // ✅ xDefer：字体回调到达时机随机，撞上跨章在途窗口会摧毁临时 flipbook（见 xDefer 注释）
                 var redrawFn = function() {
+                    xDefer(function() {
                     if (currentContent) {
                         if (isScrollMode()) {
                             layoutScroll(currentContent, chapterTitle);
@@ -272,6 +277,7 @@ function startPendingResources() {
                         }
                         notifyJavaPageChange();
                     }
+                    });
                 };
                 var _probe = (typeof fontSize !== 'undefined' ? fontSize : 18) + 'px ' + fn;
                 if (document.fonts && document.fonts.load) {
@@ -497,15 +503,19 @@ function paginate(text, title) {
             currentPageLines.push({text: line, fontSize: titleFontSize, bold: true, color: textColor});
             currentPageHeight += h;
         });
-        // 标题后空行
+        // 标题后空行：必须生成占位行（blank），否则 drawPage 的 y 不会推进这段高度，
+        // 分页高度累计与绘制 y 轨迹脱节 → 标题页正文行数被压少 + 底部空出一大块
         var blankH = titleFontSize * 0.8;
         if (currentPageHeight + blankH > maxHeight) {
             pages.push(currentPageLines.slice());
             pageStartOffsets.push(globalOffset);
             currentPageLines = [];
             currentPageHeight = 0;
+            // 换页后空行落在页首：直接丢弃（页首不留段间距，与主流阅读器一致）
+        } else {
+            currentPageLines.push({blank: true, h: blankH, color: textColor});
+            currentPageHeight += blankH;
         }
-        currentPageHeight += blankH;
     }
 
     // 处理正文
@@ -514,14 +524,28 @@ function paginate(text, title) {
     var paragraphs = text.split('\n');
     paragraphs.forEach(function(para, paraIndex) {
         if (para.length === 0) {
-            // 空行：段落间距
-            var h = fontSize * lineHeightRatio * 0.5;
+            // 空行：段落间距（行距 × 段距倍数，默认半行高）
+            var h = fontSize * lineHeightRatio * paraGapRatio;
+            // ✅ 修复「页面行数不够/底部空余过大」：
+            //    原实现空行只累加分页高度、不生成行对象，而 drawPage 的 y 只按行对象推进，
+            //    两者高度基准脱节 → 含空行的页正文被压少 1~2 行且底部空出一大块（无空行的页又排满）。
+            //    现将空行落为占位行（blank），绘制 y 同步推进，分页与绘制完全一致。
+            // 页首空行（刚换页/章首）直接丢弃：段间距不延续到新页首
+            if (currentPageHeight === 0) {
+                globalOffset += 1;
+                return;
+            }
+            // 空行落在换页边界：换页并丢弃该空行（页底段间距本就不可见，且避免新页开头虚占半行）
+            // 注意 push 的偏移与原实现一致：先 push 当前 globalOffset，再 +1
             if (currentPageHeight + h > maxHeight) {
                 pages.push(currentPageLines.slice());
                 pageStartOffsets.push(globalOffset);
                 currentPageLines = [];
                 currentPageHeight = 0;
+                globalOffset += 1;
+                return;
             }
+            currentPageLines.push({blank: true, h: h, color: textColor});
             currentPageHeight += h;
             globalOffset += 1;
             return;
@@ -609,6 +633,15 @@ function drawPage(pageIndex) {
     }
     
     lines.forEach(function(line) {
+        // ✅ 空行占位行：只推进 y、不绘制文字 —— 与 paginate 的高度累计保持同一基准，
+        //    否则 y 比分页高度慢，含空行的页底部会空出一大块（分页/绘制脱节修复的一半）
+        if (line.blank) {
+            if (y + line.h > maxY) {
+                return;
+            }
+            y += line.h;
+            return;
+        }
         var lineH = line.fontSize * (line.bold ? 1.6 : lineHeightRatio);
         // 检查是否超出底部边界
         if (y + lineH > maxY) {
@@ -661,7 +694,7 @@ function goToPage(page) {
         animateScrollTo(page * (scrollViewH || window.innerHeight));
         return;
     }
-    if (isAnimating) return;
+    if (isAnimating || _xCrossFlipping) return;
     if (page < 0) page = 0;
     if (page >= pages.length) page = pages.length - 1;
     if (page === currentPage) return;
@@ -681,7 +714,7 @@ function goToPage(page) {
 
 function nextPage() {
     console.log('DBG nextPage: pages=' + (pages?pages.length:'(none)') + ' anim=' + isAnimating + ' sim=' + simulationActive + ' mode=' + pageTurnMode + ' swipe=' + swipeEnabled + ' dragMode=' + dragMode() + ' cur=' + currentPage);
-    if (isAnimating) return;
+    if (isAnimating || _xCrossFlipping) return;
     if (isHtmlMode()) { htmlNextPage(); return; }
     if (isScrollMode()) { scrollNextScreen(); return; }
     try {
@@ -689,6 +722,9 @@ function nextPage() {
             if (currentPage < pages.length - 1) {
                 $('#flipbook').turn('next');
             } else {
+                // ✅ 邻章已预加载：无缝卷页换章（与普通卷页同观感）；未就绪走原有加载流程
+                var xtSimNext = tryFetchAdjacentChapter(1);
+                if (xtSimNext && simStartCrossFlip(xtSimNext)) return;
                 Android.onChapterEnd();
             }
             return;
@@ -703,6 +739,9 @@ function nextPage() {
                 animateTurn(oldPage, currentPage, true);
             }
         } else {
+            // ✅ 邻章已预加载：换章复用换页动画（跨章无缝），未就绪走原有加载流程
+            var xtNext = tryFetchAdjacentChapter(1);
+            if (xtNext) { crossChapterTapTurn(xtNext); return; }
             Android.onChapterEnd();
         }
     } catch (e) {
@@ -712,7 +751,7 @@ function nextPage() {
 }
 
 function prevPage() {
-    if (isAnimating) return;
+    if (isAnimating || _xCrossFlipping) return;
     if (isHtmlMode()) { htmlPrevPage(); return; }
     if (isScrollMode()) { scrollPrevScreen(); return; }
     try {
@@ -720,6 +759,9 @@ function prevPage() {
             if (currentPage > 0) {
                 $('#flipbook').turn('previous');
             } else {
+                // ✅ 邻章（上一章）已预加载：无缝卷页换章，落点为上一章最后一页
+                var xtSimPrev = tryFetchAdjacentChapter(-1);
+                if (xtSimPrev && simStartCrossFlip(xtSimPrev)) return;
                 try { Android.onChapterStart(); } catch(e) {}
             }
             return;
@@ -734,6 +776,9 @@ function prevPage() {
                 animateTurn(oldPage, currentPage, false);
             }
         } else {
+            // ✅ 邻章（上一章）已预加载：换章复用换页动画，落点为上一章最后一页
+            var xtPrev = tryFetchAdjacentChapter(-1);
+            if (xtPrev) { crossChapterTapTurn(xtPrev); return; }
             try { Android.onChapterStart(); } catch(e) {}
         }
     } catch (e) {
@@ -776,10 +821,96 @@ function getCurrentPageText() {
 }
 
 function notifyJavaPageChange() {
+    // ✅ 跨章无缝翻页：全局 pages 已切到邻章、但 Java 侧 currentChapterIndex 尚未推进的过渡窗口内，
+    //    禁止上报页码（否则会用旧章索引 + 新章页码写进度，造成进度错乱）。loadContent 到达后解除。
+    if (_suppressPageNotify) return;
     try {
         if (typeof Android === 'undefined' || !Android) return;
         Android.onPageChanged(virtualCurrentPage(), virtualTotalPages());
     } catch(e) {}
+}
+
+// ============ 跨章无缝翻页（预加载就绪时，换章复用换页动画） ============
+// Java 侧 getAdjacentChapterPayload(dir) 同步返回邻章已就绪正文（JSON: {index,title,content}），
+// 未就绪返回空串。拿到后先把全局 pages 整体切换成邻章分页结果，再走与普通换页完全相同的动画
+// （或跟手拖拽位图）；落地后才回调 Android.onChapterEnd/onChapterStart，Java 回送的 loadContent
+// 用同一算法同一视口重排 → 结果与已显示页面完全一致 → 视觉零跳变。
+var _suppressPageNotify = false;   // 过渡窗口内抑制页码上报（见 notifyJavaPageChange）
+var _xTurnBusy = false;            // 跨章换章在途（防止窗口期内再次抓取邻章导致连环切换）
+
+function tryFetchAdjacentChapter(dir) {
+    if (_xTurnBusy) return null;
+    if (typeof Android === 'undefined' || !Android || !Android.getAdjacentChapterPayload) return null;
+    var raw = null;
+    try { raw = Android.getAdjacentChapterPayload(dir > 0 ? 1 : -1); } catch (e) { return null; }
+    if (!raw) return null;
+    var pl = null;
+    try { pl = JSON.parse(raw); } catch (e2) { return null; }
+    if (!pl || typeof pl.index !== 'number' || !pl.content || !String(pl.content).trim()) return null;
+    if (pl.index === currentChapterIndex) return null;
+    // ✅ 邻章索引必须与 JS 当前位置严格相邻（dir 方向 ±1）。
+    //    Java 侧索引可能因回调被去重窗口吞掉等原因滞后于 JS——不相邻说明两端失步，
+    //    拒绝该负载走 Java 加载链路自我修正（loadContent 会把索引拉回一致），
+    //    否则会按失步索引换章，把用户抛回刚读过的章节或倒退两章。
+    if (pl.index !== currentChapterIndex + (dir > 0 ? 1 : -1)) return null;
+    var text = preprocessContent(String(pl.content));
+    if (!text || !text.trim()) return null;
+    // 临时分页：swap 全局 → paginate → 还原（paginate 只写 pages/pageStartOffsets，同步执行无重入）
+    var sPages = pages, sOffsets = pageStartOffsets, sTitle = chapterTitle, sContent = currentContent;
+    chapterTitle = pl.title || '';
+    paginate(text, chapterTitle);
+    var xPages = pages, xOffsets = pageStartOffsets;
+    pages = sPages; pageStartOffsets = sOffsets; chapterTitle = sTitle; currentContent = sContent;
+    if (!xPages || !xPages.length) return null;
+    return { dir: (dir > 0 ? 1 : -1), index: pl.index, title: (pl.title || ''),
+             content: text, pages: xPages, offsets: xOffsets };
+}
+
+/** 把全局分页状态整体切换为邻章（此后 drawPage / 页码上报 / 目录页码都基于新章） */
+function swapToAdjacentChapter(xt) {
+    pages = xt.pages;
+    pageStartOffsets = xt.offsets;
+    chapterTitle = xt.title;
+    currentContent = xt.content;
+    currentChapterIndex = xt.index;
+    _suppressPageNotify = true;
+    _xTurnBusy = true;
+    // 兜底：Java loadContent 正常到达时会清这两个旗标；此处超时兜底防极端情况长期卡死
+    setTimeout(function() { _suppressPageNotify = false; _xTurnBusy = false; }, 2000);
+}
+
+/** 跨章「点击 / 音量键 / 自动翻页」翻页：与普通换页同一套动画，落地后再通知 Java 真正换章 */
+function crossChapterTapTurn(xt) {
+    if (isAnimating) return;
+    var toPage = xt.dir > 0 ? 0 : xt.pages.length - 1;
+    if (pageTurnMode === 'none') {
+        // none 模式换页本就无动画：直接切换，与换页观感一致
+        swapToAdjacentChapter(xt);
+        currentPage = toPage;
+        drawPage(currentPage);
+        try { if (xt.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
+        return;
+    }
+    var oldImg = null;
+    try { oldImg = ctx.getImageData(0, 0, canvas.width, canvas.height); } catch (e) { oldImg = null; }
+    if (!oldImg) {
+        // 截图失败（极端环境）→ 退回原有换章流程
+        try { if (xt.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e2) {}
+        return;
+    }
+    swapToAdjacentChapter(xt);
+    currentPage = toPage;
+    drawPage(currentPage);
+    var newImg = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var tmpOld = document.createElement('canvas');
+    tmpOld.width = canvas.width; tmpOld.height = canvas.height;
+    tmpOld.getContext('2d').putImageData(oldImg, 0, 0);
+    var tmpNew = document.createElement('canvas');
+    tmpNew.width = canvas.width; tmpNew.height = canvas.height;
+    tmpNew.getContext('2d').putImageData(newImg, 0, 0);
+    startTurnFrames(tmpOld, tmpNew, toPage, xt.dir > 0, function() {
+        try { if (xt.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
+    });
 }
 
 // ============ 翻页动画系统 ============
@@ -827,7 +958,9 @@ function setPageTurnMode(mode) {
     }
 }
 
-function animateTurn(fromPage, toPage, isForward) {
+/** 通用翻页帧循环：tmpOld/tmpNew 为两页位图，按当前 pageTurnMode 合成 280ms 动画；
+ *  结束后恢复 toPage 正常绘制并解除 isAnimating；onDone 可选（跨章落地时用于通知 Java 换章） */
+function startTurnFrames(tmpOld, tmpNew, toPage, isForward, onDone) {
     isAnimating = true;
     // 超时保护：2秒后强制恢复
     if (animWatchdog) clearTimeout(animWatchdog);
@@ -840,44 +973,6 @@ function animateTurn(fromPage, toPage, isForward) {
     var dpr = window.devicePixelRatio || 1;
     var CW = canvas.width;   // 实际像素宽
     var CH = canvas.height;  // 实际像素高
-    var W = window.innerWidth;  // CSS像素宽
-    var H = window.innerHeight; // CSS像素高
-
-    var tmpNew, tmpOld;
-    try {
-        // 截取旧页画面（用实际像素尺寸）
-        var savedPage = currentPage;
-        currentPage = fromPage;
-        var oldImg = ctx.getImageData(0, 0, CW, CH);
-        // 截取新页画面
-        currentPage = toPage;
-        drawPage(toPage);
-        var newImg = ctx.getImageData(0, 0, CW, CH);
-        currentPage = savedPage;
-
-        // 将新页像素放入离屏 canvas（同样用实际像素尺寸）
-        tmpNew = document.createElement('canvas');
-        tmpNew.width = CW;
-        tmpNew.height = CH;
-        tmpNew.getContext('2d').putImageData(newImg, 0, 0);
-
-        // 将旧页像素放入离屏 canvas
-        tmpOld = document.createElement('canvas');
-        tmpOld.width = CW;
-        tmpOld.height = CH;
-        tmpOld.getContext('2d').putImageData(oldImg, 0, 0);
-    } catch (e) {
-        console.error('翻页截图异常: ' + e.message);
-        // 截图失败，直接跳到目标页
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(dpr, dpr);
-        currentPage = toPage;
-        drawPage(currentPage);
-        notifyJavaPageChange();
-        isAnimating = false;
-        return;
-    }
-
     var startTime = null;
     function frame(timestamp) {
         try {
@@ -916,6 +1011,7 @@ function animateTurn(fromPage, toPage, isForward) {
                 notifyJavaPageChange();
                 isAnimating = false;
                 if (animWatchdog) { clearTimeout(animWatchdog); animWatchdog = null; }
+                if (onDone) onDone();
             }
         } catch (e) {
             // 动画出错时安全恢复状态，防止 isAnimating 卡死
@@ -927,9 +1023,53 @@ function animateTurn(fromPage, toPage, isForward) {
             notifyJavaPageChange();
             isAnimating = false;
             if (animWatchdog) { clearTimeout(animWatchdog); animWatchdog = null; }
+            if (onDone) onDone();
         }
     }
     requestAnimationFrame(frame);
+}
+
+function animateTurn(fromPage, toPage, isForward) {
+    var dpr = window.devicePixelRatio || 1;
+    var CW = canvas.width;   // 实际像素宽
+    var CH = canvas.height;  // 实际像素高
+
+    var tmpNew, tmpOld;
+    try {
+        // 截取旧页画面（用实际像素尺寸）
+        var savedPage = currentPage;
+        currentPage = fromPage;
+        var oldImg = ctx.getImageData(0, 0, CW, CH);
+        // 截取新页画面
+        currentPage = toPage;
+        drawPage(toPage);
+        var newImg = ctx.getImageData(0, 0, CW, CH);
+        currentPage = savedPage;
+
+        // 将新页像素放入离屏 canvas（同样用实际像素尺寸）
+        tmpNew = document.createElement('canvas');
+        tmpNew.width = CW;
+        tmpNew.height = CH;
+        tmpNew.getContext('2d').putImageData(newImg, 0, 0);
+
+        // 将旧页像素放入离屏 canvas
+        tmpOld = document.createElement('canvas');
+        tmpOld.width = CW;
+        tmpOld.height = CH;
+        tmpOld.getContext('2d').putImageData(oldImg, 0, 0);
+    } catch (e) {
+        console.error('翻页截图异常: ' + e.message);
+        // 截图失败，直接跳到目标页
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+        currentPage = toPage;
+        drawPage(currentPage);
+        notifyJavaPageChange();
+        isAnimating = false;
+        return;
+    }
+
+    startTurnFrames(tmpOld, tmpNew, toPage, isForward);
 }
 
 // 覆盖动画：两个方向观感不同（刻意不对称，两个方向都跟手）
@@ -1320,13 +1460,235 @@ document.addEventListener('touchcancel', function () { _simTapStart = null; _sim
  * 兜底解锁：跨章失败（如"已经是最后一章"）时不会触发 loadContent，需自行复位。
  */
 function simBoundarySwap(dir) {
+    if (_xCrossFlipping) return;
     if (_boundaryPending) return;
     _boundaryPending = true;
     setTimeout(function() { _boundaryPending = false; }, 1500);
+    // ✅ 邻章已就绪 → 无缝卷页换章（与普通卷页同观感）；未就绪 → 原有加载流程。
+    //    turn.js 的 boundary 事件处于其内部状态机中，同步 destroy flipbook 有风险 → 下一拍再拆。
+    var xt = null;
+    try { xt = tryFetchAdjacentChapter(dir); } catch (e) { xt = null; }
+    if (xt) {
+        setTimeout(function() {
+            if (!simStartCrossFlip(xt)) {
+                try { if (dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
+            }
+        }, 0);
+        return;
+    }
     try {
         if (dir > 0) Android.onChapterEnd();
         else Android.onChapterStart();
     } catch (e) {}
+}
+
+// ============ 仿真模式跨章无缝卷页（临时双页 flipbook） ============
+// turn.js 的 flipbook 页数即本章页数，无法原地追加邻章页，因此用「临时双页 flipbook」完成跨章：
+//   前向（本章末页 → 下一章第 1 页）：p1=本章末页位图、p2=下一章第 1 页位图，
+//       初始停在 p1，程序化 turn('next') → 末页卷起露出下一章首页，与普通卷页观感一致；
+//   后向（本章首页 → 上一章末页）：p1=上一章末页位图、p2=本章首页位图，
+//       初始停在 p2，程序化 turn('previous') → 上一章末页从左侧卷入盖住屏幕。
+// 落地后重建正式 flipbook（initSimulation），画面与落地帧完全一致 → 零跳变，
+// 再回调 Android.onChapterEnd/onChapterStart，Java 回送的 loadContent 结果一致。
+// 注意：前向在起飞前就把全局分页切到下一章（swapToAdjacentChapter），后向在落地时才切换。
+var _xCrossFlipping = false;   // 临时 flipbook 跨章卷页在途（含 500ms 动画与落地重建）
+var _xflipArmed = false;       // ✅ turn('next'/'previous') 已发出；armed 之后的 turned 才是真正落点
+var _xflipInitPage = 0;        // ✅ 临时 flipbook 初始页号；turned(page===初始页) 是 turn() 初始化误触发
+
+/** ✅ 跨章在途延迟器：跨章卷页期间，任何会 paginate/重绘/重建仿真层的异步回调
+ *  （字体加载回调、setFontSize/setFontFamily 的 reinitSimulation 防抖定时器等）若此刻执行，
+ *  会 destroySimulation 摧毁在途临时 flipbook → turned 永不到达 → 3s 兜底按失败回退，
+ *  表现为「换章翻页有时跳回翻页前的页面」。字体回调到达时机随机（网络/缓存），故偶发。
+ *  在途时统一延迟到落地后执行；落地后立即照常执行。 */
+function xDefer(fn) {
+    if (!_xCrossFlipping) { fn(); return; }
+    setTimeout(function () { xDefer(fn); }, 120);
+}
+
+/** 临时把全局 pages/chapterTitle 换成目标章后渲染第 idx 页位图；渲染完立即还原。
+ *  若该槽位原本无缓存则顺手清掉，防止污染当前章的同序号页位图（simPageCache 按索引存）。 */
+function simRenderUrlForPages(pArr, title, idx) {
+    var sPages = pages, sTitle = chapterTitle;
+    pages = pArr; chapterTitle = title;
+    var had = (simPageCache[idx] !== undefined);
+    var url = null;
+    try { url = renderPageToCache(idx); } catch (e) { url = null; }
+    pages = sPages; chapterTitle = sTitle;
+    if (!had && url !== null) { try { delete simPageCache[idx]; } catch (e2) {} }
+    return url;
+}
+
+/** 仿真跨章无缝卷页：构建临时双页 flipbook 并程序化翻页。成功接管返回 true（换章回调由落地时发出） */
+function simStartCrossFlip(xt) {
+    if (_xCrossFlipping) return false;
+    if (!xt || !xt.pages || !xt.pages.length) return false;
+    var forward = xt.dir > 0;
+    var frontUrl = null, underEl = null, initPage = 1;
+
+    try {
+        if (forward) {
+            // 起飞前先把全局分页切到下一章（落地后 Java loadContent 结果一致）
+            xt.saved = { pages: pages, offsets: pageStartOffsets, title: chapterTitle,
+                         content: currentContent, index: currentChapterIndex, page: currentPage };
+            frontUrl = simPageCache[currentPage];
+            if (frontUrl === undefined) frontUrl = renderPageToCache(currentPage);
+            if (!frontUrl) return false;
+            swapToAdjacentChapter(xt);
+            currentPage = 0;
+            delete simPageCache[0];              // 防止命中旧章第 1 页的同序号缓存
+            underEl = createSimPageElement(0);   // 下一章第 1 页（读新全局）
+            initPage = 1;
+        } else {
+            // 全局暂不切换（落地时再切）；先渲染上一章末页位图
+            var zLast = xt.pages.length - 1;
+            frontUrl = simRenderUrlForPages(xt.pages, xt.title, zLast);
+            if (!frontUrl) return false;
+            _suppressPageNotify = true;
+            _xTurnBusy = true;
+            setTimeout(function() { _suppressPageNotify = false; _xTurnBusy = false; }, 2000);
+            underEl = createSimPageElement(0);   // 本章第 1 页（读当前全局）
+            initPage = 2;
+        }
+    } catch (e) {
+        console.error('simStartCrossFlip 准备失败: ' + e.message);
+        return false;
+    }
+
+    _xCrossFlipping = true;
+    _xflipArmed = false;
+    _xflipInitPage = initPage;
+    // 兜底：turn.js 事件异常未落地时，3 秒后强制按失败收尾
+    setTimeout(function() { if (_xCrossFlipping) simFinishCrossFlip(xt, false); }, 3000);
+
+    // 类名显式重排：p1=卷动页（front）、p2=落点页（under），避免 createSimPageElement 的 p1 类名冲突
+    underEl.attr('class', 'page-div p2 page fixed');
+    var frontEl = $('<div class="page-div p1 page fixed"></div>');
+    frontEl.css({ 'background-color': bgColor });
+    var imgF = document.createElement('img');
+    imgF.src = frontUrl;
+    imgF.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:fill;';
+    imgF.className = 'page-content';
+    frontEl[0].appendChild(imgF);
+
+    destroySimulation();                       // 拆掉旧 flipbook（此时 simulationActive 仍为 true）
+    simulationActive = false;                  // 折页在途期间屏蔽仿真触摸处理（touch 分支等）
+    canvas.style.visibility = 'hidden';
+    $('#flipbookContainer').css('display', 'block');
+    // ✅ 在途期间屏蔽 flipbook 指针事件：程序化卷页若被用户触摸打断，turn.js 会走取消路径
+    //    不再触发 turned → 只能等 3s 兜底按失败回退（表现为换章后 ~3s 跳回原章）。
+    //    我们的触摸处理在 document 层且 simulationActive=false 已屏蔽，不受影响。
+    $('#flipbook').css('pointer-events', 'none');
+    syncSimulationBackground();
+    var flipbook = $('#flipbook');
+    flipbook.empty();
+    flipbook.append(frontEl).append(underEl);
+
+    var W = window.innerWidth, H = window.innerHeight;
+    flipbook.turn({
+        width: W, height: H, display: 'single', duration: 500,
+        gradients: true, acceleration: true, elevation: 60,
+        page: initPage, pages: 2,
+        when: {
+            start: function (event, opts) {
+                // 底层静止区保险：用「落点页」位图铺 wrapper 背景（与 simOnFlipStart 同理）。
+                // ⚠️ 落点页随方向而异：前向落点 = underEl（下一章第 1 页）；
+                //    后向落点 = frontEl（上一章末页 = frontUrl）。后向若沿用 underEl 的位图
+                //    （它是当前章第 1 页，单页模式 p1 被 turn.js 隐藏、露出的正是这层背景），
+                //    卷页全程露出的仍是原章内容，落地重建后才跳变成上一章末页（已踩坑）。
+                try {
+                    var url;
+                    if (forward) {
+                        var uimg = underEl.find('img')[0];
+                        url = (uimg && uimg.src) || frontUrl;
+                    } else {
+                        url = frontUrl;
+                    }
+                    var styleEl = document.getElementById('simUnderPageStyle');
+                    if (!styleEl) {
+                        styleEl = document.createElement('style');
+                        styleEl.id = 'simUnderPageStyle';
+                        document.head.appendChild(styleEl);
+                    }
+                    styleEl.textContent = '#flipbook .page-wrapper {' +
+                        ' background-image: url(' + url + ') !important;' +
+                        ' background-size: 100% 100% !important;' +
+                        ' background-repeat: no-repeat !important;' +
+                        ' background-position: 0 0 !important; }';
+                    var pt = document.querySelector('#flipbook .page.p-temporal');
+                    if (pt) pt.style.display = '';
+                } catch (e) {}
+            },
+            end: function (event, opts, completed) {
+                if (!_xflipArmed) return;
+                if (completed) return;                 // 成功：交给 _eventEnd → _fitPage → turned 落地
+                // ⚠️ 程序化翻页不存在「取消」。此 end(false) 是 turn.js _fitPage 内部 turn("stop")
+                //    的正常收尾（成功翻页后必伴随一次），只清视觉残留，绝不能当失败回退——
+                //    否则会同步 destroy 临时 flipbook，摧毁紧随其后的 turned 事件链（已踩坑）。
+                //    失败收尾由 fire 异常分支与 3s 兜底负责。
+                simOnFlipEnd();
+            },
+            turned: function (event, page) {
+                // ✅ turn.js 在 turn() 初始化时就会触发一次 turned(page=初始页)（实测 t≈55~115ms），
+                //    并非翻页落点；只有 turn('next'/'previous') 发出（armed）之后的 turned 才算落地。
+                if (!_xflipArmed) return;
+                if (page === _xflipInitPage) return;   // 双保险：初始页的 turned 不是落点
+                simOnFlipEnd();
+                simFinishCrossFlip(xt, true);
+            },
+            missing: function () {}
+        }
+    });
+
+    setTimeout(function() {
+        try {
+            // ✅ 若收尾已发生（如 init 误触发被拦截前后的异常路径），此刻 #flipbook 可能已是
+            //    重建后的正式 flipbook——绝不能再对它发 turn('next'/'previous')（会误翻一页并污染进度）。
+            if (!_xCrossFlipping) return;
+            var fb = $('#flipbook');
+            if (!fb.data() || !fb.turn('is')) { simFinishCrossFlip(xt, false); return; }
+            _xflipArmed = true;                // 翻页指令已发出：之后的 turned 才是落点
+            fb.turn(forward ? 'next' : 'previous');
+        } catch (e) { simFinishCrossFlip(xt, false); }
+    }, 30);
+    return true;
+}
+
+/** 仿真跨章卷页收尾：completed=true 落地目标章并重建正式 flipbook；false 回退触发前状态 */
+function simFinishCrossFlip(xt, completed) {
+    if (!_xCrossFlipping) return;
+    _xCrossFlipping = false;
+    try {
+        var fb = $('#flipbook');
+        if (fb.data() && fb.turn('is')) fb.turn('destroy');
+    } catch (e) {}
+    $('#flipbook').empty();
+    $('#flipbook').css('pointer-events', '');   // ✅ 恢复指针事件（临时 flipbook 期间被屏蔽，见 simStartCrossFlip）
+    if (completed) {
+        if (xt.dir < 0) {
+            // 后向：落地时才把全局分页切到上一章，落点为其最后一页
+            swapToAdjacentChapter(xt);
+            currentPage = xt.pages.length - 1;
+        }
+        // 前向：起飞前已切换，currentPage 已是 0
+        // ✅ 落地即解除「跨章繁忙」：此后用户立刻再跨章，桥可按 Java 已推进的索引正常取邻章，
+        //    不必等 loadContent 回送（期间快速再翻会被拒走旧流程、撞上去重窗被吞=点一下无反应）。
+        //    _suppressPageNotify 仍保持到 loadContent 到达（页码上报窗口保护不变）；
+        //    迟到的过时 loadContent 由 loadContent 内的 onChapterResync 校验兜住。
+        _xTurnBusy = false;
+    } else {
+        // 失败回退：恢复触发前状态（前向已切全局需还原；后向全局未动）；换章回调未发出，旗标自行清除
+        if (xt.dir > 0 && xt.saved) {
+            pages = xt.saved.pages; pageStartOffsets = xt.saved.offsets;
+            chapterTitle = xt.saved.title; currentContent = xt.saved.content;
+            currentChapterIndex = xt.saved.index; currentPage = xt.saved.page;
+        }
+        _suppressPageNotify = false;
+        _xTurnBusy = false;
+    }
+    initSimulation();     // 重建正式 flipbook（画面与落地帧/原帧一致）
+    if (completed) {
+        try { if (xt.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
+    }
 }
 
 /**
@@ -1356,6 +1718,12 @@ function simOnFlipEnd() {
 }
 
 function initSimulation() {
+    // ✅ 跨章在途闸门：Java 在 loadContent 之外单独发送的伴随指令（setPageTurnMode、设置批处理等）
+    //    不走 loadContent 的延迟队列——它们若在跨章卷页中途执行，会 destroySimulation 拆掉在途
+    //    临时 flipbook，turn.js 内部状态机崩溃（Uncaught reading 'data'），事件链断裂。
+    //    在途时延迟到落地后执行：届时正式 flipbook 已由落地逻辑重建，本调用幂等无害。
+    //    （落地路径 simFinishCrossFlip 调用本函数时 _xCrossFlipping 已复位，不受影响。）
+    if (_xCrossFlipping) { setTimeout(initSimulation, 120); return; }
     if (pages.length === 0) return;
 
     // 清理可能存在的占位页，并将 simulationActive 统一在初始化后设置
@@ -1582,9 +1950,10 @@ function reinitSimulation() {
     if (!simulationActive) return;
     // Debounce: wait for all pending settings calls before rebuilding
     if (_reinitTimer) clearTimeout(_reinitTimer);
+    // ✅ xDefer：防抖定时器若在跨章在途窗口内到期，会摧毁临时 flipbook（见 xDefer 注释）
     _reinitTimer = setTimeout(function() {
         _reinitTimer = null;
-        restartSimulationNow();
+        xDefer(restartSimulationNow);
     }, 80);
 }
 
@@ -1629,7 +1998,7 @@ function layoutScroll(text, title) {
     var paragraphs = text.split('\n');
     paragraphs.forEach(function (para) {
         if (para.length === 0) {
-            y += fontSize * lineHeightRatio * 0.5;
+            y += fontSize * lineHeightRatio * paraGapRatio;
             return;
         }
         var trimmed = para.replace(/^[\s\u3000]+/, '');
@@ -1907,6 +2276,33 @@ function renderPageTo(cvs, pageIndex) {
     return cvs;
 }
 
+/** 把邻章分页结果的指定页渲染到离屏 canvas：临时交换全局 pages/chapterTitle 复用 drawPage
+ *  （drawPage 页码用 pageIndex 参数、页眉读 chapterTitle，均不读 currentPage，交换面最小） */
+function renderAdjacentPageTo(cvs, xt, pageIdx) {
+    if (!cvs) cvs = document.createElement('canvas');
+    if (cvs.width !== canvas.width || cvs.height !== canvas.height) {
+        cvs.width = canvas.width;
+        cvs.height = canvas.height;
+    }
+    var octx = cvs.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.scale(dpr, dpr);
+    var mainCtx = ctx;
+    var sPages = pages, sTitle = chapterTitle;
+    ctx = octx;
+    pages = xt.pages;
+    chapterTitle = xt.title;
+    try {
+        drawPage(pageIdx);
+    } finally {
+        ctx = mainCtx;
+        pages = sPages;
+        chapterTitle = sTitle;
+    }
+    return cvs;
+}
+
 /** 开始拖拽：确定方向与是否有目标页，并预渲染两页位图 */
 function beginDrag(d, dir) {
     var target = currentPage + dir;
@@ -1915,9 +2311,23 @@ function beginDrag(d, dir) {
     d.dir = dir;
     d.target = target;
     d.boundary = !valid;
+    d.crossChapter = null;
     isAnimating = true;                 // 拖拽期间屏蔽外部翻页（音量键 / 进度条 / 自动翻页）
     dragOldCvs = copyCanvasTo(dragOldCvs);
-    dragNewCvs = valid ? renderPageTo(dragNewCvs, target) : null;
+    if (valid) {
+        dragNewCvs = renderPageTo(dragNewCvs, target);
+    } else {
+        // ✅ 邻章已预加载：拖拽直接跟手展示邻章目标页（与普通跨页拖拽观感一致），不再做橡皮筋
+        var xt = tryFetchAdjacentChapter(dir);
+        if (xt) {
+            d.crossChapter = xt;
+            d.boundary = false;
+            d.target = dir > 0 ? 0 : xt.pages.length - 1;
+            dragNewCvs = renderAdjacentPageTo(dragNewCvs, xt, d.target);
+        } else {
+            dragNewCvs = null;
+        }
+    }
     if (animWatchdog) { clearTimeout(animWatchdog); animWatchdog = null; }
 }
 
@@ -2027,6 +2437,19 @@ function finishDrag(d, commit) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
         if (commit && !d.boundary) {
+            if (d.crossChapter) {
+                // ✅ 跨章跟手拖拽落地：切换全局分页到邻章，再通知 Java 真正换章。
+                //    Java 回送的 loadContent 用同一算法重排 → 与当前画面一致，零跳变。
+                //    页码上报由 _suppressPageNotify 抑制到 loadContent 到达为止。
+                swapToAdjacentChapter(d.crossChapter);
+                currentPage = d.target;
+                lastDragFinishTs = Date.now();
+                drawPage(currentPage);
+                isAnimating = false;
+                if (drag === d) drag = null;
+                try { if (d.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (ee) {}
+                return;
+            }
             currentPage = d.target;
             lastDragFinishTs = Date.now();
             drawPage(currentPage);
@@ -2250,7 +2673,35 @@ function handleScrollTouchEnd(e) {
 //    总页数是畸形值，表现为「翻不了页 / 恢复不到页」。故尺寸未就绪时先把渲染意图存起来，
 //    等下一帧 / resize 回调拿到真实尺寸后再真正排版绘制。
 function loadContent(chapterIndex, title, content, startPage, isLocal, progress, cachedPagesJson, cacheKey) {
+    // ✅ 跨章临时 flipbook 在途时延迟应用：快速折返场景下，上一跨的 loadContent 可能迟到，
+    //    此刻无条件 initSimulation 会摧毁在途 flipbook，turn.js 内部状态机崩溃
+    //    （Uncaught TypeError: reading 'data'），事件链断裂、页码上报丢失（真机实测踩中）。
+    //    延迟到落地后再执行；多次排队时最后一次生效（每次都是完整重渲染，幂等）。
+    if (_xCrossFlipping) {
+        var _xlArgs = Array.prototype.slice.call(arguments);
+        setTimeout(function () { loadContent.apply(null, _xlArgs); }, 120);
+        return;
+    }
+    // ✅ 跨章过渡窗口（三旗标任一在：卷页在途/跨章繁忙/页码上报抑制）内的 loadContent 若目标章
+    //    与 JS 当前位置不一致，说明它是「用户已折返/又跨了一章」后迟到的过时回送——执行它会把
+    //    用户拉回刚离开的章（「跳回未翻之前的页」）。丢弃之，并调 onChapterResync 让 Java 把索引
+    //    同步到 JS 实际位置、按正确落点页重发，两端重新对齐。
+    //    ⚠️ 判据必须含 _suppressPageNotify：落地即清 _xTurnBusy 后，迟到的 loadContent 仍会在
+    //    抑制窗口内到达（实测被拉回刚离开的章）。窗口外（开书/目录跳章）不校验——那时 JS 索引
+    //    本就靠 loadContent 设置。
+    if ((_xTurnBusy || _suppressPageNotify) && typeof chapterIndex === 'number' && chapterIndex !== currentChapterIndex) {
+        console.log('loadContent 过时丢弃: 来自章=' + chapterIndex + ' JS当前章=' + currentChapterIndex);
+        try {
+            if (typeof Android !== 'undefined' && Android && Android.onChapterResync) {
+                Android.onChapterResync(currentChapterIndex, currentPage === pages.length - 1);
+            }
+        } catch (_e) {}
+        return;
+    }
     _boundaryPending = false;
+    // ✅ 跨章无缝翻页：Java 侧正式 loadContent 到达 → 过渡窗口结束，恢复页码上报、解除跨章繁忙
+    _suppressPageNotify = false;
+    _xTurnBusy = false;
     currentChapterIndex = chapterIndex;
     chapterTitle = title;
     currentContent = preprocessContent(content);
@@ -2268,6 +2719,8 @@ function loadContent(chapterIndex, title, content, startPage, isLocal, progress,
                 pageStartOffsets = _cp.offsets;
                 pagesRestoredFromCache = true;
                 _restoreOk = true;
+                // ✅ 记录分页时的视口尺寸（旧版缓存无 vw/vh 字段 → 0，恢复时校验不过会重排一次并回写新格式）
+                _cachedLayoutViewport = { w: (_cp.vw | 0), h: (_cp.vh | 0) };
             }
         } catch (_e) { pagesRestoredFromCache = false; }
     }
@@ -2330,6 +2783,21 @@ function _scheduleLayoutRender() {
 /** loadContent 的「尺寸就绪后」渲染逻辑：仅在 window.innerWidth/innerHeight 有效时调用 */
 function _finishLoadContent(p) {
     var startPage = p.startPage, _restoreOk = p.restoreOk, cacheKey = p.cacheKey;
+    // ✅ 排版缓存视口一致性校验：缓存 pages 是按「分页那一刻的视口尺寸」固化的一维行高布局。
+    //    若当前视口与分页时不同（跨 Activity 复用 WebView 时 JS 视口值更新滞后 / 键盘或系统栏 insets
+    //    变化 / 旧版缓存没有 vw/vh），直接恢复会因 drawPage 的底部越界跳行逻辑被整段砍掉若干行，
+    //    表现为「正文底部空余过大、少显示好几行」。校验不过 → 丢弃缓存走重新分页，
+    //    并把 _restoreOk 置 false 使重排结果按新格式回写缓存（旧脏缓存自动自愈）。
+    if (pagesRestoredFromCache) {
+        var _vpOk = _cachedLayoutViewport
+                && _cachedLayoutViewport.w === window.innerWidth
+                && _cachedLayoutViewport.h === window.innerHeight;
+        if (!_vpOk) {
+            pagesRestoredFromCache = false;
+            _restoreOk = false;
+        }
+        _cachedLayoutViewport = null;
+    }
     resizeCanvas();
 
     if (isScrollMode()) {
@@ -2389,10 +2857,11 @@ function _finishLoadContent(p) {
     // ✅ 排版缓存回写：本次是「纯文本 + 非滚动模式 + 真正重新分页」且 cacheKey 有效时，
     //    把分页结果交给 Java 落盘，下次进入本书同章同排版即可跳过重新分页。
     //    占位内容 / 滚动模式(updown) / 已从缓存恢复(_restoreOk) 时不回写。
+    //    ✅ 回写带上分页时刻的视口 vw/vh，恢复时据此校验视口一致性（防跨会话尺寸错位 → 底部跳行）。
     if (!_restoreOk && !isScrollMode()
             && typeof cacheKey !== 'undefined' && cacheKey && cacheKey.length > 0
             && typeof Android !== 'undefined' && Android && Android.cacheChapterLayout) {
-        try { Android.cacheChapterLayout(cacheKey, JSON.stringify({pages: pages, offsets: pageStartOffsets})); } catch (_e2) {}
+        try { Android.cacheChapterLayout(cacheKey, JSON.stringify({pages: pages, offsets: pageStartOffsets, vw: window.innerWidth, vh: window.innerHeight})); } catch (_e2) {}
     }
 
     notifyJavaPageChange();
@@ -2559,6 +3028,8 @@ function htmlLastColumnRight(cols, side) {
 
 function loadHtmlContent(chapterIndex, title, html, startPage, isLocal, progress) {
     _boundaryPending = false;
+    _suppressPageNotify = false;
+    _xTurnBusy = false;
     currentChapterIndex = chapterIndex;
     chapterTitle = title;
     if (typeof isLocal !== 'undefined') isLocalBook = isLocal;
@@ -2792,7 +3263,7 @@ function onAndroidTap(ratio) {
 function setFontSize(size) {
     fontSize = size;
     titleFontSize = size + 4;
-    topPadding = padding + fontSize; // 字号变化时同步顶部边距
+    topPadding = (vPadding >= 0) ? vPadding : padding + fontSize; // 字号变化时同步顶部边距（显式上下边距优先）
     if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：直接套用样式，跳过 canvas 重排
     if (currentContent) {
         if (!_deferDraw) {
@@ -2809,6 +3280,26 @@ function setFontFamily(name) {
     } else {
         fontFamily = name;
     }
+    if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：直接套用样式，跳过 canvas 重排
+    if (currentContent) {
+        if (!_deferDraw) {
+            relayoutAndRedraw();
+            if (simulationActive) reinitSimulation();
+        }
+    }
+}
+
+/**
+ * 阅读排版参数（设置弹窗「间距」行）：行距倍数 / 段距（行）/ 左右边距 px / 上下边距 px。
+ * padTB 传 -1 表示跟随默认公式（左右边距 + 字号行高）；运行中直调会立即重排当前章，
+ * 在 beginSettingsBatch 批处理期间则只更新变量，由 finishSettingsBatch 统一重绘。
+ */
+function setTypesetting(lineRatio, paraGap, padLR, padTB) {
+    lineHeightRatio = lineRatio;
+    paraGapRatio = paraGap;
+    padding = padLR;
+    vPadding = padTB;
+    topPadding = (vPadding >= 0) ? vPadding : padding + fontSize;
     if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：直接套用样式，跳过 canvas 重排
     if (currentContent) {
         if (!_deferDraw) {
