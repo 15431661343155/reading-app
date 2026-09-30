@@ -10,6 +10,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.graphics.PorterDuff;
 import android.os.Bundle;
 import android.text.Layout;
 import android.text.Spannable;
@@ -41,6 +42,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.core.content.ContextCompat;
 
 import com.example.myapplication.R;
 import com.example.myapplication.api.RetrofitClient;
@@ -75,6 +77,7 @@ public class BookDetailActivity extends BaseActivity{
     private ImageView ivCover;
     private TextView tvBookName, tvAuthor, tvIntro, tvStatus, tvLastRead, tvAddShelf, tvLatestChapter;
     private ImageView ivShelfIcon;
+    private LinearLayout shelfChip;
     private Button btnRead;
     private LinearLayout btnChapterList, btnAddShelf;
     private boolean isInShelf = false;
@@ -273,6 +276,21 @@ public class BookDetailActivity extends BaseActivity{
         btnAddShelf = findViewById(R.id.btn_add_shelf);
         tvAddShelf = findViewById(R.id.tv_add_shelf);
         ivShelfIcon = findViewById(R.id.iv_shelf_icon);
+        shelfChip = findViewById(R.id.shelf_chip);
+        // 按压时胶囊整体轻微回弹缩放，增强点击反馈
+        btnAddShelf.setOnTouchListener((v, event) -> {
+            if (shelfChip == null) return false;
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    shelfChip.animate().scaleX(0.96f).scaleY(0.96f).setDuration(120).start();
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    shelfChip.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+                    break;
+            }
+            return false;
+        });
         tvLatestChapter = findViewById(R.id.tv_latest_chapter);
     }
 
@@ -340,11 +358,11 @@ public class BookDetailActivity extends BaseActivity{
             isInShelf = isExternalBookInShelf();
         }
         if (isInShelf) {
-            tvAddShelf.setText("已在书架");
-            ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
+            setShelfLabel(true);
+            updateShelfVisual(true);
         } else {
-            tvAddShelf.setText(isExternalBook() ? "导入书架" : "加入书架");
-            ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
+            setShelfLabel(false);
+            updateShelfVisual(false);
         }
         btnAddShelf.setEnabled(true);
 
@@ -700,13 +718,8 @@ public class BookDetailActivity extends BaseActivity{
                             isInShelf = updated.getIsInShelf();
                         }
                         runOnUiThread(() -> {
-                            if (isInShelf) {
-                                tvAddShelf.setText("已在书架");
-                                ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
-                            } else {
-                                tvAddShelf.setText("加入书架");
-                                ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
-                            }
+                            setShelfLabel(isInShelf);
+                            updateShelfVisual(isInShelf);
                             btnAddShelf.setEnabled(true);
                             // 刷新状态栏显示（字数、分类等）
                             updateStatusDisplay();
@@ -787,17 +800,16 @@ public class BookDetailActivity extends BaseActivity{
                             public void onResponse(@NonNull Call<ApiResponse<Void>> call, @NonNull Response<ApiResponse<Void>> response) {
                                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                                     isInShelf = false;
-                                    runOnUiThread(() -> {
-                                        tvAddShelf.setText("加入书架");
-                                        ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
-                                        btnAddShelf.setEnabled(true);
-                                        Hint.show(BookDetailActivity.this, "已移出书架");
-                                    });
+                                runOnUiThread(() -> {
+                                    setShelfLabel(false);
+                                    updateShelfVisual(false);
+                                    btnAddShelf.setEnabled(true);
+                                });
                                 } else {
                                     runOnUiThread(() -> {
                                         btnAddShelf.setEnabled(true);
-                                        tvAddShelf.setText("已在书架");
-                                        ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
+                                        setShelfLabel(true);
+                                        updateShelfVisual(true);
                                     });
                                 }
                             }
@@ -805,8 +817,8 @@ public class BookDetailActivity extends BaseActivity{
                             public void onFailure(@NonNull Call<ApiResponse<Void>> call, @NonNull Throwable t) {
                                 runOnUiThread(() -> {
                                     btnAddShelf.setEnabled(true);
-                                    tvAddShelf.setText("已在书架");
-                                    ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
+                                    setShelfLabel(true);
+                                    updateShelfVisual(true);
                                 });
                             }
                         });
@@ -821,12 +833,12 @@ public class BookDetailActivity extends BaseActivity{
                             public void onResponse(@NonNull Call<ApiResponse<Bookshelf>> call, @NonNull Response<ApiResponse<Bookshelf>> response) {
                                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                                     isInShelf = true;
-                                    runOnUiThread(() -> {
-                                        tvAddShelf.setText("已在书架");
-                                        ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
-                                        btnAddShelf.setEnabled(true);
-                                        Hint.show(BookDetailActivity.this, "已加入书架");
-                                    });
+                                runOnUiThread(() -> {
+                                    setShelfLabel(true);
+                                    updateShelfVisual(true);
+                                    btnAddShelf.setEnabled(true);
+                                    popIcon();
+                                });
                                 } else {
                                     String errorMsg;
                                     if (response.body() != null && response.body().getMessage() != null) {
@@ -836,8 +848,8 @@ public class BookDetailActivity extends BaseActivity{
                                     }
                                     runOnUiThread(() -> {
                                         btnAddShelf.setEnabled(true);
-                                        tvAddShelf.setText("加入书架");
-                                        ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
+                                        setShelfLabel(false);
+                                        updateShelfVisual(false);
                                         Hint.show(BookDetailActivity.this, errorMsg);
                                     });
                                 }
@@ -846,14 +858,41 @@ public class BookDetailActivity extends BaseActivity{
                             public void onFailure(@NonNull Call<ApiResponse<Bookshelf>> call, @NonNull Throwable t) {
                                 runOnUiThread(() -> {
                                     btnAddShelf.setEnabled(true);
-                                    tvAddShelf.setText("加入书架");
-                                    ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
+                                    setShelfLabel(false);
+                                    updateShelfVisual(false);
                                     Hint.show(BookDetailActivity.this, "网络连接失败，请检查网络");
                                 });
                             }
                         });
             }
         });
+    }
+
+    /** 根据是否在书架刷新「加入书架」按钮的图标 / 文字色 / 胶囊底色（不含文案标签）。 */
+    private void updateShelfVisual(boolean inShelf) {
+        if (inShelf) {
+            ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
+            ivShelfIcon.setColorFilter(ContextCompat.getColor(this, R.color.ios_blue), PorterDuff.Mode.SRC_IN);
+            tvAddShelf.setTextColor(ContextCompat.getColor(this, R.color.ios_blue));
+            shelfChip.setBackgroundResource(R.drawable.bg_shelf_chip_selected);
+        } else {
+            ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
+            ivShelfIcon.clearColorFilter();
+            tvAddShelf.setTextColor(ContextCompat.getColor(this, R.color.ios_text_primary));
+            shelfChip.setBackgroundResource(R.drawable.bg_shelf_chip);
+        }
+    }
+
+    /** 设置「加入书架」按钮文案标签（外站书显示「导入书架」）。 */
+    private void setShelfLabel(boolean inShelf) {
+        tvAddShelf.setText(inShelf ? "已在书架" : (isExternalBook() ? "导入书架" : "加入书架"));
+    }
+
+    /** 成功加入时图标做一次轻微弹跳，增强反馈。 */
+    private void popIcon() {
+        ivShelfIcon.animate().scaleX(1.25f).scaleY(1.25f).setDuration(150)
+                .withEndAction(() -> ivShelfIcon.animate().scaleX(1f).scaleY(1f).setDuration(150).start())
+                .start();
     }
 
     private String getAddShelfErrorMessage(int code) {
@@ -901,9 +940,9 @@ public class BookDetailActivity extends BaseActivity{
         sp.edit().putString(key, val).apply();
 
         isInShelf = true;
-        tvAddShelf.setText("已在书架");
-        ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
-        Hint.show(this, "已加入书架");
+        setShelfLabel(true);
+        updateShelfVisual(true);
+        popIcon();
 
         // 立即同步外站书架到服务器（用户主动操作，期望即时入库）
         ExternalSyncManager.getInstance(this).flushShelfOnly();
@@ -955,9 +994,8 @@ public class BookDetailActivity extends BaseActivity{
         ExternalSyncManager.getInstance(this).deleteReadingRecordRemote(sourceType, sourceUrl);
 
         isInShelf = false;
-        tvAddShelf.setText("导入书架");
-        ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
-        Hint.show(this, "已移出书架");
+        setShelfLabel(false);
+        updateShelfVisual(false);
     }
 
     private String externalCacheKey() {

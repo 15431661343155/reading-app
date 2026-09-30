@@ -224,33 +224,49 @@
         android:paddingVertical="8dp"
         android:gravity="center_vertical">
 
-        <!-- 加入书架按钮（左侧，图标在上，文字在下） -->
+        <!-- 加入书架按钮（左侧，图标 + 文字横向排列，包成胶囊） -->
         <LinearLayout
             android:id="@+id/btn_add_shelf"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:orientation="vertical"
+            android:orientation="horizontal"
             android:gravity="center"
-            android:background="?attr/selectableItemBackground"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
 
-            <ImageView
-                android:id="@+id/iv_shelf_icon"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:src="@drawable/icon_bookshelf_add"
-                android:contentDescription="加入书架" />
-
-            <TextView
-                android:id="@+id/tv_add_shelf"
+            <LinearLayout
+                android:id="@+id/shelf_chip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="加入书架"
-                android:textSize="9sp"
-                android:textColor="?android:attr/textColorPrimary"
-                android:layout_marginTop="2dp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:duplicateParentState="true"
+                android:background="@drawable/bg_shelf_chip"
+                android:paddingStart="16dp"
+                android:paddingTop="9dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="9dp">
+
+                <ImageView
+                    android:id="@+id/iv_shelf_icon"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/icon_bookshelf_add"
+                    android:contentDescription="加入书架" />
+
+                <TextView
+                    android:id="@+id/tv_add_shelf"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="加入书架"
+                    android:textSize="13sp"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:layout_marginStart="7dp" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
