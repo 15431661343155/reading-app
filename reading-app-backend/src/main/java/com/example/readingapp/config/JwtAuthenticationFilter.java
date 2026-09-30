@@ -16,6 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Date;
 
 @Component
 @RequiredArgsConstructor
@@ -57,6 +58,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 );
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+
+            // ===== 滑动续期 =====
+            // App/Web 走 Authorization 头的 token，只要本次请求校验通过且剩余有效期不足一半，
+            // 就在响应头下发一枚全新有效期的 token（X-New-Token），客户端收到后无感替换。
+            // 效果：活跃用户永远不会再「莫名过期」；连续 7 天完全不用 App 才会真正过期。
+            // 只对 Authorization 头来源生效：管理后台的 ADMIN_TOKEN Cookie 不在此续期。
+            if (userId != null && request.getHeader("Authorization") != null) {
+                Date expiration = jwtUtils.extractExpiration(jwt);
+                long remainingMs = expiration.getTime() - System.currentTimeMillis();
+                if (remainingMs > 0 && remainingMs < jwtUtils.getExpirationMs() / 2) {
+                    response.setHeader("X-New-Token", jwtUtils.generateToken(
+                            jwtUtils.extractUsername(jwt), userId, jwtUtils.extractRole(jwt)));
+                }
             }
         } catch (Exception e) {
             logger.error("JWT Authentication failed: " + e.getMessage());

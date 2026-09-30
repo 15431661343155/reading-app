@@ -3,6 +3,7 @@ package com.example.myapplication.api;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.example.myapplication.utils.ExternalSyncManager;
 import com.example.myapplication.utils.Hint;
 
 import okhttp3.Interceptor;
@@ -99,6 +100,20 @@ public class RetrofitClient {
                     .build();
 
             Response response = chain.proceed(request);
+
+            // ===== 滑动续期 =====
+            // 后端对「校验通过但剩余有效期不足一半」的 token，会在响应头下发新 token。
+            // 这里无感写回 SP，后续请求自动改用新 token —— 活跃用户不再「莫名过期」。
+            // 仅在本地确有登录 token 时才接受（游客态不理会）；后端不重启密钥、有效期 7 天，
+            // 旧 token 在半衰期内仍有效，写回时机略有并发也无碍。
+            String renewed = response.header("X-New-Token");
+            if (renewed != null && !renewed.isEmpty() && appContext != null) {
+                SharedPreferences sp = appContext.getSharedPreferences("user_info", Context.MODE_PRIVATE);
+                if (!sp.getString("token", "").isEmpty()) {
+                    sp.edit().putString("token", renewed).apply();
+                }
+            }
+
             if (response.code() == 401) {
                 onUnauthorized();
             }
@@ -114,12 +129,13 @@ public class RetrofitClient {
      * 登录态失效（HTTP 401）的统一兜底。
      *
      * <p>后端已把 /api/user/**（书架/进度/书签）、/api/users/** 等接口收紧为「必须登录」，
-     * token 过期或失效时会返回 401。若不做处理，App 只会「静默失败」——用户看到数据莫名
-     * 丢失却没有任何提示。这里清掉本地 token，使 LoginHelper.isLoggedIn() 变为 false，
-     * 后续需要登录的功能会正常弹出「去登录」提醒，并给一次文字提示说明原因。
+     * token 过期或失效时会返回 401。这里把本地登录态<b>彻底清干净</b>（与
+     * {@code ProfileActivity#doLogout} 对齐，clear 整个 user_info：token/userId/用户名/昵称/
+     * 头像等全部清掉），保证「我的」页、书架等界面一致回到未登录态 —— 修复此前「只清 token
+     * 却仍显示用户名/UID/书架等账号信息」的矛盾状态。
      *
-     * <p>只清 token、不清 userId：userId 是本地外站书缓存的隔离键（ExternalPrefs），
-     * 清掉会导致该用户已缓存的外站书读不出来。
+     * <p>userId 清掉后，本地外站书缓存（ExternalPrefs 按 userId 隔离）会暂时切回游客键；
+     * 重新登录同一账号会拿到原 userId，缓存可完整恢复 —— 与「退出登录」行为一致。
      */
     private static void onUnauthorized() {
         final Context context = appContext;
@@ -130,7 +146,13 @@ public class RetrofitClient {
             // 本来就是游客态（无 token），不是登录态失效，不打扰用户
             return;
         }
-        sp.edit().putString("token", "").apply();
+        sp.edit().clear().apply();
+
+        // 停掉外站书同步引擎，避免后续上传继续携带已失效的 token 打出更多 401。
+        try {
+            ExternalSyncManager.getInstance(context).stopPeriodic();
+        } catch (Exception ignored) {
+        }
 
         long now = System.currentTimeMillis();
         if (now - lastUnauthorizedHintAt < UNAUTHORIZED_HINT_INTERVAL_MS) return;

@@ -36,7 +36,7 @@ apk.backup-dir=/www/apk/backup
 
 # ============ JWT（secret 请自行生成，绝不要复用示例值） ============
 jwt.secret=<CHANGE_ME>
-jwt.expiration=86400000
+jwt.expiration=604800000
 
 # ============ 管理后台登录 ============
 # 启动时若该用户名不存在，会自动创建一个 role=ADMIN 的管理员账号（密码 BCrypt 落库）；

@@ -27,6 +27,11 @@ public class JwtUtils {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
+    /** 读取配置的 token 有效期（毫秒），供过滤器做滑动续期判断。 */
+    public long getExpirationMs() {
+        return expiration;
+    }
+
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
