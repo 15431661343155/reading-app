@@ -1,10 +1,11 @@
 # 书阁阅读
 
-一个面向中文阅读场景的电子书阅读应用，支持**本地导入**（TXT / EPUB）与**在线书源**两大内容来源，配套 Spring Boot 后端提供账号、书架同步、书源分发与应用内更新能力。
+一个面向中文阅读场景的电子书阅读应用，支持**本地导入**（TXT / EPUB）与**在线书源**两大内容来源，配套 Spring Boot 后端提供账号、书架同步、书源分发与应用内更新能力，并配有 **Web 书城、管理后台与官网**三端页面。
 
 - Android 客户端版本：`v2.0.16`（versionCode 2）
 - 包名：`com.example.myapplication`
 - 后端：`reading-app-backend` 0.0.1-SNAPSHOT
+- Web 端：`web/`（书城前台 Vue SPA + 管理后台静态页 + 官网，nginx 四子域部署）
 
 ---
 
@@ -36,6 +37,21 @@
 - **阅读数据**：阅读进度同步、书签、阅读时长统计
 - **内容运营**：字体资源、封面、公版书导入、反馈与消息
 - **运维能力**：APK 上传与版本管理、更新推送、操作日志、Actuator 健康检查
+
+### Web 端（web/）
+
+| 站点 | 说明 |
+| --- | --- |
+| **书城前台**（book.\*） | Vue 3（`vue.global.prod.js` + vue-router + axios）单页应用：书城浏览、搜索、在线阅读、个人书架，同源调用 `/api/` |
+| **管理后台**（admin.\*） | 纯静态多页站：书籍 / 分类 / 章节 / 书源 / 资源 / 用户 / 反馈管理，HttpOnly Cookie（JWT）鉴权 |
+| **官网**（主域 + IP:8089） | 产品介绍与 APK 下载页（`Download.html` 走公开接口） |
+| **下载页**（download.\*） | 反代后端下载服务 |
+
+安全加固已落地：
+
+- **后端**：SSRF 防护（`SafeUrlGuard`）、路径穿越防护（`PathSafety`）、多维限流与防爆破（`RateLimitService`）、CSRF 强制头（`SecurityHardeningFilter`，带 Cookie 的后台请求必须携带 `X-Requested-With`）、JWT 每请求查库校验（封禁即时失效）、验证码失败作废、CORS 域名白名单
+- **nginx**：按站定制 CSP、API 限流（30r/s burst=60）、admin/book HTML 禁缓存、安全响应头、HTTPS 强跳。注意 **book 站 CSP `script-src` 必须含 `'unsafe-eval'`**（`vue.global.prod.js` 运行时编译模板依赖它，缺失会直接白屏）
+- **后台前端**：`admin-auth.js` 统一包装 fetch（附加请求头 + 401 跳登录），页面引用带 `?v=` 版本号，改脚本必须同步升版本号
 
 ---
 
@@ -90,6 +106,18 @@ reading-app/
 │           └── templates/  static/  public-domain-books/
 │
 ├── legado-ref/                       # Legado 解析规则参考实现
+│
+├── web/                              # Web 三端 + 部署配置
+│   ├── web前台/                      # 书城 SPA（Vue 3，含 vendor 与文档资料页）
+│   ├── 后台/                         # 管理后台（纯静态多页站）
+│   │   └── assets/js/admin-auth.js   # 公共鉴权脚本（请求头 + 401 处理，改必升 ?v=）
+│   ├── 官网/                          # 官网 + Download.html 下载页
+│   └── 部署配置/
+│       ├── nginx.conf                # 四子域 nginx 参考模板（通用版）
+│       ├── nginx-baota.conf          # 宝塔粘贴用安全头片段
+│       └── server-current/           # ★ 服务器正在运行的 nginx 配置权威存档
+│                                     #   （排查线上行为 / 重建环境以此为准）
+│
 ├── screenshots/                      # 开发过程截图
 └── ppt_work/                         # 演示文稿素材
 ```
@@ -133,6 +161,17 @@ cd app
 
 **连接后端**：修改 `api/RetrofitClient.java` 中的 `BASE_URL`。真机调试填电脑的局域网 IP，模拟器可用 `10.0.2.2`。后端为 HTTP 协议，Manifest 已开启 `usesCleartextTraffic`。
 
+### 三、部署 Web 端
+
+```bash
+# 1. 把 web/ 整体上传到服务器 /www/app/web（各子域 root 指向 web前台 / 后台 / 官网）
+# 2. nginx 配置参考 web/部署配置/nginx.conf；
+#    服务器上实际运行的配置以 web/部署配置/server-current/ 存档为准
+# 3. 改配置后 nginx -t && nginx -s reload
+```
+
+关键约束：admin/book 两站必须与后端 `/api/` **同源**（nginx 反代到 127.0.0.1:8080），否则 JWT Cookie 带不过去会全部 401；封面 `/covers/` 同样需反代后端。详见 `web/部署配置/server-current/README.md`。
+
 ---
 
 ## 核心模块说明
@@ -155,6 +194,8 @@ cd app
 - **大文件**：`ReadActivity.java`（约 96 KB）与 `LocalBookParser.java`（约 49 KB）承载了主要复杂度，修改前建议先通读。
 - **依赖仓库**：Gradle 使用阿里云与 JitPack 镜像，若依赖解析失败请检查网络或镜像配置。
 - **发布包未混淆**：`minifyEnabled false`，正式发布前建议配置 ProGuard 规则。
+- **Web 后台缓存策略**：后台 HTML 已由 nginx 禁缓存（`expires -1`），JS 改动必须同步升 `?v=` 版本号，否则用户端可能继续跑旧脚本（历史教训：旧版 `admin-auth.js` 缺请求头导致接口全 403）。
+- **JWT 密钥**：后端 `jwt.secret` 固定存于 `application.properties`，重启不掉登录态；泄露需立即更换并全员重登。
 
 ---
 
