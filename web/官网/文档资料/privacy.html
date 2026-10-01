@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>隐私政策 - 书阁阅读</title>
+<meta name="description" content="书阁阅读隐私政策">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f8f7f5;
+    --bg-muted: #f2f1ee;
+    --ink: #111111;
+    --ink-secondary: #5f5f5f;
+    --ink-muted: #9a9a9a;
+    --border: #eeeeee;
+    --border-strong: #e2e2e2;
+    --accent-warm: #e85d04;
+    --accent-warm-soft: #fff4ef;
+    --radius-sm: 10px;
+    --radius: 16px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.03), 0 8px 24px rgba(0,0,0,0.04);
+    --max-width: 1080px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Plus Jakarta Sans', 'Noto Sans SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.75;
+  }
+
+  a { color: var(--accent-warm); }
+
+  /* ---------- 顶栏 ---------- */
+  .brand-seal{
+    width:38px;height:38px;border-radius:9px;overflow:hidden;flex:none;display:block;
+    box-shadow:0 2px 8px rgba(30,26,19,.14);
+  }
+  .brand-icon{display:block;width:100%;height:100%;object-fit:cover}
+  .doc-top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    height: 60px;
+    padding: 0 28px;
+    background: rgba(255,255,255,0.88);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .doc-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--ink);
+    text-decoration: none;
+    letter-spacing: -0.01em;
+  }
+
+  .doc-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 14px;
+    font-weight: 900;
+    flex: none;
+  }
+
+  .doc-top-actions { display: flex; align-items: center; gap: 10px; }
+
+  .doc-top-link {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink-secondary);
+    text-decoration: none;
+    padding: 7px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: #fff;
+    transition: color .18s ease, border-color .18s ease;
+  }
+
+  .doc-top-link:hover { color: var(--accent-warm); border-color: var(--accent-warm); }
+
+  /* ---------- 头部 ---------- */
+  .doc-hero {
+    padding: 56px 28px 34px;
+    border-bottom: 1px solid var(--border);
+    background:
+      radial-gradient(900px 260px at 12% -20%, rgba(232,93,4,0.10), rgba(232,93,4,0)),
+      radial-gradient(700px 240px at 92% 10%, rgba(17,17,17,0.05), rgba(17,17,17,0)),
+      var(--bg-soft);
+  }
+
+  .doc-hero-inner { max-width: var(--max-width); margin: 0 auto; }
+
+  .doc-tag {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--accent-warm);
+    background: var(--accent-warm-soft);
+    border-radius: 999px;
+    padding: 5px 12px;
+    margin-bottom: 16px;
+  }
+
+  .doc-hero h1 {
+    margin: 0 0 12px;
+    font-family: 'Noto Serif SC', 'Songti SC', serif;
+    font-size: 38px;
+    line-height: 1.25;
+    font-weight: 900;
+    letter-spacing: -0.015em;
+  }
+
+  .doc-meta {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-muted);
+  }
+
+  .doc-meta b { color: var(--ink-secondary); font-weight: 700; }
+
+  /* ---------- 正文布局 ---------- */
+  .doc-body {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 44px 28px 72px;
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+  }
+
+  .doc-toc {
+    position: sticky;
+    top: 84px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .doc-toc-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .doc-toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-left: 1px solid var(--border-strong);
+  }
+
+  .doc-toc li { margin: 0; }
+
+  .doc-toc a {
+    display: block;
+    padding: 6px 0 6px 14px;
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+    color: var(--ink-secondary);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .doc-toc a:hover {
+    color: var(--ink);
+    border-left-color: var(--accent-warm);
+  }
+
+  .doc-main { min-width: 0; max-width: 760px; }
+
+  .doc-main > .doc-sec:first-child { margin-top: 0; }
+
+  .doc-sec { margin-top: 40px; }
+
+  .doc-sec > h2 {
+    margin: 0 0 14px;
+    font-family: 'Noto Serif SC', 'Songti SC', serif;
+    font-size: 21px;
+    line-height: 1.4;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+  }
+
+  .doc-sec > h2 .n {
+    display: inline-block;
+    min-width: 30px;
+    color: var(--accent-warm);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    vertical-align: 1px;
+  }
+
+  .doc-sec h3 {
+    margin: 24px 0 8px;
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .doc-sec p {
+    margin: 0 0 12px;
+    font-size: 15px;
+    color: var(--ink-secondary);
+  }
+
+  .doc-sec ul, .doc-sec ol {
+    margin: 0 0 12px;
+    padding-left: 22px;
+    font-size: 15px;
+    color: var(--ink-secondary);
+  }
+
+  .doc-sec li { margin-bottom: 7px; }
+
+  .doc-sec strong { color: var(--ink); font-weight: 700; }
+
+  .doc-callout {
+    background: var(--bg-soft);
+    border-left: 3px solid var(--accent-warm);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 16px 18px;
+    margin: 0 0 18px;
+    font-size: 14px;
+    color: var(--ink-secondary);
+    line-height: 1.7;
+  }
+
+  .doc-callout b { color: var(--ink); }
+
+  .doc-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 18px;
+    font-size: 14px;
+  }
+
+  .doc-table th, .doc-table td {
+    text-align: left;
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink-secondary);
+    vertical-align: top;
+  }
+
+  .doc-table th {
+    background: var(--bg-soft);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .doc-table td strong { color: var(--ink); }
+
+  .doc-note {
+    margin: 28px 0 0;
+    padding: 16px 18px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink-muted);
+  }
+
+  /* ---------- 页脚 ---------- */
+  .doc-foot {
+    border-top: 1px solid var(--border);
+    background: var(--bg-soft);
+    padding: 28px;
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+
+  .doc-foot-inner {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .doc-foot a { color: var(--ink-secondary); font-weight: 700; text-decoration: none; }
+  .doc-foot a:hover { color: var(--accent-warm); }
+
+  /* ---------- 响应式 ---------- */
+  @media (max-width: 900px) {
+    .doc-hero { padding: 40px 20px 26px; }
+    .doc-hero h1 { font-size: 29px; }
+    .doc-body {
+      grid-template-columns: 1fr;
+      gap: 0;
+      padding: 32px 20px 56px;
+    }
+    .doc-toc {
+      position: static;
+      background: var(--bg-soft);
+      border-radius: var(--radius);
+      padding: 18px 18px 10px;
+      margin-bottom: 32px;
+    }
+    .doc-toc ol { border-left: none; columns: 2; column-gap: 18px; }
+    .doc-toc a { border-left: none; padding: 5px 0; }
+  }
+
+  @media (max-width: 560px) {
+    .doc-top { padding: 0 16px; }
+    .doc-top-actions .doc-top-link.hide-sm { display: none; }
+    .doc-toc { padding: 14px 14px 8px; }
+    .doc-toc a { font-size: 12.5px; padding: 4px 0; }
+  }
+
+  @media print {
+    .doc-top, .doc-toc, .doc-foot { display: none; }
+    .doc-hero { background: none; border-bottom: none; padding: 0 0 12px; }
+    .doc-body { display: block; padding: 0; max-width: none; }
+    .doc-main { max-width: none; }
+    body { font-size: 12pt; }
+    .doc-sec { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header class="doc-top">
+  <a class="doc-brand" href="/index.html">
+    <span class="brand-seal"><img class="brand-icon" src="../assets/brand-icon.png" alt="书阁阅读" width="512" height="512"></span>书阁阅读
+  </a>
+  <div class="doc-top-actions">
+    <a class="doc-top-link hide-sm" href="terms.html">用户服务协议</a>
+    <a class="doc-top-link" href="#" onclick="window.print();return false;">打印 / 存为 PDF</a>
+    <a class="doc-top-link" href="/index.html#/login">返回登录</a>
+  </div>
+</header>
+
+<section class="doc-hero">
+  <div class="doc-hero-inner">
+    <span class="doc-tag">隐私文件</span>
+    <h1>隐私政策</h1>
+    <p class="doc-meta">
+      适用产品：书阁阅读（Android 客户端 / Web 端）　·　
+      <b>生效日期</b>：2026 年 9 月 19 日　·　
+      <b>最近更新</b>：2026 年 9 月 19 日
+    </p>
+  </div>
+</section>
+
+<div class="doc-body">
+
+  <nav class="doc-toc" aria-label="目录">
+    <div class="doc-toc-title">目录</div>
+    <ol>
+      <li><a href="#s1">1 · 引言与适用范围</a></li>
+      <li><a href="#s2">2 · 我们收集哪些信息</a></li>
+      <li><a href="#s3">3 · 我们如何使用信息</a></li>
+      <li><a href="#s4">4 · 信息的存储与保护</a></li>
+      <li><a href="#s5">5 · 共享、转让与披露</a></li>
+      <li><a href="#s6">6 · Cookie 与本地存储</a></li>
+      <li><a href="#s7">7 · 你的权利</a></li>
+      <li><a href="#s8">8 · 未成年人信息保护</a></li>
+      <li><a href="#s9">9 · 第三方服务</a></li>
+      <li><a href="#s10">10 · 政策的更新</a></li>
+      <li><a href="#s11">11 · 联系我们</a></li>
+    </ol>
+  </nav>
+
+  <main class="doc-main">
+
+    <div class="doc-callout">
+      <b>一句话说明：</b>我们只收集为提供阅读与账号同步所必需的信息。你的<strong>阅读偏好（字号、夜间模式、背景色）与导入的本地书籍不会上传</strong>，仅保存在你的设备上。详见
+      <a href="#s2">第 2 条</a> 与 <a href="#s6">第 6 条</a>。
+    </div>
+
+    <section class="doc-sec" id="s1">
+      <h2><span class="n">01</span>引言与适用范围</h2>
+      <p>1.1 书阁阅读运营方（以下称「我们」）深知个人信息对你的重要性。本政策说明我们在你使用「书阁阅读」软件及相关服务（以下统称「本服务」）时，如何收集、使用、存储、共享和保护你的个人信息，以及你对自己的信息享有哪些权利。</p>
+      <p>1.2 本政策适用于 Android 客户端与 Web 端。本政策是<a href="terms.html">《用户服务协议》</a>的组成部分，与之具有同等法律效力。</p>
+      <p>1.3 请你在使用本服务前仔细阅读本政策，特别是以<strong>加粗</strong>形式标示的条款。你通过登录页勾选同意选项、注册账号或使用本服务，即表示你已理解并同意本政策。</p>
+    </section>
+
+    <section class="doc-sec" id="s2">
+      <h2><span class="n">02</span>我们收集哪些信息</h2>
+      <p>我们遵循「最小必要」原则，仅收集实现产品功能所必需的信息。具体如下：</p>
+
+      <table class="doc-table">
+        <thead>
+          <tr>
+            <th>信息类型</th>
+            <th>具体内容</th>
+            <th>收集场景与用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>账号信息</strong></td>
+            <td>邮箱地址、用户名、密码（加密存储）</td>
+            <td>注册、登录、身份识别。验证码登录时邮箱用于接收一次性验证码</td>
+          </tr>
+          <tr>
+            <td><strong>阅读数据</strong></td>
+            <td>书架书目、阅读进度、书签、最近阅读记录</td>
+            <td>登录后在你授权的账号下云端保存，用于多设备间同步</td>
+          </tr>
+          <tr>
+            <td><strong>书源配置</strong></td>
+            <td>你自行添加的第三方书源地址与配置</td>
+            <td>按账号隔离保存在本地，用于书籍检索与章节抓取</td>
+          </tr>
+          <tr>
+            <td><strong>登录与设备信息</strong></td>
+            <td>登录时间、登录方式、设备标识、客户端版本</td>
+            <td>保障账号安全、排查异常登录与故障</td>
+          </tr>
+          <tr>
+            <td><strong>本地数据</strong><br>（不上传）</td>
+            <td>导入的本地书籍文件与正文缓存、字号 / 夜间模式 / 背景色等阅读偏好</td>
+            <td>仅存储于你的设备本地，<strong>我们不会收集或上传</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>2.1 我们<strong>不会</strong>主动收集你的通讯录、短信、通话记录、相册（除你主动选择的本地书籍文件外）、精确地理位置、麦克风或摄像头信息。</p>
+      <p>2.2 我们<strong>不会</strong>保存你的明文密码。密码在传输过程中使用加密通道，在服务端以不可逆的摘要形式存储。</p>
+      <p>2.3 若你使用的功能需要额外收集信息，我们会在收集前通过弹窗或页面提示单独征求你的同意。</p>
+    </section>
+
+    <section class="doc-sec" id="s3">
+      <h2><span class="n">03</span>我们如何使用信息</h2>
+      <p>3.1 我们将收集到的信息用于下列目的：</p>
+      <ul>
+        <li>创建和管理你的账号，完成登录与身份验证；</li>
+        <li>在你的设备之间同步书架、阅读进度与书签；</li>
+        <li>向你发送验证码等与账号相关的必要通知；</li>
+        <li>保障服务的安全与稳定，识别和防范异常登录、刷量、攻击等风险；</li>
+        <li>定位并修复故障，改进产品体验；</li>
+        <li>遵守法律法规要求，或响应有权机关依法提出的要求。</li>
+      </ul>
+      <p>3.2 若我们拟将信息用于本政策未载明的其他目的，或变更原有使用目的，我们将再次向你告知并取得你的同意。</p>
+    </section>
+
+    <section class="doc-sec" id="s4">
+      <h2><span class="n">04</span>信息的存储与保护</h2>
+      <p>4.1 <strong>存储位置。</strong>账号信息与同步数据存储于我们部署在中国大陆的服务器中。</p>
+      <p>4.2 <strong>存储期限。</strong>我们仅在实现本政策所述目的所必需的期限及法律法规要求的期限内保留你的个人信息。超出期限后，我们将删除或匿名化处理。</p>
+      <p>4.3 <strong>安全措施。</strong>我们采取符合行业标准的技术与管理措施保护你的信息，包括但不限于：</p>
+      <ul>
+        <li>传输链路加密（HTTPS / TLS）；</li>
+        <li>密码单向加密存储，不保留明文；</li>
+        <li>接口访问鉴权与权限分级，数据按账号隔离；</li>
+        <li>对内部人员访问数据的权限控制与审计。</li>
+      </ul>
+      <p>4.4 <strong>安全事件。</strong>若不幸发生个人信息安全事件，我们将按照法律法规要求及时向你告知事件基本情况、可能的影响、已采取的措施及你可以采取的补救措施，并按要求向监管部门报告。</p>
+      <p>4.5 请注意，互联网环境并非绝对安全。请妥善保管你的账号与密码，避免在公共设备上勾选「记住我」。</p>
+    </section>
+
+    <section class="doc-sec" id="s5">
+      <h2><span class="n">05</span>共享、转让与公开披露</h2>
+      <p>5.1 <strong>我们不会出售你的个人信息。</strong></p>
+      <p>5.2 我们不会与任何第三方共享你的个人信息，但下列情形除外：</p>
+      <ul>
+        <li><strong>已获得你的明确同意</strong>；</li>
+        <li><strong>邮件发送服务</strong>：为向你发送验证码，需将你的邮箱地址提供给邮件服务商（腾讯 QQ 邮箱 SMTP 服务）用于投递邮件。该服务商仅能接触投递所必需的邮箱地址；</li>
+        <li><strong>法律法规要求</strong>：根据法律法规、司法或行政机关依法定程序提出的强制性要求；</li>
+        <li><strong>保护合法权益</strong>：为保护我们、你或其他用户的合法权益、财产安全所必需，且难以取得本人同意的情形。</li>
+      </ul>
+      <p>5.3 我们不会将你的个人信息转让给任何公司、组织或个人。若发生合并、分立、收购等主体变更，我们将告知你接收方的名称与联系方式，并要求其继续受本政策约束；否则我们将要求其重新征求你的同意。</p>
+      <p>5.4 我们不会公开披露你的个人信息，依法必须披露的除外，且披露时会采取符合行业标准的安全防护措施。</p>
+    </section>
+
+    <section class="doc-sec" id="s6">
+      <h2><span class="n">06</span>Cookie 与本地存储</h2>
+      <p>6.1 <strong>Web 端</strong>：我们使用浏览器本地存储（LocalStorage）保存你的登录凭证与后端服务地址，用于保持登录状态、避免重复登录。你可以通过浏览器设置清除这些数据，清除后需重新登录。</p>
+      <p>6.2 <strong>客户端</strong>：我们在你的设备上使用本地存储保存下列内容，这些数据<strong>不会上传至服务器</strong>：</p>
+      <ul>
+        <li>阅读偏好设置：字号、夜间模式、背景色；</li>
+        <li>导入的本地书籍文件与章节正文缓存；</li>
+        <li>你添加的第三方书源配置及其检索缓存。</li>
+      </ul>
+      <p>6.3 卸载应用或清除应用数据后，上述本地数据将被删除且无法恢复，请谨慎操作。</p>
+      <p>6.4 你理解并同意，为保障服务正常运行的登录凭证、以及保障服务安全所必需的记录，不属于可选的本地存储，不接受第三方广告类跟踪用途。本服务<strong>不接入任何第三方广告或行为追踪 SDK</strong>。</p>
+    </section>
+
+    <section class="doc-sec" id="s7">
+      <h2><span class="n">07</span>你的权利</h2>
+      <p>7.1 按照相关法律法规，你对自身的个人信息享有以下权利：</p>
+      <ul>
+        <li><strong>查阅与复制</strong>：你可在客户端的「个人中心」查看账号信息，包括昵称、邮箱与头像；</li>
+        <li><strong>更正与补充</strong>：发现信息有误的，可在「个人中心」自行修改，或联系我们协助更正；</li>
+        <li><strong>删除</strong>：在法律法规允许的范围内，你可以删除云端的书签、书架记录或本地数据；</li>
+        <li><strong>撤回同意</strong>：你可以随时撤回对非必要信息处理的同意。撤回后我们将不再处理相应信息，但不影响此前基于同意已进行的处理；</li>
+        <li><strong>注销账号</strong>：你可以通过第 11 条的方式申请注销。注销后我们将删除或匿名化处理你的个人信息，法律法规另有规定的除外；</li>
+        <li><strong>获得解释</strong>：你有权要求我们对本政策或你的个人信息处理规则作出解释说明。</li>
+      </ul>
+      <p>7.2 为保障安全，我们在处理你的请求前可能需要验证你的身份。我们将在收到请求后 <strong>15 个工作日</strong>内予以答复。对于无端重复、超出合理限度的请求，我们可能予以拒绝。</p>
+    </section>
+
+    <section class="doc-sec" id="s8">
+      <h2><span class="n">08</span>未成年人信息保护</h2>
+      <p>8.1 我们非常重视未成年人个人信息的保护。若你未满 18 周岁，请在监护人陪同下阅读本政策，并在取得监护人同意后使用本服务。</p>
+      <p>8.2 我们不会主动收集未成年人的个人信息，也不会将未成年人信息用于任何与提供本服务无关的用途。</p>
+      <p>8.3 若你是未成年人的监护人，对其个人信息有疑问，或发现我们在未事先获得同意的情况下收集了未成年人的个人信息，请通过第 11 条联系我们，我们将及时删除相关数据。</p>
+    </section>
+
+    <section class="doc-sec" id="s9">
+      <h2><span class="n">09</span>第三方服务</h2>
+      <p>9.1 本服务用于发送验证码的邮件投递依赖第三方邮件服务商。该服务商的数据处理行为受其自身的隐私政策约束。</p>
+      <p>9.2 本服务支持你自行添加第三方书源。你通过书源访问的网站由第三方独立运营，其内容与数据处理行为与我们无关。<strong>请你在添加书源前评估该第三方的可信度</strong>，我们不对第三方站点的内容与隐私保护水平作出任何保证。</p>
+      <p>9.3 本服务可能包含指向第三方页面的链接（如协议文档、开源许可说明）。本政策不适用于这些第三方页面。</p>
+    </section>
+
+    <section class="doc-sec" id="s10">
+      <h2><span class="n">10</span>政策的更新</h2>
+      <p>10.1 我们可能适时修订本政策。未经你明确同意，我们不会削减你依据本政策所应享有的权利。</p>
+      <p>10.2 修订后我们将在本页面公布更新版本并标注「最近更新」日期。对于重大变更，我们将通过登录时弹窗、站内公告或邮件等显著方式通知你。</p>
+      <p>10.3 本政策所指的重大变更包括但不限于：服务模式发生重大变化、所有权结构发生重大变化、个人信息共享或披露的主要对象发生变化、你参与个人信息处理方面的权利及其行使方式发生重大变化等。</p>
+    </section>
+
+    <section class="doc-sec" id="s11">
+      <h2><span class="n">11</span>联系我们</h2>
+      <p>如你对本政策有任何疑问、意见或投诉，或需查阅、更正、删除个人信息及注销账号，可通过以下方式联系我们：</p>
+      <ul>
+        <li>联系邮箱：<strong>1459931151@qq.com</strong></li>
+      </ul>
+      <p>我们设有专门的个人信息保护负责人，将在收到你的反馈后 <strong>15 个工作日</strong>内予以答复。若你对我们的答复不满意，还可以向网信、电信、公安及市场监管等监管部门投诉或举报。</p>
+    </section>
+
+    <p class="doc-note">
+      本政策自 <b>2026 年 9 月 19 日</b> 起生效。本页面为书阁阅读隐私政策的正式版本，与登录页《隐私政策》指向同一文件。
+    </p>
+
+  </main>
+</div>
+
+<footer class="doc-foot">
+  <div class="doc-foot-inner">
+    <div>© 2026 书阁阅读 · 本页面最后更新于 2026 年 9 月 19 日</div>
+    <div>
+      <a href="terms.html">用户服务协议</a>　·　
+      <a href="/index.html">返回首页</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
