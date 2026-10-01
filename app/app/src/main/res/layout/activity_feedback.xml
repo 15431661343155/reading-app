@@ -12,7 +12,7 @@
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:background="@color/ios_bg"
+        android:background="@color/ios_bg_grouped"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="@string/feedback_title"
         app:titleCentered="true"

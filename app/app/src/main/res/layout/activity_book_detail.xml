@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:layout_alignParentTop="true"
-        android:background="@color/ios_bg"
+        android:background="@color/ios_bg_grouped"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="书籍详情"
         app:titleCentered="true"
@@ -34,7 +34,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:background="@color/ios_bg"
+                android:background="@color/ios_bg_grouped"
                 android:padding="20dp">
 
                 <!-- 封面和信息 -->

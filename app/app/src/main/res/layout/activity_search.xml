@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ios_bg">
+    android:background="@color/ios_bg_grouped">
 
     <!-- 顶部导航栏 + 搜索框 -->
     <LinearLayout
@@ -13,7 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@color/ios_bg">
+        android:background="@color/ios_bg_grouped">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -223,7 +223,7 @@
                     android:id="@+id/tab_result_filter"
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
-                    android:background="@color/ios_bg"
+                    android:background="@color/ios_bg_grouped"
                     app:tabMode="fixed"
                     app:tabGravity="fill"
                     app:tabIndicatorColor="@color/ios_blue"

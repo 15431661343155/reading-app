@@ -40,6 +40,9 @@ public class LiquidSlider extends View {
         void onDragEnd(int page);
     }
 
+    /** 浮窗文字格式化：用于把 int 值映射为自定义文案（如「1.8×」「22」）；null 时显示默认「cur / total」 */
+    public interface TipFormatter { String format(int value); }
+
     private static final long ANIM_DURATION_MS = 260;
     private static final PathInterpolator EASE = new PathInterpolator(0.34f, 1.3f, 0.55f, 1f);
     private static final float MAX_STRETCH = 0.22f;
@@ -72,6 +75,7 @@ public class LiquidSlider extends View {
     private int tipBgColor, tipTextColor, tipStrokeColor;
 
     private Listener listener;
+    private TipFormatter tipFormatter;
 
     public LiquidSlider(Context context) {
         super(context);
@@ -95,6 +99,13 @@ public class LiquidSlider extends View {
 
     public void setListener(Listener l) {
         listener = l;
+    }
+
+    /** 设置浮窗文字格式化器（导航栏进度条无需设置，保持默认「cur / total」） */
+    public void setTipFormatter(TipFormatter f) {
+        tipFormatter = f;
+        recomputeTipMetrics();
+        invalidate();
     }
 
     /**
@@ -151,7 +162,8 @@ public class LiquidSlider extends View {
     }
 
     private void recomputeTipMetrics() {
-        tipText = currentPage + " / " + totalPages;
+        tipText = (tipFormatter != null) ? tipFormatter.format(currentPage)
+                                         : currentPage + " / " + totalPages;
         tipPaint.setTextSize(dp(12f));
         tipTextWidth = tipPaint.measureText(tipText);
     }

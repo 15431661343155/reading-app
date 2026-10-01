@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 夜间：列表卡片 悬浮（纯色面 + 0.5dp 高光描边区分层级，替代旧实色露边） -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/ios_card_float_dark" />
+            <corners android:radius="12dp" />
+            <stroke
+                android:width="0.5dp"
+                android:color="#14FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

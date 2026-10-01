@@ -284,70 +284,185 @@
             android:textSize="12sp"
             android:textColor="@color/ios_text_primary" />
 
-        <TextView
-            android:id="@+id/tv_page_cover"
+        <!-- 与间距抽屉同款分段导航：轨道 + 滑动指示器（宽度/位置由代码计算） -->
+        <FrameLayout
+            android:id="@+id/seg_track_page"
             android:layout_width="0dp"
-            android:layout_height="36dp"
+            android:layout_height="42dp"
             android:layout_weight="1"
-            android:text="覆盖"
-            android:textSize="12sp"
-            android:textColor="@color/black"
-            android:gravity="center"
-            android:background="@drawable/bg_search_radius"
-            android:clickable="true"
-            android:focusable="true" />
+            android:background="@drawable/bg_reader_seg_track">
+
+            <View
+                android:id="@+id/seg_thumb_page"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="3dp"
+                android:background="@drawable/bg_shelf_seg_thumb" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:padding="3dp">
+
+                <TextView
+                    android:id="@+id/tv_page_cover"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="覆盖"
+                    android:textSize="12sp"
+                    android:textColor="@color/ios_text_primary"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/tv_page_simulation"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="仿真"
+                    android:textSize="12sp"
+                    android:textColor="@color/ios_text_primary"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/tv_page_translate"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="平移"
+                    android:textSize="12sp"
+                    android:textColor="@color/ios_text_primary"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/tv_page_updown"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="上下"
+                    android:textSize="12sp"
+                    android:textColor="@color/ios_text_primary"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/tv_page_fade"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="淡入"
+                    android:textSize="12sp"
+                    android:textColor="@color/ios_text_primary"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </LinearLayout>
+        </FrameLayout>
+
+    </LinearLayout>
+
+    <!-- ========== 间距（行段间距 / 页面边距） ========== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="6dp"
+        android:gravity="center_vertical">
 
         <TextView
-            android:id="@+id/tv_page_simulation"
-            android:layout_width="0dp"
-            android:layout_height="36dp"
-            android:layout_weight="1"
-            android:text="仿真"
+            android:layout_width="50dp"
+            android:layout_height="wrap_content"
+            android:text="间距"
             android:textSize="12sp"
-            android:textColor="@color/black"
-            android:gravity="center"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true" />
+            android:textColor="@color/ios_text_primary" />
 
-        <TextView
-            android:id="@+id/tv_page_translate"
-            android:layout_width="0dp"
-            android:layout_height="36dp"
-            android:layout_weight="1"
-            android:text="平移"
-            android:textSize="12sp"
-            android:textColor="@color/black"
-            android:gravity="center"
-            android:background="?attr/selectableItemBackground"
+        <LinearLayout
+            android:id="@+id/btn_line_spacing"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_capsule_gray"
+            android:paddingHorizontal="14dp"
             android:clickable="true"
-            android:focusable="true" />
+            android:focusable="true">
 
-        <TextView
-            android:id="@+id/tv_page_updown"
-            android:layout_width="0dp"
-            android:layout_height="36dp"
-            android:layout_weight="1"
-            android:text="上下"
-            android:textSize="12sp"
-            android:textColor="@color/black"
-            android:gravity="center"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="行段间距"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary" />
 
-        <TextView
-            android:id="@+id/tv_page_fade"
-            android:layout_width="0dp"
-            android:layout_height="36dp"
-            android:layout_weight="1"
-            android:text="淡入"
-            android:textSize="12sp"
-            android:textColor="@color/black"
-            android:gravity="center"
-            android:background="?attr/selectableItemBackground"
+            <TextView
+                android:id="@+id/tv_line_spacing_cur"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="适中"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="@color/ios_text_primary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="›"
+                android:textSize="11sp"
+                android:textColor="@color/ios_text_primary" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="10dp"
+            android:layout_height="1dp" />
+
+        <LinearLayout
+            android:id="@+id/btn_page_margin"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_capsule_gray"
+            android:paddingHorizontal="14dp"
             android:clickable="true"
-            android:focusable="true" />
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="页面边距"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary" />
+
+            <TextView
+                android:id="@+id/tv_margin_cur"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="适中"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="@color/ios_text_primary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="›"
+                android:textSize="11sp"
+                android:textColor="@color/ios_text_primary" />
+        </LinearLayout>
 
     </LinearLayout>
 

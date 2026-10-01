@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 阅读器间距抽屉分段控件轨道：底色用 ios_bg_grouped(#F2F2F7) 锚点，
+     themeViewTree 的 mapBgColor 会把它映射到二级底(sChrome2)，日/夜自动跟随。
+     （书架同款 bg_shelf_seg_track 的 #E9E9EB 不在映射清单内，夜间不跟随，故不复用） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#F2F2F7" />
+    <corners android:radius="12dp" />
+</shape>

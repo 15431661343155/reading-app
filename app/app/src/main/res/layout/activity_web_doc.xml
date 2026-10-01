@@ -3,13 +3,13 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ios_bg"
+    android:background="@color/ios_bg_grouped"
     android:orientation="vertical">
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:background="@color/ios_bg">
+        android:background="@color/ios_bg_grouped">
 
         <ImageView
             android:id="@+id/iv_doc_back"

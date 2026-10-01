@@ -4,13 +4,13 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ios_bg">
+    android:background="@color/ios_bg_grouped">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:background="@color/ios_bg"
+        android:background="@color/ios_bg_grouped"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="@string/settings"
         app:titleCentered="true"

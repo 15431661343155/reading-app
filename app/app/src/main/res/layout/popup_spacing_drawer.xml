@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 阅读设置「间距」抽屉（行段间距 / 页面边距 共用，由代码参数化）。
+     配色策略：文字一律 @color/ios_text_primary（themeViewTree 映射为主文字黑/白，无灰字），
+     容器/胶囊底走 ios_bg / #F2F2F7 锚点（映射主底/二级底），日/夜自动跟随阅读器背景。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_sheet_top_rounded"
+    android:clipToOutline="true"
+    android:paddingTop="10dp"
+    android:paddingBottom="26dp">
+
+    <!-- 标题栏（收起图标左上，与「选择背景/选择字体」弹窗一致） -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp">
+
+        <TextView
+            android:id="@+id/tv_drawer_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="行段间距"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:textColor="@color/ios_text_primary" />
+
+        <ImageView
+            android:id="@+id/btn_drawer_close"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="14dp"
+            android:src="@drawable/shouqi"
+            android:scaleType="centerInside"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="收起" />
+
+        <!-- 与左侧图标等宽的占位，保证标题严格居中 -->
+        <View
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="14dp" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tv_drawer_desc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="10dp"
+        android:gravity="center"
+        android:textSize="12sp"
+        android:textColor="@color/ios_text_primary" />
+
+    <!-- 5 档分段导航（书架同款交互：白色滑动指示器 + 260ms 平移过渡） -->
+    <FrameLayout
+        android:id="@+id/seg_track"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:background="@drawable/bg_reader_seg_track">
+
+        <!-- 滑动指示器（底层绘制；宽度/位置由代码计算） -->
+        <View
+            android:id="@+id/seg_thumb"
+            android:layout_width="60dp"
+            android:layout_height="36dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="3dp"
+            android:background="@drawable/bg_shelf_seg_thumb" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:padding="3dp">
+
+            <TextView
+                android:id="@+id/seg_i_0"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/seg_i_1"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/seg_i_2"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/seg_i_3"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/seg_i_4"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textSize="12sp"
+                android:textColor="@color/ios_text_primary"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- 自定义滑块区（选「自定义」时显示） -->
+    <LinearLayout
+        android:id="@+id/custom_zone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="22dp"
+        android:paddingEnd="22dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_custom_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_reader_hint_soft"
+            android:text="自定义：拖动滑块微调，松手即生效"
+            android:textSize="11sp"
+            android:textColor="@color/ios_text_primary"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp" />
+
+        <!-- 滑块 A（行距 / 左右边距） -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="6dp"
+            android:clipChildren="false">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_label_a"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="行距"
+                    android:textSize="12sp"
+                    android:textColor="@color/ios_text_primary" />
+
+                <TextView
+                    android:id="@+id/tv_val_a"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1.80×"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/ios_text_primary" />
+            </LinearLayout>
+
+            <com.example.myapplication.view.LiquidSlider
+                android:id="@+id/slider_a"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- 滑块 B（段距 / 上下边距） -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="8dp"
+            android:clipChildren="false">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_label_b"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="段距"
+                    android:textSize="12sp"
+                    android:textColor="@color/ios_text_primary" />
+
+                <TextView
+                    android:id="@+id/tv_val_b"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0.50 行"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/ios_text_primary" />
+            </LinearLayout>
+
+            <com.example.myapplication.view.LiquidSlider
+                android:id="@+id/slider_b"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

@@ -6,19 +6,19 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/item_root"
     android:layout_width="match_parent"
-    android:layout_height="132dp"
+    android:layout_height="128dp"
     android:clipChildren="false"
     android:clickable="true"
-    android:focusable="true"
-    android:foreground="?attr/selectableItemBackground">
+    android:focusable="true">
 
-    <!-- 白卡片（列表：上下 6dp 边距；宫格：四边 4dp，由代码设定） -->
+    <!-- 白卡片（列表：上下 2dp 边距；宫格：四边 4dp，由代码设定）
+         波纹挂根节点（按压态/触点 hotspot 可用），由 BookAdapter.applyMode 按模式切换 inset 波纹 drawable -->
     <View
         android:id="@+id/card_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="6dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp"
         android:background="@drawable/bg_ios_card" />
 
     <!-- 封面盒：圆角裁切 + 灰底占位，ImageView 用 Matrix 等比裁切 -->
@@ -27,7 +27,7 @@
         android:layout_width="72dp"
         android:layout_height="96dp"
         android:layout_marginStart="14dp"
-        android:layout_marginTop="18dp"
+        android:layout_marginTop="15dp"
         android:background="@drawable/bg_cover_rounded"
         android:clipToOutline="true">
 
@@ -60,7 +60,7 @@
         android:layout_height="96dp"
         android:layout_marginStart="100dp"
         android:layout_marginEnd="14dp"
-        android:layout_marginTop="18dp"
+        android:layout_marginTop="15dp"
         android:orientation="vertical"
         android:gravity="center_vertical">
 
@@ -142,7 +142,7 @@
         android:layout_width="24dp"
         android:layout_height="24dp"
         android:layout_marginStart="14dp"
-        android:layout_marginTop="54dp"
+        android:layout_marginTop="51dp"
         android:src="@drawable/ic_checkbox_unchecked"
         android:visibility="gone"
         android:contentDescription="选择" />

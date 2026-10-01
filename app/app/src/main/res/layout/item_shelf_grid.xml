@@ -7,16 +7,17 @@
     android:orientation="vertical"
     android:padding="6dp"
     android:clickable="true"
-    android:focusable="true"
-    android:foreground="?attr/selectableItemBackground">
+    android:focusable="true">
 
-    <!-- 白卡片容器 -->
+    <!-- 白卡片容器（波纹挂卡片节点 + duplicateParentState 跟随根按压态，收敛在卡面内） -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="8dp"
-        android:background="@drawable/bg_ios_card">
+        android:duplicateParentState="true"
+        android:background="@drawable/bg_ios_card"
+        android:foreground="@drawable/fg_card_ripple">
 
         <!-- 封面容器 -->
         <FrameLayout

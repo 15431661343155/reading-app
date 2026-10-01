@@ -67,6 +67,7 @@
     <color name="ios_separator_dark">#FF38383A</color>
     <color name="ios_tab_bar_dark">#F0171718</color>
     <color name="ios_card_bg_dark">#FF1C1C1E</color>
+    <color name="ios_card_float_dark">#FF2C2C2E</color>   <!-- 夜间卡片悬浮面（比 grouped 底 #1C1C1E 略亮） -->
 
     <!-- 国风开屏配色（仅保留在用项：系统启动屏/主页窗口背景底色） -->
     <color name="splash_bg">#F6EEDF</color>           <!-- 插画宣纸底色（取自新开屏图） -->

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 间距抽屉自定义提示条底色：强调蓝 8% 透明度。刻意不用 #F2F2F7 锚点
+     （会被 mapBgColor 染成二级底），保持与效果图一致的淡蓝提示底，日/夜均可读。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#14007AFF" />
+    <corners android:radius="8dp" />
+</shape>

@@ -138,9 +138,9 @@
              与英雄区重叠 46dp：卡片顶 y=170，交界在 216（卡片腰部）。 -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="92dp"
-            android:layout_marginTop="-46dp"
-            android:layout_marginHorizontal="18dp"
+            android:layout_height="95dp"
+            android:layout_marginTop="-47dp"
+            android:layout_marginHorizontal="16dp"
             android:background="@drawable/bg_mine_stat_card"
             android:elevation="3dp"
             android:gravity="center_vertical"

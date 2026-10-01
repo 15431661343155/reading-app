@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 卡片点击波纹：layer-list 把 ripple 内缩到卡面可视矩形（左右2/上3/下4dp，与 bg_ios_card 柔影内缩一致），
+     mask 按 12dp 卡面圆角裁切 —— 波纹严格止步于卡面，不再漫出盖到柔影区（item 根 view 边界含柔影区）。
+     用于 item_book / item_shelf_book / item_shelf_grid / item_shelf_morph 根节点 foreground。
+     仅 mask 无内容层 = 按压时才绘制波纹，静止不遮挡卡片背景。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:top="3dp"
+        android:bottom="4dp"
+        android:left="2dp"
+        android:right="2dp">
+        <ripple android:color="?attr/colorControlHighlight">
+            <item android:id="@android:id/mask">
+                <shape android:shape="rectangle">
+                    <solid android:color="#FFFFFF" />
+                    <corners android:radius="12dp" />
+                </shape>
+            </item>
+        </ripple>
+    </item>
+</layer-list>

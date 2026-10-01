@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 书架 morph 宫格海报卡根节点波纹：inset 对齐卡面可视矩形（白卡 margin 左右10/上下4 + bg_ios_card 柔影内缩 上3/下4/左右2）
+     mask 12dp 圆角裁切 —— 波纹止步于卡面，不漫出柔影区。挂 item 根节点（有完整按压态与触点 hotspot）。 -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="12dp"
+    android:insetTop="7dp"
+    android:insetRight="12dp"
+    android:insetBottom="8dp">
+    <ripple android:color="?attr/colorControlHighlight">
+        <item android:id="@android:id/mask">
+            <shape android:shape="rectangle">
+                <solid android:color="#FFFFFF" />
+                <corners android:radius="12dp" />
+            </shape>
+        </item>
+    </ripple>
+</inset>
