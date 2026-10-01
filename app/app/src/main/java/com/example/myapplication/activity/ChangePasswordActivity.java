@@ -161,7 +161,8 @@ public class ChangePasswordActivity extends BaseActivity {
         ivEmailConfirmEye.setOnClickListener(v -> togglePassword(etEmailConfirmPassword, ivEmailConfirmEye));
 
         etNewPassword.addTextChangedListener(new StrengthWatcher(etNewPassword, strengthSegs, strengthLabel));
-        etEmailNewPassword.addTextChangedListener(new StrengthWatcher(etEmailNewPassword, strengthSegsEmail, strengthLabelEmail));
+        etEmailNewPassword.addTextChangedListener(new StrengthWatcher(etEmailNewPassword,
+                strengthSegsEmail, strengthLabelEmail));
     }
 
     private static final int COL_SEL = 0xFF6C5CE7;

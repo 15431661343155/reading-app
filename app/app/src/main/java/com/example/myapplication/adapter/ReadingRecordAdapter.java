@@ -106,7 +106,6 @@ public class ReadingRecordAdapter extends RecyclerView.Adapter<ReadingRecordAdap
         holder.tvProgress.setText("已读：" + record.getProgress() + "%");
         holder.tvProgress.setVisibility(View.VISIBLE);
 
-        // 加载封面
         if (record.getCover() != null && !record.getCover().isEmpty()) {
             String fullCoverUrl = RetrofitClient.getFullImageUrl(record.getCover());
             Glide.with(context)

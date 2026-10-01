@@ -13,7 +13,8 @@ public class ViewUtils {
      * @param thumbColor 滑块颜色，如 "#0099CC"
      * @param trackColor 滑道颜色，如 "#E0E0E0"
      */
-    public static FastScrollRecyclerView createFastScrollRecyclerView(Context context, String thumbColor, String trackColor) {
+    public static FastScrollRecyclerView createFastScrollRecyclerView(Context context, String thumbColor,
+            String trackColor) {
         FastScrollRecyclerView recyclerView = new FastScrollRecyclerView(context);
         recyclerView.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,

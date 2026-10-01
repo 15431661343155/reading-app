@@ -45,7 +45,6 @@ public class PageBean {
             FOOTER           // 页脚页码
         }
 
-        // 创建页眉标题行
         public static LineData createHeaderTitle(String title, float x, float y) {
             LineData data = new LineData();
             data.text = title;
@@ -55,7 +54,6 @@ public class PageBean {
             return data;
         }
 
-        // 创建分隔线
         public static LineData createHeaderSeparator(float x1, float y, float x2) {
             LineData data = new LineData();
             data.x = x1;
@@ -65,7 +63,6 @@ public class PageBean {
             return data;
         }
 
-        // 创建正文行
         public static LineData createContent(String text, float x, float y) {
             LineData data = new LineData();
             data.text = text;
@@ -75,7 +72,6 @@ public class PageBean {
             return data;
         }
 
-        // 创建页脚行
         public static LineData createFooter(String text, float x, float y) {
             LineData data = new LineData();
             data.text = text;

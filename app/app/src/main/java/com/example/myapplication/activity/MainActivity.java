@@ -316,7 +316,6 @@ public class MainActivity extends BaseActivity {
         }
     }
 
-    //保存状态
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);

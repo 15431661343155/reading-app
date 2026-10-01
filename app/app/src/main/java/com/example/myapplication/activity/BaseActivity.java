@@ -25,7 +25,6 @@ public class BaseActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // 应用主题
         int theme = ThemeManager.getCurrentTheme(this);
         setTheme(ThemeManager.getThemeRes(theme));
         if (getResources() == null) {
@@ -33,7 +32,6 @@ public class BaseActivity extends AppCompatActivity {
         }
         super.onCreate(savedInstanceState);
 
-        // 获取状态栏高度
         getStatusBarHeight();
         
         // 状态栏适配 - 让内容绘制在状态栏下方，保持状态栏显示
@@ -101,7 +99,6 @@ public class BaseActivity extends AppCompatActivity {
     protected void extendToolbarToStatusBar(View toolbar) {
         if (toolbar == null || statusBarHeight == 0) return;
         
-        // 设置导航栏高度 = 状态栏高度 + 原有高度
         int toolbarHeight = toolbar.getLayoutParams().height;
         if (toolbarHeight <= 0) {
             // 如果高度未设置，使用默认56dp

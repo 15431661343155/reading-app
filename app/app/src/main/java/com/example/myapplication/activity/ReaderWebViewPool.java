@@ -64,7 +64,7 @@ public final class ReaderWebViewPool {
                 } catch (Exception e) {
                     android.util.Log.e("ReaderWebViewPool", "preload reader.html failed", e);
                 }
-                // ✅ 关键修复：必须在 reader.html「加载阶段」就注入 JS 桥接（Android 全局对象）。
+                // 关键修复：必须在 reader.html「加载阶段」就注入 JS 桥接（Android 全局对象）。
                 //    复用池里若先 loadUrl、等进入 ReadActivity 后再 addJavascriptInterface，则对「已加载完成」
                 //    的页面本机（Vivo 等）不会重新注入，导致 JS 里 Android 始终为 undefined —— 所有
                 //    Web→Java 回调（onPageChanged / onChapterEnd 等）全部静默失败，表现为「续读无法精准到页」

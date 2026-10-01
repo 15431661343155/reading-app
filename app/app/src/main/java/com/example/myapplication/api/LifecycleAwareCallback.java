@@ -23,7 +23,8 @@ public abstract class LifecycleAwareCallback<T> implements Callback<T> {
      * @param activity 绑定的Activity
      * @param requestManager 可选的请求管理器
      */
-    public LifecycleAwareCallback(@NonNull Activity activity, @Nullable NetworkRequestManager.ScopedRequestManager requestManager) {
+    public LifecycleAwareCallback(@NonNull Activity activity,
+            @Nullable NetworkRequestManager.ScopedRequestManager requestManager) {
         this.lifecycleHelper = new ActivityLifecycleHelper(activity, requestManager);
     }
 
@@ -32,7 +33,8 @@ public abstract class LifecycleAwareCallback<T> implements Callback<T> {
      * @param fragment 绑定的Fragment
      * @param requestManager 可选的请求管理器
      */
-    public LifecycleAwareCallback(@NonNull Fragment fragment, @Nullable NetworkRequestManager.ScopedRequestManager requestManager) {
+    public LifecycleAwareCallback(@NonNull Fragment fragment,
+            @Nullable NetworkRequestManager.ScopedRequestManager requestManager) {
         this.lifecycleHelper = new FragmentLifecycleHelper(fragment, requestManager);
     }
 

@@ -13,6 +13,7 @@ import android.graphics.Color;
 import android.graphics.RenderEffect;
 import android.graphics.Shader;
 import android.graphics.Typeface;
+import androidx.annotation.NonNull;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -145,7 +146,6 @@ public class ProfileActivity extends BaseActivity {
         findViewById(R.id.btn_username).setOnClickListener(v -> showEditNicknameDialog());
         // 性别行
         findViewById(R.id.btn_gender).setOnClickListener(v -> showGenderDialog());
-        // 复制 UID
         findViewById(R.id.btn_copy).setOnClickListener(v -> copyUid());
         // 邮箱行：进入邮箱绑定
         findViewById(R.id.btn_email).setOnClickListener(v ->
@@ -651,8 +651,8 @@ public class ProfileActivity extends BaseActivity {
         RetrofitClient.getApiService().uploadAvatar(part)
                 .enqueue(new Callback<ApiResponse<Map<String, Object>>>() {
                     @Override
-                    public void onResponse(@androidx.annotation.NonNull Call<ApiResponse<Map<String, Object>>> call,
-                                           @androidx.annotation.NonNull Response<ApiResponse<Map<String, Object>>> response) {
+                    public void onResponse(@NonNull Call<ApiResponse<Map<String, Object>>> call,
+                                           @NonNull Response<ApiResponse<Map<String, Object>>> response) {
                         ApiResponse<Map<String, Object>> body = response.body();
                         if (body != null && body.isSuccess() && body.getData() != null) {
                             Object url = body.getData().get("avatar");
@@ -691,8 +691,8 @@ public class ProfileActivity extends BaseActivity {
                     }
 
                     @Override
-                    public void onFailure(@androidx.annotation.NonNull Call<ApiResponse<Map<String, Object>>> call,
-                                          @androidx.annotation.NonNull Throwable t) {
+                    public void onFailure(@NonNull Call<ApiResponse<Map<String, Object>>> call,
+                                          @NonNull Throwable t) {
                         finishWithFailure("头像上传失败：" + t.getMessage());
                     }
                 });
@@ -712,8 +712,8 @@ public class ProfileActivity extends BaseActivity {
         RetrofitClient.getApiService().updateProfile(request)
                 .enqueue(new Callback<ApiResponse<Map<String, Object>>>() {
                     @Override
-                    public void onResponse(@androidx.annotation.NonNull Call<ApiResponse<Map<String, Object>>> call,
-                                           @androidx.annotation.NonNull Response<ApiResponse<Map<String, Object>>> response) {
+                    public void onResponse(@NonNull Call<ApiResponse<Map<String, Object>>> call,
+                                           @NonNull Response<ApiResponse<Map<String, Object>>> response) {
                         ApiResponse<Map<String, Object>> body = response.body();
                         if (body != null && body.isSuccess()) {
                             // 本次提交若带上了头像变更（含清空 → 空串），同步更新 avatar_server 标记，
@@ -730,8 +730,8 @@ public class ProfileActivity extends BaseActivity {
                     }
 
                     @Override
-                    public void onFailure(@androidx.annotation.NonNull Call<ApiResponse<Map<String, Object>>> call,
-                                          @androidx.annotation.NonNull Throwable t) {
+                    public void onFailure(@NonNull Call<ApiResponse<Map<String, Object>>> call,
+                                          @NonNull Throwable t) {
                         finishWithFailure("云端同步失败：" + t.getMessage());
                     }
                 });
@@ -772,7 +772,7 @@ public class ProfileActivity extends BaseActivity {
         Window window = dialog.getWindow();
         if (window != null) {
             window.setGravity(Gravity.CENTER);
-            // ⚠️ inflate(layout, null) 丢根布局 layout_*，窗口宽度必须显式给：
+            // inflate(layout, null) 丢根布局 layout_*，窗口宽度必须显式给：
             // 312 = 卡片 280dp + 左右各 16dp（留卡片投影），同 LoginHelper.showLoginPrompt
             float density = getResources().getDisplayMetrics().density;
             window.setLayout((int) (312 * density), WindowManager.LayoutParams.WRAP_CONTENT);

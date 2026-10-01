@@ -55,7 +55,8 @@ public class ChapterLoader {
         
         RetrofitClient.getApiService().getChapters(bookId).enqueue(new Callback<ApiResponse<List<ChapterDto>>>() {
             @Override
-            public void onResponse(Call<ApiResponse<List<ChapterDto>>> call, Response<ApiResponse<List<ChapterDto>>> response) {
+            public void onResponse(Call<ApiResponse<List<ChapterDto>>> call,
+                    Response<ApiResponse<List<ChapterDto>>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     List<ChapterDto> chapters = response.body().getData();
                     if (chapters != null && !chapters.isEmpty()) {
@@ -82,13 +83,11 @@ public class ChapterLoader {
      * 获取指定章节的内容（优先从缓存）
      */
     public void getChapterContent(int index, long bookId, ContentLoadCallback callback) {
-        // 检查索引有效性
         if (index < 0 || index >= chapterList.size()) {
             callback.onError(index, "章节索引无效");
             return;
         }
         
-        // 检查内存缓存
         if (index < chapterContents.size() && chapterContents.get(index) != null) {
             String cachedContent = chapterContents.get(index);
             if (!cachedContent.contains("加载中...") && cachedContent.length() >= 50) {
@@ -97,7 +96,6 @@ public class ChapterLoader {
             }
         }
         
-        // 检查磁盘缓存
         String diskCached = getDiskCache(bookId, index);
         if (diskCached != null && diskCached.length() >= 50) {
             updateMemoryCache(index, diskCached);
@@ -119,12 +117,12 @@ public class ChapterLoader {
             return;
         }
         
-        // 设置加载中标记
         updateMemoryCache(index, "加载中...");
         
         RetrofitClient.getApiService().getChapterContent(chapterId).enqueue(new Callback<ApiResponse<com.example.myapplication.bean.Chapter>>() {
             @Override
-            public void onResponse(Call<ApiResponse<com.example.myapplication.bean.Chapter>> call, Response<ApiResponse<com.example.myapplication.bean.Chapter>> response) {
+            public void onResponse(Call<ApiResponse<com.example.myapplication.bean.Chapter>> call,
+                    Response<ApiResponse<com.example.myapplication.bean.Chapter>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     com.example.myapplication.bean.Chapter chapter = response.body().getData();
                     if (chapter != null && chapter.getContent() != null && !chapter.getContent().isEmpty()) {
@@ -158,7 +156,6 @@ public class ChapterLoader {
     private void prefetchNextChapter(int currentIndex, long bookId) {
         int nextIndex = currentIndex + 1;
         if (nextIndex < chapterList.size()) {
-            // 检查是否已经缓存
             if (nextIndex >= chapterContents.size() || chapterContents.get(nextIndex) == null) {
                 getChapterContent(nextIndex, bookId, new ContentLoadCallback() {
                     @Override
@@ -182,7 +179,6 @@ public class ChapterLoader {
         chapterList.clear();
         chapterList.addAll(newChapters);
         
-        // 重置内容缓存
         chapterContents.clear();
         for (int i = 0; i < newChapters.size(); i++) {
             chapterContents.add(null);

@@ -55,7 +55,6 @@ public class ProgressTracker {
             prefs.edit().putInt(KEY_RECORD_COUNT, recordCount + 1).apply();
         }
         
-        // 保存进度
         prefs.edit()
             .putLong(KEY_RECORD_BOOKID + targetIndex, bookId)
             .putInt(KEY_RECORD_CHAPTER + targetIndex, chapterIndex)
@@ -80,7 +79,7 @@ public class ProgressTracker {
                 
                 ReadingProgress progress = new ReadingProgress();
                 progress.setChapterIndex(chapterIndex);
-                progress.setScrollPosition(page);  // ✅ 使用scrollPosition而不是page
+                progress.setScrollPosition(page);  // 使用scrollPosition而不是page
                 // 注意：ReadingProgress没有lastReadTime字段，时间信息保存在SharedPreferences中
                 
                 Log.d(TAG, "Progress loaded: chapter=" + chapterIndex + ", page=" + page);
@@ -100,11 +99,12 @@ public class ProgressTracker {
         progress.setUserId(userId);
         progress.setBookId(bookId);
         progress.setChapterIndex(chapterIndex);
-        progress.setScrollPosition(page);  // ✅ 使用scrollPosition
+        progress.setScrollPosition(page);  // 使用scrollPosition
         
         RetrofitClient.getApiService().saveProgress(progress).enqueue(new Callback<ApiResponse<ReadingProgress>>() {
             @Override
-            public void onResponse(Call<ApiResponse<ReadingProgress>> call, Response<ApiResponse<ReadingProgress>> response) {
+            public void onResponse(Call<ApiResponse<ReadingProgress>> call,
+                    Response<ApiResponse<ReadingProgress>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     Log.d(TAG, "Progress synced to server");
                     if (callback != null) {
@@ -132,9 +132,11 @@ public class ProgressTracker {
      * 从服务器加载进度
      */
     public void loadFromServer(long userId, long bookId, ServerLoadCallback callback) {
-        RetrofitClient.getApiService().getProgress(userId, bookId).enqueue(new Callback<ApiResponse<ReadingProgress>>() {
+        RetrofitClient.getApiService().getProgress(userId,
+                bookId).enqueue(new Callback<ApiResponse<ReadingProgress>>() {
             @Override
-            public void onResponse(Call<ApiResponse<ReadingProgress>> call, Response<ApiResponse<ReadingProgress>> response) {
+            public void onResponse(Call<ApiResponse<ReadingProgress>> call,
+                    Response<ApiResponse<ReadingProgress>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     ReadingProgress progress = response.body().getData();
                     if (progress != null) {
@@ -197,7 +199,6 @@ public class ProgressTracker {
                         .apply();
                 }
                 
-                // 删除最后一条记录
                 prefs.edit()
                     .remove(KEY_RECORD_BOOKID + lastIndex)
                     .remove(KEY_RECORD_CHAPTER + lastIndex)

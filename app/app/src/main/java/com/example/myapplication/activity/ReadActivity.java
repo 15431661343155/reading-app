@@ -98,34 +98,35 @@ import retrofit2.Response;
 public class ReadActivity extends BaseActivity {
 
     // ========== UI 组件 ==========
-    private WebView webView;
-    private View layoutTopNav, layoutBottomNav;
-    private TextView tvToolbarTitle, tvProgressText;
+    WebView webView;
+    View layoutTopNav, layoutBottomNav;
+    TextView tvToolbarTitle, tvProgressText;
     private View btnPrevChapter, btnNextChapter, btnCatalog, btnNightMode, btnSettings;
-    private ImageView ivNightModeIcon;
-    private TextView tvNightModeText;
-    private com.example.myapplication.view.LiquidSlider liquidSlider;
+    ImageView ivNightModeIcon;
+    TextView tvNightModeText;
+    com.example.myapplication.view.LiquidSlider liquidSlider;
 
     // ========== 弹窗 ==========
-    private PopupWindow chapterPopupWindow, moreMenuPopupWindow, settingsPopupWindow, moreSettingsPopupWindow, bgColorsPopupWindow, fontsPopupWindow;
+    PopupWindow chapterPopupWindow, moreMenuPopupWindow, settingsPopupWindow,
+            moreSettingsPopupWindow, bgColorsPopupWindow, fontsPopupWindow;
     // 设置面板内容视图：用于窗内裁剪滑动，使其从「目录/夜间/设置」行里滑出/收回
     private View settingsPanelView;
 
     // ========== 阅读设置 ==========
     private int currentBrightness = 128;
     private boolean followSystemBrightness = false;
-    private boolean autoPageEnabled = false;
-    private int autoPageInterval = 5000; // 自动翻页间隔(ms)，可配置：慢10s/中5s/快3s
+    boolean autoPageEnabled = false;
+    int autoPageInterval = 5000; // 自动翻页间隔(ms)，可配置：慢10s/中5s/快3s
     // 阅读亮屏时间：0=跟随系统（不加 KEEP_SCREEN_ON），-1=阅读时常亮，
     // >0=阅读时保持亮屏、无操作超过该毫秒数后允许熄屏（任意触摸重新计时）
-    private long screenOnTimeoutMs = 0;
-    private int currentBgColor = 0;  // 0-9:纯色（0-3保持旧值兼容）
+    long screenOnTimeoutMs = 0;
+    int currentBgColor = 0;  // 0-9:纯色（0-3保持旧值兼容）
     /** 设置面板翻页分段的主题重刷（夜间/背景切换后重设指示器底色与文字颜色）；面板未打开时为上次面板遗留，由 isShowing 守卫 */
-    private Runnable settingsPageSegRefresher;
+    Runnable settingsPageSegRefresher;
     // 页面「实际显示」的背景基准色：纯色即自身，纹理取其预览底色，夜间模式为 #1A1A1A。
     // 导航栏/浮窗的派生配色以它为输入，保证与 WebView 里看到的一致。
-    private int effectiveBgBase = 0xFFFFFFFF;
-    private boolean isNightMode = false;
+    int effectiveBgBase = 0xFFFFFFFF;
+    boolean isNightMode = false;
 
     /** 供弹窗内 Adapter 读取当前夜间模式状态，确保列表项配色跟随主题 */
     public boolean isNightMode() { return isNightMode; }
@@ -143,12 +144,12 @@ public class ReadActivity extends BaseActivity {
     }
 
     // 纯色背景（indices 0-9，0-3 为快捷面板，0=纯白为 iOS 默认）
-    private static final String[] BG_COLORS = {
+    static final String[] BG_COLORS = {
         "#FFFFFF", "#C4DFCF", "#E5D5C0", "#1A1A1A",  // 纯白/护眼绿/羊皮纸/夜间
         "#F5F5DC", "#D2B48C", "#F8D7DA", "#2C3E50",  // 米黄/牛皮纸/粉色/深空灰
         "#DCE8F5", "#E8DAEF"                          // 淡蓝/薰衣草
     };
-    private static final String[] BG_TEXT_COLORS = {
+    static final String[] BG_TEXT_COLORS = {
         "#1D1D1F", "#1D1D1F", "#1D1D1F", "#AAAAAA",
         "#1D1D1F", "#1D1D1F", "#1D1D1F", "#CCCCCC",
         "#1D1D1F", "#1D1D1F"
@@ -160,39 +161,39 @@ public class ReadActivity extends BaseActivity {
     };
 
     // 纹理背景（indices 10-16，对应assets/backgrounds/中的图片）
-    private static final String[] BG_TEXTURE_FILES = {
+    static final String[] BG_TEXTURE_FILES = {
         "yangpi1.jpg", "yangpi2.jpg", "cuizhu.jpg", "shuimo.jpg",
         "yuanshan.jpg", "zhisan.jpg", "zhuying.jpg"
     };
-    private static final String[] BG_TEXTURE_LABELS = {
+    static final String[] BG_TEXTURE_LABELS = {
         "古纸", "旧纸", "翠竹", "水墨山", "远山", "纸伞", "竹影"
     };
     // 纹理预览底色（用于弹窗中的色块预览边框配色）
-    private static final int[] BG_TEXTURE_PREVIEW_COLORS = {
+    static final int[] BG_TEXTURE_PREVIEW_COLORS = {
         0xFFF5F0E6, 0xFFF0EBE0, 0xFFE8E4D8, 0xFFD5C4A1,
         0xFFE0E4E8, 0xFFF5E6E0, 0xFFEAE8E0
     };
 
     // ========== 字体管理 ==========
     // 内置选项
-    private static final String FONT_DEFAULT_CSS = "sans-serif";      // 默认字体（app自带）
-    private static final String FONT_SYSTEM_CSS  = "__system__";       // 系统字体（跟随手机）
+    static final String FONT_DEFAULT_CSS = "sans-serif";      // 默认字体（app自带）
+    static final String FONT_SYSTEM_CSS  = "__system__";       // 系统字体（跟随手机）
     // 后端字体列表（运行时从 API 获取）
-    private java.util.List<com.example.myapplication.bean.FontItem> backendFonts = new java.util.ArrayList<>();
+    java.util.List<com.example.myapplication.bean.FontItem> backendFonts = new java.util.ArrayList<>();
 
-    private String currentFontFamily = "sans-serif"; // 当前使用的CSS字体族
+    String currentFontFamily = "sans-serif"; // 当前使用的CSS字体族
 
     // ========== 间距设置（行距倍数 / 段距行数 / 左右边距 dp / 上下边距 dp） ==========
     // padTB = -1 表示跟随默认公式（JS 侧 topPadding = 左右边距 + 字号行高），保持老用户视觉不变
-    private float lineSpacingRatio = 1.8f;   // 行距倍数（1.2~2.6）
-    private float paraGapRatio = 0.5f;       // 段距（0~1.5 行）
-    private int padLR = 16;                  // 左右边距（8~40 dp）
-    private int padTB = -1;                  // 上下边距（12~56 dp；-1 = 默认公式）
-    private String currentFontDisplay = "默认字体";    // 当前字体展示名（选择时记录，用于设置按钮文案）
-    private java.util.Set<String> downloadedFonts = new java.util.HashSet<>(); // 已下载的字体cssName
-    private java.util.Set<String> downloadingFonts = new java.util.HashSet<>(); // 正在下载的字体cssName
-    private Book currentBook;
-    private int currentChapterIndex = 0;
+    float lineSpacingRatio = 1.8f;   // 行距倍数（1.2~2.6）
+    float paraGapRatio = 0.5f;       // 段距（0~1.5 行）
+    int padLR = 16;                  // 左右边距（8~40 dp）
+    int padTB = -1;                  // 上下边距（12~56 dp；-1 = 默认公式）
+    String currentFontDisplay = "默认字体";    // 当前字体展示名（选择时记录，用于设置按钮文案）
+    java.util.Set<String> downloadedFonts = new java.util.HashSet<>(); // 已下载的字体cssName
+    java.util.Set<String> downloadingFonts = new java.util.HashSet<>(); // 正在下载的字体cssName
+    Book currentBook;
+    int currentChapterIndex = 0;
     /** 显式跳章标记：从详情页目录等入口点击具体章节时为 true，
      *  此时无论有无阅读记录都直接进入点击的章节；仅默认入口（继续阅读）才恢复进度 */
     private boolean explicitChapterJump = false;
@@ -205,20 +206,20 @@ public class ReadActivity extends BaseActivity {
     private int pendingChapterPage = -1;           // >0=跳过去后定位到该页（服务端进度同步用）；-1=不指定
     private long pendingChapterTs = 0L;            // 发起时间，超时后允许重新发起（避免异常时永久卡死）
     private static final long PENDING_CHAPTER_TIMEOUT = 10000L;
-    private long lastChapterJumpTs = 0L;            // ⚠️ 防御：一次手势只会触发一次 onChapterEnd/onChapterStart；
+    private long lastChapterJumpTs = 0L;            // 防御：一次手势只会触发一次 onChapterEnd/onChapterStart；
                                                     //    仿真翻页下 document 级滑动与 turn.js boundary 曾各自触发一次导致连跳两章，
                                                     //    这里按时间窗去重（见 onChapterEnd/onChapterStart）
     /** 服务端进度比本地新时，允许越过 positionRestored 守卫重渲染一次（同一本书只保留最新那条记录） */
     private boolean forceRestorePosition = false;
-    private float currentFontSize = 28f;   // px
-    private float headerFooterFontSize = 12f; // 初始字号改为12
-    private boolean showHeaderFooter = true;
-    private boolean showBatteryTime = false;
-    private boolean volumeKeyPageTurn = true;
-    private boolean swipePageTurn = true;
+    float currentFontSize = 28f;   // px
+    float headerFooterFontSize = 12f; // 初始字号改为12
+    boolean showHeaderFooter = true;
+    boolean showBatteryTime = false;
+    boolean volumeKeyPageTurn = true;
+    boolean swipePageTurn = true;
     private String pageTurnMode = "cover"; // none, cover, slide, updown, fade, simulation
-    private boolean isLocalBook = false;
-    private boolean isExternalBook = false;       // 外站书籍在线阅读模式
+    boolean isLocalBook = false;
+    boolean isExternalBook = false;       // 外站书籍在线阅读模式
     private String[][] externalChapters;          // 外站章节列表 [[title, url], ...]
     private final android.util.LruCache<String, String> externalContentCache =
             new android.util.LruCache<>(5);        // 缓存最近5章正文
@@ -229,8 +230,8 @@ public class ReadActivity extends BaseActivity {
     private TextView tvLoadFailMsg;
 
     // ========== 电量时间 ==========
-    private final Handler timeUpdateHandler = new Handler(Looper.getMainLooper());
-    private final Runnable timeUpdateRunnable = new Runnable() {
+    final Handler timeUpdateHandler = new Handler(Looper.getMainLooper());
+    final Runnable timeUpdateRunnable = new Runnable() {
         @Override
         public void run() {
             updateBatteryAndTime();
@@ -239,27 +240,25 @@ public class ReadActivity extends BaseActivity {
     };
 
     // ========== 章节数据 ==========
-    private final List<Chapter> chapterList = new ArrayList<>();
+    final List<Chapter> chapterList = new ArrayList<>();
     /**
      * 本地书的分卷结构（来自导入时持久化的紧凑卷表）；空列表表示该书无分卷信息，
      * 目录浮窗按平铺章节列表显示。仅在 {@link #loadLocalBookChapters} 中填充。
      * 注意：服务器书（含后台导入 EPUB）的分卷不存这里，而是在打开目录时按最新
-     * chapterList 实时推导（见 {@link #currentVolumes()}），以保证卷区间与下标严格一致。
      */
-    private final List<LocalBookParser.VolumeInfo> localVolumes = new ArrayList<>();
+    final List<LocalBookParser.VolumeInfo> localVolumes = new ArrayList<>();
     /**
      * 服务器书的分卷表（后台导入 EPUB 时写入 major_chapter）。仅在服务器书加载链路拉取；
-     * 供 {@link #currentVolumes()} 结合章节 sortKey 推导分卷。为空则目录保持平铺。
      */
-    private final List<MajorChapter> serverMajorChapters = new ArrayList<>();
+    final List<MajorChapter> serverMajorChapters = new ArrayList<>();
 
     // 本地书元信息（目录浮窗顶部信息头的兜底来源）：仅在 loadLocalBookChapters 里填充。
     // 从阅读记录/详情页进来时 currentBook 可能缺书名/作者/封面，这里用 local_books 记录补齐。
-    private String localBookName = "";
-    private String localBookAuthor = "";
-    private String localBookCover = "";
-    private String localBookCoverPath = "";
-    private final List<String> chapterContents = new ArrayList<>();
+    String localBookName = "";
+    String localBookAuthor = "";
+    String localBookCover = "";
+    String localBookCoverPath = "";
+    final List<String> chapterContents = new ArrayList<>();
     /** 保留样式的 HTML（与 chapterContents 一一对应；为空表示用纯文本渲染） */
     private final List<String> chapterHtmlContents = new ArrayList<>();
     /**
@@ -271,7 +270,7 @@ public class ReadActivity extends BaseActivity {
     /** 本地书已加载正文的保留半径：只留当前章前后各 N 章，避免长时间阅读把全书正文堆进内存 */
     private static final int LOCAL_CONTENT_KEEP_RADIUS = 5;
     /** 各类书籍统一的章节预取窗口：当前章前后各 N 章（由近及远），预取结果落盘供下次秒开 */
-    private static final int CHAPTER_PREFETCH_RADIUS = 5;
+    static final int CHAPTER_PREFETCH_RADIUS = 5;
 
     /**
      * 章节正文是否仍处于「占位 / 未加载」状态（而不是真实正文）。
@@ -285,17 +284,17 @@ public class ReadActivity extends BaseActivity {
      * <p>这里统一按「占位符 / 空串」判定；真正空白的章节仍会被判为未就绪，
      * 从而保留原有的「跳过空章」行为。
      */
-    private static boolean isChapterContentPending(String content) {
+    static boolean isChapterContentPending(String content) {
         if (content == null) return true;
         String t = content.trim();
         if (t.isEmpty()) return true;
         // 【章节加载中...】/【正在加载...】等占位文本
         return t.contains("加载中") || t.contains("正在加载");
     }
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     // ========== 导航栏自动隐藏 ==========
-    private final Runnable hideNavRunnable = this::hideNavigation;
+    final Runnable hideNavRunnable = this::hideNavigation;
     private int statusBarHeight = 0;  // 状态栏高度
     private int bottomNavHeight = 0;  // 底部导航栏高度缓存（避免每次滑动都重新 measure）
     private static final long NAV_ANIM_MS = 250L;  // 上下导航栏滑入/滑出时长
@@ -312,12 +311,14 @@ public class ReadActivity extends BaseActivity {
     private int lastGestureActionMasked = -1;
 
     // ========== 自动翻页 ==========
-    private final Handler autoPageHandler = new Handler(Looper.getMainLooper());
-    private Runnable autoPageRunnable;
+    /** 目录/书签浮窗控制器（承载/切章/书签跳转），实现见 ReadTocPopupController */
+    final ReadTocPopupController tocController = new ReadTocPopupController(this);
+    /** 自动翻页调度器（定时器/倒计时/挂起恢复），实现见 ReadAutoPageController */
+    final ReadAutoPageController autoPageController = new ReadAutoPageController(this);
     /** 当某个设置弹窗打开时挂起自动翻页，关闭后恢复（仅当开启时） */
-    private boolean autoPageSuspended = false;
+    boolean autoPageSuspended = false;
     /** Activity 是否处于前台（onResume 后为 true，onPause 后为 false） */
-    private boolean activityResumed = false;
+    boolean activityResumed = false;
 
     // ========== 阅读时间 ==========
     private long readStartTime;
@@ -326,25 +327,23 @@ public class ReadActivity extends BaseActivity {
     private int currentPageInChapter = 1;
     private int totalPagesInChapter = 1;
 
-    // ✅ 复用池修复：恢复阅读位置时记住「目标页码」，正文异步到达后重渲染时沿用，
+    // 复用池修复：恢复阅读位置时记住「目标页码」，正文异步到达后重渲染时沿用，
     //    避免 fetchChapterContent.onResponse 用默认 page=1 重渲染把恢复位置冲掉（导致「恢复总落第 1 页」）。
     private int restoreTargetPage = 1;
 
-    // ✅ 排版缓存：把「章节分页结果」按 layout signature 落盘，下次进入本书同章同排版直接复用，避免每次重排
-    private java.io.File layoutCacheDir;
-    private java.util.concurrent.ExecutorService layoutExecutor;
-    private static final int LAYOUT_CACHE_MAX_FILES = 300;
+    // 排版缓存：把「章节分页结果」按 layout signature 落盘，下次进入本书同章同排版直接复用，避免每次重排
+    private ReadLayoutCache layoutCache;
 
     private boolean positionRestored = false;
-    private boolean isWebViewReady  = false;
-    // ✅ 复用池：标记「WebView 就绪后的统一处理」是否已执行，避免首次加载与复用命中两条路径重复触发
+    boolean isWebViewReady  = false;
+    // 复用池：标记「WebView 就绪后的统一处理」是否已执行，避免首次加载与复用命中两条路径重复触发
     private boolean readerReadyHandled = false;
-    // ✅ 复用池：等 WebView 布局就绪（拿到正确宽度）再恢复位置的监听。
+    // 复用池：等 WebView 布局就绪（拿到正确宽度）再恢复位置的监听。
     //    池化 WebView 跨 Activity 复用，该监听必须随 Activity 生命周期清理，否则 observer 随 detach 失效后崩溃。
     private android.view.ViewTreeObserver.OnGlobalLayoutListener layoutReadyListener;
     private boolean hasRestoredFromLocal = false;
-    private boolean chapterRestoredFromCache = false;  // ✅ 新增：标记是否从缓存恢复了章节
-    // ✅ 渲染代次：每次外部调用 renderChapterContent 都生成一个新代次。
+    private boolean chapterRestoredFromCache = false;  // 新增：标记是否从缓存恢复了章节
+    // 渲染代次：每次外部调用 renderChapterContent 都生成一个新代次。
     //    WebView 未就绪时会以 50ms 重试渲染，若期间已有更新的渲染请求（如服务器正文到达后渲染目标章），
     //    较早的延迟重试通过比对代次被判定为「过期」并直接丢弃，避免用旧 index（如占位章的 0）
     //    覆盖 currentChapterIndex，导致用户被拉回第一章。
@@ -352,7 +351,7 @@ public class ReadActivity extends BaseActivity {
 
     // ==================== Long/Book 安全工具（彻底消灭 Long->long 自动拆箱 NPE） ====================
     /** currentBook.getId() 统一安全入口：外站书为 null → 返回 0，绝不会自动拆箱 */
-    private long safeBookId() {
+    long safeBookId() {
         if (currentBook == null) return 0L;
         Long raw = currentBook.getId();
         return (raw == null || raw <= 0) ? 0L : raw;
@@ -367,7 +366,8 @@ public class ReadActivity extends BaseActivity {
             return "ext|" + st + "|" + su;
         }
         long bid = safeBookId();
-        return bid > 0 ? ("local|" + bid) : ("tmp_book|" + (currentBook.getBookName() == null ? "" : currentBook.getBookName()));
+        return bid > 0 ? ("local|" + bid) : ("tmp_book|"
+                + (currentBook.getBookName() == null ? "" : currentBook.getBookName()));
     }
 
     /**
@@ -391,7 +391,7 @@ public class ReadActivity extends BaseActivity {
     @SuppressWarnings("deprecation")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // ✅ super.onCreate 之前先替换当前线程未捕获异常处理器。
+        // super.onCreate 之前先替换当前线程未捕获异常处理器。
         // 背景：之前给 showChapterPopup / Fragment / renderChapterContent 各点都加了 try/catch，
         // 但 ViewPager2 延迟一帧才执行 onCreateView、FragmentManager.moveToState、
         // RecyclerView onMeasure/onBind 等，这些后续 MessageQueue 中的事件循环抛出的异常
@@ -426,7 +426,7 @@ public class ReadActivity extends BaseActivity {
 
         super.onCreate(savedInstanceState);
 
-        // ✅ 关键：让窗口始终占满物理屏幕，状态栏显隐时不改变窗口高度
+        // 关键：让窗口始终占满物理屏幕，状态栏显隐时不改变窗口高度
         // 这样 WebView 的 window.innerHeight 始终恒定，不会触发重新分页
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
@@ -469,7 +469,7 @@ public class ReadActivity extends BaseActivity {
         isExternalBook = getIntent().getBooleanExtra("isExternal", false);
         externalChapters = (String[][]) getIntent().getSerializableExtra("chapters");
 
-        // ✅ 关键兜底：即使 intent 没传对，也从 local_books 检测是否为本地书
+        // 关键兜底：即使 intent 没传对，也从 local_books 检测是否为本地书
         // 注意：外站书（isExternalBook=true）不能被误判为本地书，否则会走 getChapters(bookId) 死循环
         if (!isLocalBook && !isExternalBook && currentBook.getId() != null && currentBook.getId() > 0) {
             SharedPreferences spLocal = getSharedPreferences("local_books", MODE_PRIVATE);
@@ -483,11 +483,10 @@ public class ReadActivity extends BaseActivity {
             }
         }
         
-        // 获取状态栏高度
         getStatusBarHeight();
 
         initView();
-        // ✅ 进门即展示「章节加载中」遮罩：覆盖 WebView 就绪 + 仿真翻页首屏渲染（同步 toDataURL 多张大图）的空窗，
+        // 进门即展示「章节加载中」遮罩：覆盖 WebView 就绪 + 仿真翻页首屏渲染（同步 toDataURL 多张大图）的空窗，
         //    避免进入阅读器时（尤其仿真模式）出现白屏而非加载动画。内容真正渲染到位后由
         //    renderChapterContentInternal 的回调撤下；占位/异常分支也各自有收口。
         setChapterLoading(true);
@@ -499,7 +498,7 @@ public class ReadActivity extends BaseActivity {
         effectiveBgBase = isNightMode ? Color.parseColor("#1A1A1A")
                 : resolveBaseForMode(currentBgColor);
         applyChromeTheme();
-        // ✅ 应用阅读亮屏策略（跟随系统 / 定时 / 常亮）
+        // 应用阅读亮屏策略（跟随系统 / 定时 / 常亮）
         applyScreenKeepAlive();
 
         setupWebView();
@@ -527,7 +526,7 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
-     * ✅ 隐藏系统状态栏（仅改变可见性，不改变窗口高度）
+     * 隐藏系统状态栏（仅改变可见性，不改变窗口高度）
      * 使用 LAYOUT_NO_LIMITS + WindowInsetsController，让窗口始终占满物理屏幕，
      * 避免状态栏显隐导致 WebView 高度变化触发重新分页。
      */
@@ -553,7 +552,7 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
-     * ✅ 显示系统状态栏（仅改变可见性，不改变窗口高度）
+     * 显示系统状态栏（仅改变可见性，不改变窗口高度）
      */
     @SuppressWarnings("deprecation")
     private void showSystemStatusBar() {
@@ -587,7 +586,7 @@ public class ReadActivity extends BaseActivity {
     }
 
     private void initView() {
-        // ✅ 复用 WebView 池：把池化实例动态插入内容容器，避免每次开书都 inflate / 重建 WebView + 重载 reader.html。
+        // 复用 WebView 池：把池化实例动态插入内容容器，避免每次开书都 inflate / 重建 WebView + 重载 reader.html。
         //    容器（webview_container）在布局里是空的；池化 WebView 若已挂在其他父容器则先摘离再重新挂接。
         ViewGroup webContainer = findViewById(R.id.webview_container);
         webView = ReaderWebViewPool.obtain(getApplicationContext());
@@ -611,14 +610,8 @@ public class ReadActivity extends BaseActivity {
         tvProgressText = findViewById(R.id.tv_progress_text);
         tvToolbarTitle.setText(currentBook.getBookName());
 
-        // ✅ 排版缓存目录 + 单线程写入池；启动时清理上次残留的 .tmp 半文件
-        layoutCacheDir = new java.io.File(getCacheDir(), "reader_layout");
-        if (!layoutCacheDir.exists()) layoutCacheDir.mkdirs();
-        if (layoutCacheDir.exists()) {
-            java.io.File[] tmpFiles = layoutCacheDir.listFiles((d, n) -> n.endsWith(".tmp"));
-            if (tmpFiles != null) for (java.io.File t : tmpFiles) t.delete();
-        }
-        layoutExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        // 排版缓存：目录/写入池/容量淘汰由 ReadLayoutCache 托管（2026-10-02 拆出）
+        layoutCache = new ReadLayoutCache(this);
 
         // 章节加载中动画 + 本站/外站统一的加载失败层
         loadingChapter = findViewById(R.id.loading_chapter);
@@ -641,9 +634,9 @@ public class ReadActivity extends BaseActivity {
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         webView.setWebChromeClient(new WebChromeClient());
-        // ✅ 每次 attach 都重新绑定到当前 Activity：上一个 Activity 的 WebViewClient / JsBridge
+        // 每次 attach 都重新绑定到当前 Activity：上一个 Activity 的 WebViewClient / JsBridge
         //    随替换而失效，避免复用池 WebView 时回调串台到已销毁的 Activity。
-        // ✅ 复用池 WebView：必须使用同一个 JsBridge 实例注入 JS。
+        // 复用池 WebView：必须使用同一个 JsBridge 实例注入 JS。
         //    若每次 new JsBridge()，reader.html 的 JS 上下文仍持有第一次注入的旧 bridge 代理，
         //    后续 Activity 的页面变化/章节边界等回调会串台到已销毁的旧 Activity，导致翻页进度无法保存。
         webView.addJavascriptInterface(JsBridge.getInstance(this), "Android");
@@ -658,12 +651,12 @@ public class ReadActivity extends BaseActivity {
             }
         });
 
-        // ✅ 复用池 WebView：reader.html 已加载则立即就绪（首开由上面的 onPageFinished 触发）。
+        // 复用池 WebView：reader.html 已加载则立即就绪（首开由上面的 onPageFinished 触发）。
         //    不再每次开书 loadDataWithBaseURL 重载 reader.html —— 这是冷启动优化的核心。
         if (ReaderWebViewPool.isLoaded()) {
             isWebViewReady = true;
             // 等 WebView 完成布局、拿到正确宽度后再恢复，否则 0 宽会导致分页 / 缓存 key 出错。
-            // ✅ 复用的 WebView 跨 Activity：必须先把可能残留的旧监听清掉（避免叠加），
+            // 复用的 WebView 跨 Activity：必须先把可能残留的旧监听清掉（避免叠加），
             //    并在移除时做 isAlive() 保护，否则 observer 随 detach 失效后会抛 IllegalStateException 崩溃。
             if (webView.getWidth() > 0) {
                 onReaderWebViewReady();
@@ -678,7 +671,7 @@ public class ReadActivity extends BaseActivity {
                     @Override
                     public void onGlobalLayout() {
                         if (webView.getWidth() > 0) {
-                            // ✅ 用「当前」observer 并在 alive 时移除，避免捕获的旧 observer 失效抛异常
+                            // 用「当前」observer 并在 alive 时移除，避免捕获的旧 observer 失效抛异常
                             android.view.ViewTreeObserver obs = webView.getViewTreeObserver();
                             if (obs.isAlive()) obs.removeOnGlobalLayoutListener(layoutReadyListener);
                             layoutReadyListener = null;
@@ -699,18 +692,18 @@ public class ReadActivity extends BaseActivity {
         if (readerReadyHandled) return;
         readerReadyHandled = true;
 
-        // ✅ 把原本注入到 reader.html 的初始化脚本改为 evaluate 执行（复用池后不再重载 HTML），
+        // 把原本注入到 reader.html 的初始化脚本改为 evaluate 执行（复用池后不再重载 HTML），
         //    保证字号 / 字体 / 背景 / 页眉页脚 / 纹理 / 仿真占位等全局变量与首帧样式正确。
         webView.evaluateJavascript(buildSettingsInitScript(), null);
 
-        // ✅ 关键修复：WebView 一就绪就无条件补发一次页眉页脚 / 电量时间设置。
+        // 关键修复：WebView 一就绪就无条件补发一次页眉页脚 / 电量时间设置。
         // 退出阅读器重进时 onResume 先于 onPageFinished 执行，那时 updateBatteryAndTime()
         // 会因 isWebViewReady=false 被跳过；而下面恢复位置的分支只在「首次恢复」时应用设置，
         // 走本地缓存恢复（chapterRestoredFromCache=true）时完全不会走到，
         // 结果就是页脚只有页码、没有电量时间，要等 60 秒的定时刷新才出现。
         applyHeaderFooterSettings();
 
-        // ✅ WebView 加载完成后，如果章节列表已加载但尚未恢复位置，则恢复
+        // WebView 加载完成后，如果章节列表已加载但尚未恢复位置，则恢复
         mainHandler.post(() -> {
             if (!positionRestored && !chapterRestoredFromCache && !chapterList.isEmpty()) {
                 android.util.Log.d("ReadActivity", "WebView ready, restoring position from server...");
@@ -721,7 +714,7 @@ public class ReadActivity extends BaseActivity {
                 webView.evaluateJavascript("setPageTurnMode('" + pageTurnMode + "')", null);
                 restoreReadingPosition(currentChapterIndex);
                 updateChapterButtons();
-                // ✅ 若此前开启过自动翻页，阅读器就绪后自动恢复
+                // 若此前开启过自动翻页，阅读器就绪后自动恢复
                 if (autoPageEnabled) {
                     autoPageSuspended = false;
                     startAutoPage();
@@ -812,10 +805,10 @@ public class ReadActivity extends BaseActivity {
             ReadActivity activity = getActivity();
             if (activity == null) return;
             long now = System.currentTimeMillis();
-            // ⚠️ 连击去重：同一手势的重复回调（仿真翻页下 document 级滑动分支与 turn.js boundary
+            // 连击去重：同一手势的重复回调（仿真翻页下 document 级滑动分支与 turn.js boundary
             //    各可能触发一次，两者间隔 <50ms）直接丢弃。同手势去重主防线在 JS 侧
             //    （_boundaryPending/_xCrossFlipping 单一入口），此处只是兜底。
-            // ⚠️ 窗口必须是 150ms 而非 700ms：无缝换章的回调在「动画 500ms 结束后」才发出，
+            // 窗口必须是 150ms 而非 700ms：无缝换章的回调在「动画 500ms 结束后」才发出，
             //    用户「翻过去立刻翻回来」时两次合法回调间隔仅 ~530-650ms——700ms 窗口会把
             //    第二次合法回调吞掉，JS 已切到目标章而 Java 索引滞留旧章，下一次边界翻页
             //    就会按旧索引用邻章，把用户抛回刚读过的章节（「换章翻页跳回未翻之前的页」）。
@@ -827,10 +820,10 @@ public class ReadActivity extends BaseActivity {
                 try {
                 int nextIndex = activity.currentChapterIndex + 1;
 
-                // ✅ 简化：直接检查是否还有下一章
+                // 简化：直接检查是否还有下一章
                 if (nextIndex >= activity.chapterList.size()) {
                     Hint.show(activity, "已经是最后一章，自动翻页已关闭");
-                    // ✅ 到达书末：停止自动翻页并同步开关状态
+                    // 到达书末：停止自动翻页并同步开关状态
                     activity.stopAutoPage();
                     activity.autoPageEnabled = false;
                     activity.autoPageSuspended = false;
@@ -839,21 +832,20 @@ public class ReadActivity extends BaseActivity {
                     return;
                 }
 
-                // ✅ 已有指向同一章的在途跳转 → 直接忽略，避免连跳多章
+                // 已有指向同一章的在途跳转 → 直接忽略，避免连跳多章
                 if (activity.shouldIgnoreChapterJump(nextIndex)) {
                     return;
                 }
 
-                // ✅ 防御：chapterContents 越界
+                // 防御：chapterContents 越界
                 if (nextIndex >= activity.chapterContents.size()) {
                     while (activity.chapterContents.size() < activity.chapterList.size()) activity.chapterContents.add("【正在加载...】");
                 }
-                // 检查下一章的状态
                 String content = activity.chapterContents.get(nextIndex);
 
                 if (activity.isChapterContentPending(content)) {
                     // 下一章正在加载或尚未加载，触发加载。
-                    // ✅ 关键：这里【不要】推进 currentChapterIndex —— 推进了的话，
+                    // 关键：这里【不要】推进 currentChapterIndex —— 推进了的话，
                     // 用户在此期间再翻一次页就会基于新索引再 +1，加载完成后会直接跳两章。
                     activity.setPendingChapterJump(nextIndex, false);
                     activity.fetchChapterContent(nextIndex);
@@ -896,7 +888,7 @@ public class ReadActivity extends BaseActivity {
             ReadActivity activity = getActivity();
             if (activity == null) return;
             long now = System.currentTimeMillis();
-            // ⚠️ 连击去重：同 onChapterEnd，窗口 150ms（理由见彼处注释——700ms 会吞掉
+            // 连击去重：同 onChapterEnd，窗口 150ms（理由见彼处注释——700ms 会吞掉
             //    无缝换章「立刻折返」的第二次合法回调，造成 Java/JS 索引失步乱跳章）。
             if (now - activity.lastChapterJumpTs < 150) return;
             activity.lastChapterJumpTs = now;
@@ -904,23 +896,21 @@ public class ReadActivity extends BaseActivity {
                 try {
                 int prevIndex = activity.currentChapterIndex - 1;
 
-                // 检查是否还有上一章
                 if (prevIndex < 0) {
                     // 确实是第一章
                     Hint.show(activity, "已经是第一章");
                     return;
                 }
 
-                // ✅ 已有指向同一章的在途跳转 → 直接忽略，避免连跳多章
+                // 已有指向同一章的在途跳转 → 直接忽略，避免连跳多章
                 if (activity.shouldIgnoreChapterJump(prevIndex)) return;
 
-                // ✅ 防御：chapterContents 越界
+                // 防御：chapterContents 越界
                 if (prevIndex >= activity.chapterContents.size()) {
                     activity.setPendingChapterJump(prevIndex, true);
                     activity.fetchChapterContent(prevIndex);
                     return;
                 }
-                // 检查上一章的状态
                 String content = activity.chapterContents.get(prevIndex);
 
                 if (activity.isChapterContentPending(content)) {
@@ -967,9 +957,9 @@ public class ReadActivity extends BaseActivity {
         }
 
         /**
-         * ✅ 跨章无缝翻页：JS 在章节边界翻页时同步查询邻章正文是否已就绪（预加载/缓存命中）。
+         * 跨章无缝翻页：JS 在章节边界翻页时同步查询邻章正文是否已就绪（预加载/缓存命中）。
          * 就绪返回 JSON {"index":N,"title":"...","content":"..."}，未就绪返回空串（走原有换章加载流程）。
-         * ⚠️ 绝不发网络请求；⚠️ 服务器书只认内存 chapterContents —— SP 兜底会让 JS 先进入新章
+         * 绝不发网络请求；服务器书只认内存 chapterContents —— SP 兜底会让 JS 先进入新章
          * 而 Java 侧 fetchChapterContent 仍走网络滞留旧章，两端索引窗口期错位。
          */
         @JavascriptInterface
@@ -995,7 +985,7 @@ public class ReadActivity extends BaseActivity {
         }
 
         /**
-         * ✅ 跨章索引重同步：JS 在跨章过渡窗口内收到「过时的 loadContent」（用户已折返、
+         * 跨章索引重同步：JS 在跨章过渡窗口内收到「过时的 loadContent」（用户已折返、
          * Java 还在处理上一次换章回调）时会丢弃它并调用本方法，把 Java 的章节索引对齐到
          * JS 的实际位置，并按正确落点页重发渲染 —— 否则下一次边界翻页会按 Java 的滞后索引
          * 取错邻章，把用户抛回刚读过的章节（「换章翻页跳回未翻之前的页」）。
@@ -1012,7 +1002,8 @@ public class ReadActivity extends BaseActivity {
                 try {
                     if (index < 0 || index >= activity.chapterList.size()) return;
                     if (activity.currentChapterIndex == index) return;   // 已一致，无需同步
-                    android.util.Log.d("ReadActivity", "onChapterResync: Java=" + activity.currentChapterIndex + " -> JS=" + index + ", atLast=" + atLastPage);
+                    android.util.Log.d("ReadActivity", "onChapterResync: Java="
+                            + activity.currentChapterIndex + " -> JS=" + index + ", atLast=" + atLastPage);
                     activity.currentChapterIndex = index;
                     activity.updateChapterButtons();
                     if (atLastPage) activity.loadChapterContentToLastPage(index);
@@ -1024,92 +1015,18 @@ public class ReadActivity extends BaseActivity {
         }
     }
 
-    // ========== 排版缓存：把「章节分页结果」按 layout signature 落盘，下次进入同章同排版直接复用 ==========
-    // layout signature 由「书籍 + 章节 + 字号 + 视口宽高 + 页眉页脚开关 + 字体 + 内容哈希」组成，
-    // 任一变动（改字号 / 换字体 / 旋转 / 改内容）都会自然错开缓存 → 自动失效并重排。
+    // ========== 排版缓存：实现见 ReadLayoutCache（2026-10-02 拆出，按 layout signature 落盘复用） ==========
+
     private String computeLayoutKey(int chIndex, String content) {
-        long bid = safeBookId();
-        String bookPart;
-        if (bid > 0) {
-            bookPart = "L" + bid;
-        } else {
-            String st = currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "";
-            String su = currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "";
-            bookPart = "E" + Integer.toHexString((st + "|" + su).hashCode());
-        }
-        int w = (webView != null) ? webView.getWidth() : 0;
-        int h = (webView != null) ? webView.getHeight() : 0;
-        int fh = (currentFontFamily != null) ? currentFontFamily.hashCode() : 0;
-        int chc = (content != null) ? content.hashCode() : 0;
-        // ✅ 间距参数参与签名：行距/段距/左右/上下任一变动都会自然错开缓存 → 自动失效并重排
-        // （padTB=-1 表示默认公式，与显式值天然不同串，不会误命中）
-        return bookPart + "_" + chIndex + "_" + ((int) currentFontSize) + "_" + w + "_" + h
-                + "_" + (showHeaderFooter ? 1 : 0) + "_" + fh + "_" + chc
-                + "_" + Math.round(lineSpacingRatio * 10) + "_" + Math.round(paraGapRatio * 100)
-                + "_" + padLR + "_" + padTB;
+        return layoutCache.computeLayoutKey(chIndex, content);
     }
 
     private String readLayoutCache(String key) {
-        try {
-            java.io.File f = new java.io.File(layoutCacheDir, sha256hex(key) + ".json");
-            if (!f.exists() || f.length() > 1536 * 1024) return null; // 超大文件不读，避免主线程卡顿
-            java.io.BufferedReader br = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(new java.io.FileInputStream(f), "UTF-8"));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = br.readLine()) != null) sb.append(line);
-            br.close();
-            return sb.length() > 0 ? sb.toString() : null;
-        } catch (Exception e) {
-            android.util.Log.w("ReadActivity", "readLayoutCache 失败: " + e.getMessage());
-            return null;
-        }
+        return layoutCache.readLayoutCache(key);
     }
 
     private void writeLayoutCache(String key, String json) {
-        if (layoutExecutor == null) return;
-        layoutExecutor.execute(() -> {
-            try {
-                String name = sha256hex(key) + ".json";
-                java.io.File tmp = new java.io.File(layoutCacheDir, name + ".tmp");
-                java.io.File dst = new java.io.File(layoutCacheDir, name);
-                java.io.FileOutputStream fos = new java.io.FileOutputStream(tmp);
-                fos.write(json.getBytes("UTF-8"));
-                fos.close();
-                if (dst.exists()) dst.delete();
-                if (!tmp.renameTo(dst)) { // 极少数 rename 失败：直接原地写兜底
-                    java.io.FileOutputStream fos2 = new java.io.FileOutputStream(dst);
-                    fos2.write(json.getBytes("UTF-8"));
-                    fos2.close();
-                    tmp.delete();
-                }
-                trimLayoutCache();
-            } catch (Exception e) {
-                android.util.Log.w("ReadActivity", "writeLayoutCache 失败: " + e.getMessage());
-            }
-        });
-    }
-
-    private void trimLayoutCache() {
-        try {
-            java.io.File[] files = layoutCacheDir.listFiles((d, n) -> n.endsWith(".json"));
-            if (files == null || files.length <= LAYOUT_CACHE_MAX_FILES) return;
-            java.util.Arrays.sort(files, (a, b) -> java.lang.Long.compare(a.lastModified(), b.lastModified()));
-            int remove = files.length - LAYOUT_CACHE_MAX_FILES;
-            for (int i = 0; i < remove; i++) files[i].delete();
-        } catch (Exception e) { /* ignore */ }
-    }
-
-    private static String sha256hex(String s) {
-        try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] b = md.digest(s.getBytes("UTF-8"));
-            StringBuilder sb = new StringBuilder(b.length * 2);
-            for (byte x : b) sb.append(String.format("%02x", x & 0xff));
-            return sb.toString();
-        } catch (Exception e) {
-            return "k" + Integer.toHexString(s.hashCode());
-        }
+        layoutCache.writeLayoutCache(key, json);
     }
 
     /** 外站书籍：根据 externalChapters 构建 chapterList、恢复阅读进度、加载当前章节正文。 */
@@ -1124,7 +1041,6 @@ public class ReadActivity extends BaseActivity {
             String title = (pair != null && pair.length > 0) ? pair[0] : "第" + (i + 1) + "章";
             dto.setTitle(title);
             chapterList.add(dto);
-            // 检查章节URL是否有效
             String chapterUrl = (pair != null && pair.length > 1) ? pair[1] : "";
             if (chapterUrl == null || chapterUrl.isEmpty()) {
                 chapterContents.add("【章节链接缺失】");
@@ -1136,12 +1052,12 @@ public class ReadActivity extends BaseActivity {
         String recordKey = "ext_" + (currentBook.getSourceType() != null ? currentBook.getSourceType() : "")
                 + "|" + (currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "");
         SharedPreferences pref = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
-        // ✅ 目录点击（显式跳章）优先于本地记录：点哪章进哪章
+        // 目录点击（显式跳章）优先于本地记录：点哪章进哪章
         int savedIdx = explicitChapterJump
                 ? currentChapterIndex
                 : pref.getInt(recordKey + "_chapterIndex", currentChapterIndex);
         currentChapterIndex = Math.min(savedIdx, chapterList.size() - 1);
-        // ✅ 读取保存的页码，用于恢复到具体页（显式跳章从第 1 页开始，不沿用其他章节的页码）
+        // 读取保存的页码，用于恢复到具体页（显式跳章从第 1 页开始，不沿用其他章节的页码）
         int savedPage = explicitChapterJump ? 1 : pref.getInt(recordKey + "_page", 1);
 
         tvToolbarTitle.setText(currentBook.getTitle());
@@ -1153,7 +1069,7 @@ public class ReadActivity extends BaseActivity {
             chapterContents.set(currentChapterIndex, "【章节链接缺失，请返回目录选择其他章节】");
             showLoadFail("章节链接缺失，无法加载");
         } else {
-            // ✅ 标记已恢复位置，阻止 onPageFinished → restoreReadingPosition 重复渲染（会导致闪回第1页）
+            // 标记已恢复位置，阻止 onPageFinished → restoreReadingPosition 重复渲染（会导致闪回第1页）
             positionRestored = true;
             loadExternalChapterContent(currentChapterIndex, savedPage);
         }
@@ -1175,12 +1091,13 @@ public class ReadActivity extends BaseActivity {
 
     /**
      * 外站书章节列表兜底拉取（书城同款 fetchOnlineChapters：内存缓存 → 持久化缓存 → 网络）。
-     * ⚠️ 内部含磁盘兜底读（缓存文件可达数 MB），必须在后台线程执行——本方法自带起线程。
+     * 内部含磁盘兜底读（缓存文件可达数 MB），必须在后台线程执行——本方法自带起线程。
      * 结果统一回 UI 线程处理：成功回填 externalChapters + 写缓存 + buildExternalChapterListAndLoad；
      * 失败弹 showExternalLoadErrorDialog；成功/失败都会撤下超时保护 timeoutTask。
      */
     private void fetchExternalChaptersAsync(Runnable timeoutTask) {
-        new Thread(() -> BookDetailActivity.fetchOnlineChapters(this, currentBook, new BookDetailActivity.ChaptersCallback() {
+        new Thread(() -> BookDetailActivity.fetchOnlineChapters(this, currentBook,
+                new BookDetailActivity.ChaptersCallback() {
             @Override
             public void onSuccess(java.util.List<String[]> chapters) {
                 runOnUiThread(() -> {
@@ -1216,7 +1133,7 @@ public class ReadActivity extends BaseActivity {
         // ===== 外站书籍：Intent extra 优先 → 内存缓存 → 占位+加载动画 → 后台(持久化缓存→网络) =====
         if (isExternalBook) {
             if (externalChapters == null || externalChapters.length == 0) {
-                // ✅ 主线程只查内存缓存（无 IO，可安全调用）
+                // 主线程只查内存缓存（无 IO，可安全调用）
                 java.util.List<String[]> mem = BookDetailActivity.getExternalChaptersMemoryOnly(this, currentBook);
                 if (mem != null && !mem.isEmpty()) {
                     externalChapters = mem.toArray(new String[0][]);
@@ -1237,14 +1154,14 @@ public class ReadActivity extends BaseActivity {
             Chapter tempChapter = new Chapter();
             tempChapter.setIndex(0);
             tempChapter.setId(-1);
-            // ⚠️ 标题不要塞「加载中...」：它会被当成真正的章节标题，**同时画在页眉和正文的大标题上**
+            // 标题不要塞「加载中...」：它会被当成真正的章节标题，**同时画在页眉和正文的大标题上**
             //    （用户看到的「正文里还显示加载中…」就是它）。标题未知时留空，
             //    「正在加载」统一由整页加载动画表达，不要再往正文里塞字。
             //    这个临时章节 id=-1，真实章节列表一到就会整体重建，所以留空不会残留。
             tempChapter.setTitle("");
             chapterList.add(tempChapter);
             chapterContents.add("【正在加载章节列表...】");
-            // ✅ 修复：占位渲染必须用真实目标章 currentChapterIndex，不能用硬编码 0，
+            // 修复：占位渲染必须用真实目标章 currentChapterIndex，不能用硬编码 0，
             //    否则 WebView 就绪前的延迟重试会把 currentChapterIndex 覆盖回 0，用户停在第一章
             renderChapterContent(currentChapterIndex, tempChapter.getTitle(), "【正在加载章节列表...】");
             tvToolbarTitle.setText(currentBook.getTitle());
@@ -1263,11 +1180,20 @@ public class ReadActivity extends BaseActivity {
         int localCh = -1;
         SharedPreferences pref = getSharedPreferences("reading_records", MODE_PRIVATE);
         int cnt = pref.getInt("record_count", 0);
-        // ✅ 外站书（bookId==0）按 sourceType+sourceUrl 组合查 external_reading_records；
+        // 外站书（bookId==0）按 sourceType+sourceUrl 组合查 external_reading_records；
         //    服务器书（bookId>0）继续走原有 reading_records。
         if (isExternalBook) {
-            String recordKey = "ext_" + (currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "")
-                    + "|" + (currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "");
+            String recordKey = "ext_"
+                    + (currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "")
+                    + "|"
+
+
+
+
+
+
+
+                            + (currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "");
             SharedPreferences extPref = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
             localCh = extPref.getInt(recordKey + "_chapterIndex", -1);
         } else if (localBookId > 0) {
@@ -1278,15 +1204,16 @@ public class ReadActivity extends BaseActivity {
                 }
             }
         }
-        // ✅ 目录点击（显式跳章）优先于阅读记录：点哪章进哪章，不再被"上次阅读位置"覆盖
+        // 目录点击（显式跳章）优先于阅读记录：点哪章进哪章，不再被"上次阅读位置"覆盖
         final int targetChapter = (!explicitChapterJump && localCh >= 0) ? localCh : currentChapterIndex;
 
-        // ✅ 性能优化：调用并行加载策略
+        // 性能优化：调用并行加载策略
         initChapterListAndRestoreProgress(targetChapter);
     }
 
     /**
-     * ✅ 优化后的并行加载策略 - 简化逻辑，避免索引混乱
+     * 章节列表加载入口：本地书/外站书/服务器书分流。
+     * 服务器书先尝试本地缓存恢复（秒开），同时异步请求服务器列表做合并更新。
      */
     private void initChapterListAndRestoreProgress(int targetChapter) {
         final long bookId = safeBookId();
@@ -1301,7 +1228,7 @@ public class ReadActivity extends BaseActivity {
         long startTime = System.currentTimeMillis();
 
         if (isLocalBook) { loadLocalBookChapters(bookId, targetChapter); return; }
-        // ✅ 外站书永远走 buildExternalChapterListAndLoad（章节来自 Intent/缓存/服务器 getExternalChapters API）
+        // 外站书永远走 buildExternalChapterListAndLoad（章节来自 Intent/缓存/服务器 getExternalChapters API）
         if (isExternalBook) {
             if (externalChapters != null && externalChapters.length > 0) {
                 buildExternalChapterListAndLoad();
@@ -1318,13 +1245,14 @@ public class ReadActivity extends BaseActivity {
 
         android.util.Log.d("ReadActivity", "Starting optimized parallel loading...");
         
-        // ✅ 步骤1：尝试从本地缓存恢复完整的章节列表
+        // 步骤1：尝试从本地缓存恢复完整的章节列表
         boolean hasFullCache = restoreFullChapterListFromCache(bookId, targetChapter);
         
         if (hasFullCache) {
-            android.util.Log.d("ReadActivity", "Restored full chapter list from cache: " + chapterList.size() + " chapters");
+            android.util.Log.d("ReadActivity", "Restored full chapter list from cache: "
+                    + chapterList.size() + " chapters");
 
-            // ✅ 关键修复：先检查是否有阅读记录（包含页码信息）
+            // 关键修复：先检查是否有阅读记录（包含页码信息）
             SharedPreferences pref = getSharedPreferences("reading_records", MODE_PRIVATE);
             int cnt = pref.getInt("record_count", 0);
             int savedPage = 1;  // 默认第1页
@@ -1335,7 +1263,8 @@ public class ReadActivity extends BaseActivity {
                         && pref.getInt("record_chapterIndex_" + i, -1) == targetChapter) {
                     savedPage = pref.getInt("record_page_" + i, 1);
                     foundRecord = true;
-                    android.util.Log.d("ReadActivity", "Found reading record: chapter=" + targetChapter + ", page=" + savedPage);
+                    android.util.Log.d("ReadActivity", "Found reading record: chapter="
+                            + targetChapter + ", page=" + savedPage);
                     break;
                 }
             }
@@ -1343,21 +1272,23 @@ public class ReadActivity extends BaseActivity {
             // 立即加载目标章节内容（如果有缓存）
             String cachedContent = getChapterContentCache(bookId, targetChapter);
             if (!isChapterContentPending(cachedContent)) {
-                android.util.Log.d("ReadActivity", "Found cached content for chapter " + targetChapter + ", length=" + cachedContent.length());
+                android.util.Log.d("ReadActivity", "Found cached content for chapter "
+                        + targetChapter + ", length=" + cachedContent.length());
                 currentChapterIndex = targetChapter;
-                // ✅ 先应用设置，再渲染内容，避免默认设置闪烁
+                // 先应用设置，再渲染内容，避免默认设置闪烁
                 applySettingsToWebView();
-                // ✅ 关键修复：直接渲染到 savedPage，避免"先显示第1页再翻页"的动画
-                renderChapterContent(targetChapter, chapterList.get(targetChapter).getTitle(), cachedContent, savedPage);
+                // 关键修复：直接渲染到 savedPage，避免"先显示第1页再翻页"的动画
+                renderChapterContent(targetChapter, chapterList.get(targetChapter).getTitle(),
+                        cachedContent, savedPage);
                 updateChapterButtons();
-                // ✅ 恢复自缓存后触发预取：窗口内缺失的章由后台补齐并落盘（下次秒开）
+                // 恢复自缓存后触发预取：窗口内缺失的章由后台补齐并落盘（下次秒开）
                 prefetchServerChaptersAround(targetChapter);
                 hasRestoredFromLocal = true;
                 chapterRestoredFromCache = true;
                 positionRestored = true;
             } else {
                 // 没有内容缓存，显示占位符并触发加载
-                // ✅ 关键修复（复用池回归）：无本地内容缓存时也要记住「恢复目标页码」，
+                // 关键修复（复用池回归）：无本地内容缓存时也要记住「恢复目标页码」，
                 //    否则 fetchChapterContent.onResponse 默认 page=1 会把恢复位置冲掉，
                 //    导致「重新打开总落第 1 页」。与 loadChapterContentWithPage 保持一致。
                 restoreTargetPage = savedPage;
@@ -1365,37 +1296,38 @@ public class ReadActivity extends BaseActivity {
                 currentChapterIndex = targetChapter;
                 renderChapterContent(targetChapter, chapterList.get(targetChapter).getTitle(), "【正在加载章节内容...】");
                 fetchChapterContent(targetChapter);
-                // ✅ 当前章走网络时同样预取窗口内其余缺失章（不与当前章加载抢主链路）
+                // 当前章走网络时同样预取窗口内其余缺失章（不与当前章加载抢主链路）
                 prefetchServerChaptersAround(targetChapter);
             }
 
             long cacheLoadTime = System.currentTimeMillis() - startTime;
-            android.util.Log.d("ReadActivity", "Cache displayed in " + cacheLoadTime + "ms, now checking server for updates...");
+            android.util.Log.d("ReadActivity", "Cache displayed in " + cacheLoadTime
+                    + "ms, now checking server for updates...");
         } else {
             android.util.Log.d("ReadActivity", "No full cache available, waiting for server response...");
-            // 显示加载中提示
             currentChapterIndex = targetChapter;
             Chapter tempChapter = new Chapter();
             tempChapter.setIndex(targetChapter);
             tempChapter.setId(-1);
-            // ⚠️ 标题不要塞「加载中...」：它会被当成真正的章节标题，**同时画在页眉和正文的大标题上**
+            // 标题不要塞「加载中...」：它会被当成真正的章节标题，**同时画在页眉和正文的大标题上**
             //    （用户看到的「正文里还显示加载中…」就是它）。标题未知时留空，
             //    「正在加载」统一由整页加载动画表达，不要再往正文里塞字。
             //    这个临时章节 id=-1，真实章节列表一到就会整体重建，所以留空不会残留。
             tempChapter.setTitle("");
             chapterList.add(tempChapter);
             chapterContents.add("【正在加载章节列表...】");
-            // ✅ 修复：占位渲染用真实目标章 targetChapter（而非硬编码 0），
+            // 修复：占位渲染用真实目标章 targetChapter（而非硬编码 0），
             //    避免 WebView 就绪前的延迟重试覆盖 currentChapterIndex 导致首次进入落回第一章
             renderChapterContent(targetChapter, tempChapter.getTitle(), "【正在加载章节列表...】");
         }
         
-        // ✅ 步骤2：异步请求服务器章节列表（后台更新）
+        // 步骤2：异步请求服务器章节列表（后台更新）
         // 同时拉取分卷表（供阅读器目录浮窗分卷展示）；失败/无分卷时目录保持平铺
         loadServerMajorChapters(bookId);
         RetrofitClient.getApiService().getChapters(bookId).enqueue(new Callback<ApiResponse<List<ChapterDto>>>() {
             @Override
-            public void onResponse(@NonNull Call<ApiResponse<List<ChapterDto>>> call, @NonNull Response<ApiResponse<List<ChapterDto>>> response) {
+            public void onResponse(@NonNull Call<ApiResponse<List<ChapterDto>>> call,
+                    @NonNull Response<ApiResponse<List<ChapterDto>>> response) {
                 long serverResponseTime = System.currentTimeMillis() - startTime;
                 
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
@@ -1405,12 +1337,13 @@ public class ReadActivity extends BaseActivity {
                         return;
                     }
                     
-                    android.util.Log.d("ReadActivity", "Server chapters loaded in " + serverResponseTime + "ms: count=" + list.size());
+                    android.util.Log.d("ReadActivity", "Server chapters loaded in " + serverResponseTime
+                            + "ms: count=" + list.size());
                     
                     // 缓存章节列表元数据
                     cacheChapterListOnly(bookId, list);
                     
-                    // ✅ 关键：用服务器数据替换当前章节列表
+                    // 关键：用服务器数据替换当前章节列表
                     int savedChapterIndex = currentChapterIndex;
                     android.util.Log.d("ReadActivity", "Before merge: currentChapterIndex=" + savedChapterIndex);
                     
@@ -1418,21 +1351,23 @@ public class ReadActivity extends BaseActivity {
                     
                     // 恢复章节索引（确保不越界）
                     currentChapterIndex = Math.min(savedChapterIndex, chapterList.size() - 1);
-                    android.util.Log.d("ReadActivity", "After merge: restored currentChapterIndex=" + currentChapterIndex);
+                    android.util.Log.d("ReadActivity", "After merge: restored currentChapterIndex="
+                            + currentChapterIndex);
                     
                     mainHandler.post(() -> {
                         android.util.Log.d("ReadActivity", "Server data arrived, refreshing UI...");
 
-                        // ✅ 关键修复：如果已经通过本地缓存正确恢复了位置和内容，
+                        // 关键修复：如果已经通过本地缓存正确恢复了位置和内容，
                         // 不再调用 restoreReadingPosition（否则仿真模式下会重复 loadContent 导致闪屏）
                         if (!hasRestoredFromLocal) {
-                            // ✅ 关键修复：使用 restoreReadingPosition 来恢复页码
+                            // 关键修复：使用 restoreReadingPosition 来恢复页码
                             restoreReadingPosition(currentChapterIndex);
                         } else {
-                            // ✅ 已有缓存内容且已恢复页码，只需更新按钮状态
+                            // 已有缓存内容且已恢复页码，只需更新按钮状态
                             // 不要重新渲染章节内容，否则会清除页码状态导致跳回第一页
                             updateChapterButtons();
-                            android.util.Log.d("ReadActivity", "Already restored from cache with page position, skip re-rendering");
+                            android.util.Log.d("ReadActivity",
+                                    "Already restored from cache with page position, skip re-rendering");
                         }
 
                         long totalLoadTime = System.currentTimeMillis() - startTime;
@@ -1446,7 +1381,8 @@ public class ReadActivity extends BaseActivity {
                         fetchServerProgress(userId, bookId);
                     }
                 } else {
-                    android.util.Log.e("ReadActivity", "Server response failed: " + (response.isSuccessful() ? "data error" : "code=" + response.code()));
+                    android.util.Log.e("ReadActivity", "Server response failed: "
+                            + (response.isSuccessful() ? "data error" : "code=" + response.code()));
                 }
             }
             
@@ -1468,7 +1404,7 @@ public class ReadActivity extends BaseActivity {
     }
     
     /**
-     * ✅ 新增：从缓存恢复完整的章节列表
+     * 从缓存恢复完整的章节列表
      * @return true 如果成功恢复完整列表
      */
     private boolean restoreFullChapterListFromCache(long bookId, int targetChapter) {
@@ -1495,7 +1431,7 @@ public class ReadActivity extends BaseActivity {
                 ch.setSortKey(getChapterSortKeyCache(bookId, i));
                 chapterList.add(ch);
                 
-                // ✅ 性能修复：不再逐章把全部正文读进内存。此前对最多数千章每章做一次
+                // 性能修复：不再逐章把全部正文读进内存。此前对最多数千章每章做一次
                 //    getChapterContentCache（chapter_content_<bookId> SP 冷启动首次访问
                 //    还是主线程同步整文件读 + 解析），进书卡顿数秒，表现为
                 //    「书架点击书籍无反应，过一会才进阅读器」。
@@ -1528,9 +1464,11 @@ public class ReadActivity extends BaseActivity {
      * web 记录落在该章首页（只对应到章节），App 记录精确到页。
      */
     private void fetchServerProgress(long userId, long bookId) {
-        RetrofitClient.getApiService().getProgress(userId, bookId).enqueue(new Callback<ApiResponse<ReadingProgress>>() {
+        RetrofitClient.getApiService().getProgress(userId,
+                bookId).enqueue(new Callback<ApiResponse<ReadingProgress>>() {
             @Override
-            public void onResponse(@NonNull Call<ApiResponse<ReadingProgress>> call, @NonNull Response<ApiResponse<ReadingProgress>> response) {
+            public void onResponse(@NonNull Call<ApiResponse<ReadingProgress>> call,
+                    @NonNull Response<ApiResponse<ReadingProgress>> response) {
                 if (!response.isSuccessful() || response.body() == null
                         || !response.body().isSuccess() || response.body().getData() == null) {
                     return;
@@ -1542,12 +1480,13 @@ public class ReadActivity extends BaseActivity {
                 // 按最后阅读时间取舍：服务端不比本地新就保持当前阅读位置，不打断用户
                 long localTime = getLocalRecordTime(bookId);
                 long serverTime = parseServerTime(server);
-                // ✅ 复用池修复：同设备续读时以本地记录为上。服务端进度历史上一度长期存成第 1 页，
+                // 复用池修复：同设备续读时以本地记录为上。服务端进度历史上一度长期存成第 1 页，
                 //    即便本地 readTime 尚未被本次打开刷新、服务端时间戳更新，也应优先保留本地已恢复的位置，
                 //    否则「打开书 → 本地恢复到第 N 页 → 服务端拉回第 1 页」会把用户弹回首页。
                 //    仅当本地无任何阅读记录（换设备 / 首次打开）时才采纳服务端进度。
                 if (localTime > 0) {
-                    android.util.Log.d("ReadActivity", "Local reading record exists, keep local position, skip server adopt");
+                    android.util.Log.d("ReadActivity",
+                            "Local reading record exists, keep local position, skip server adopt");
                     return;
                 }
                 if (serverTime > 0 && serverTime <= localTime) {
@@ -1648,18 +1587,28 @@ public class ReadActivity extends BaseActivity {
 
     private void restoreReadingPosition(int chapterIndex) {
         try {
-        android.util.Log.d("ReadActivity", "restoreReadingPosition: chapterIndex=" + chapterIndex + ", chapterList.size()=" + chapterList.size());
+        android.util.Log.d("ReadActivity", "restoreReadingPosition: chapterIndex=" + chapterIndex
+                + ", chapterList.size()=" + chapterList.size());
 
-        // ✅ 防止重复调用：如果已经正确恢复了位置，跳过
+        // 防止重复调用：如果已经正确恢复了位置，跳过
         if (positionRestored) {
             android.util.Log.d("ReadActivity", "positionRestored already true, skip restoreReadingPosition");
             return;
         }
 
-        // ✅ 外站书：用 external_reading_records（按 sourceType+sourceUrl 组合键查）
+        // 外站书：用 external_reading_records（按 sourceType+sourceUrl 组合键查）
         if (isExternalBook) {
-            String recordKey = "ext_" + (currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "")
-                    + "|" + (currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "");
+            String recordKey = "ext_"
+                    + (currentBook != null && currentBook.getSourceType() != null ? currentBook.getSourceType() : "")
+                    + "|"
+
+
+
+
+
+
+
+                            + (currentBook != null && currentBook.getSourceUrl() != null ? currentBook.getSourceUrl() : "");
             SharedPreferences pref = getSharedPreferences(ExternalPrefs.recordsName(this), MODE_PRIVATE);
             int savedPage = pref.getInt(recordKey + "_page", 1);
             android.util.Log.d("ReadActivity", "外站书从本地记录恢复: page=" + savedPage);
@@ -1671,7 +1620,7 @@ public class ReadActivity extends BaseActivity {
         SharedPreferences pref = getSharedPreferences("reading_records", MODE_PRIVATE);
         int cnt = pref.getInt("record_count", 0);
 
-        // ✅ bookId<=0 时不进循环按 bookId 精确匹配，回落到直接加载第一页
+        // bookId<=0 时不进循环按 bookId 精确匹配，回落到直接加载第一页
         if (bookId > 0) {
             for (int i = 0; i < cnt; i++) {
                 if (pref.getLong("record_bookId_" + i, 0) == bookId
@@ -1693,22 +1642,24 @@ public class ReadActivity extends BaseActivity {
         }
     }
 
-    private void loadChapterContent(int chapterIndex) {
-        android.util.Log.d("ReadActivity", "loadChapterContent: chapterIndex=" + chapterIndex + ", chapterList.size()=" + chapterList.size());
-        // ✅ 非恢复渲染（跳章/翻章等）：目标页码回到首页，避免沿用上次恢复的目标页
+    void loadChapterContent(int chapterIndex) {
+        android.util.Log.d("ReadActivity", "loadChapterContent: chapterIndex=" + chapterIndex
+                + ", chapterList.size()=" + chapterList.size());
+        // 非恢复渲染（跳章/翻章等）：目标页码回到首页，避免沿用上次恢复的目标页
         restoreTargetPage = 1;
         // 主动跳章（目录/进度条等）时取消在途的边界跨章跳转
         clearPendingChapterJump();
 
         if (chapterIndex < 0 || chapterIndex >= chapterList.size()) {
-            android.util.Log.e("ReadActivity", "loadChapterContent: chapterIndex out of range! Will wait for full chapter list...");
-            // ✅ 修正：如果索引超出范围，不直接返回，而是等待完整章节列表加载
+            android.util.Log.e("ReadActivity",
+                    "loadChapterContent: chapterIndex out of range! Will wait for full chapter list...");
+            // 修正：如果索引超出范围，不直接返回，而是等待完整章节列表加载
             // 这种情况通常发生在章节列表尚未完全加载时
             return;
         }
 
         String title = chapterList.get(chapterIndex).getTitle();
-        // ✅ 关键防御：chapterContents 与 chapterList 必须同步，否则用占位符避免 IndexOutOfBounds
+        // 关键防御：chapterContents 与 chapterList 必须同步，否则用占位符避免 IndexOutOfBounds
         String content;
         if (chapterIndex < chapterContents.size()) {
             content = chapterContents.get(chapterIndex);
@@ -1718,13 +1669,14 @@ public class ReadActivity extends BaseActivity {
             content = chapterContents.get(chapterIndex);
         }
 
-        android.util.Log.d("ReadActivity", "loadChapterContent: title=" + title + ", content length=" + (content != null ? content.length() : 0));
+        android.util.Log.d("ReadActivity", "loadChapterContent: title=" + title + ", content length="
+                + (content != null ? content.length() : 0));
 
         boolean isPlaceholder = isChapterContentPending(content);
 
         if (isPlaceholder) {
             android.util.Log.d("ReadActivity", "Content is placeholder, fetching from server");
-            // ✅ 修正：立即更新 currentChapterIndex，让用户看到章节切换
+            // 修正：立即更新 currentChapterIndex，让用户看到章节切换
             currentChapterIndex = chapterIndex;
             updateChapterButtons();
 
@@ -1732,24 +1684,24 @@ public class ReadActivity extends BaseActivity {
             // 原实现调的是 reader.html 里的 showLoading() —— 那个函数根本不存在，一直是空操作，
             // 于是加载期间正文只把占位哨兵串「【章节加载中...】」当正文画了出来。
             setChapterLoading(true);
-            // ✅ 同时把占位页渲染进 WebView：加载动画/失败层都是透明底，
+            // 同时把占位页渲染进 WebView：加载动画/失败层都是透明底，
             //    不清掉旧页的话，离线切章时「上一章正文」会一直衬在加载动画/失败层底下。
             renderChapterContent(chapterIndex, title, "【正在加载...】");
             fetchChapterContent(chapterIndex);
         } else {
             android.util.Log.d("ReadActivity", "Content valid, rendering directly");
-            // ✅ 修正：先更新 currentChapterIndex，再渲染内容
+            // 修正：先更新 currentChapterIndex，再渲染内容
             currentChapterIndex = chapterIndex;
             updateChapterButtons();
             renderChapterContent(chapterIndex, title, content);
-            // ✅ 修正：成功渲染后，设置 positionRestored 标志
+            // 修正：成功渲染后，设置 positionRestored 标志
             if (!positionRestored) {
                 positionRestored = true;
                 android.util.Log.d("ReadActivity", "positionRestored set to true after successful render");
             }
         }
 
-        // ✅ 当前章就绪后，后台由近及远预取前后各 5 章并落盘缓存（下次打开秒开）
+        // 当前章就绪后，后台由近及远预取前后各 5 章并落盘缓存（下次打开秒开）
         prefetchServerChaptersAround(chapterIndex);
     }
 
@@ -1760,10 +1712,11 @@ public class ReadActivity extends BaseActivity {
         SharedPreferences sp = getSharedPreferences("local_books", MODE_PRIVATE);
         int count = sp.getInt("count", 0);
         
-        // ✅ 添加调试日志
-        android.util.Log.d("ReadActivity", "reloadLocalChapterContent: bookId=" + currentBook.getId() + ", chapterIndex=" + chapterIndex + ", totalBooks=" + count);
+        // 添加调试日志
+        android.util.Log.d("ReadActivity", "reloadLocalChapterContent: bookId=" + currentBook.getId()
+                + ", chapterIndex=" + chapterIndex + ", totalBooks=" + count);
 
-        // ✅ 内存控制：只保留当前章附近已加载的正文，其余重置为占位。
+        // 内存控制：只保留当前章附近已加载的正文，其余重置为占位。
         //    否则用户一路读下去，翻过的每一章都会常驻 chapterContents/chapterHtmlContents（含 base64 图片），
         //    同样会把堆撑满（此前开书即 OOM 的另一半原因）。
         trimLocalContentCache(chapterIndex);
@@ -1775,14 +1728,16 @@ public class ReadActivity extends BaseActivity {
                 android.util.Log.d("ReadActivity", "Found book at index " + i + ", chapterCount=" + chCount);
                 
                 if (chapterIndex >= 0 && chapterIndex < chCount) {
-                    String title = sp.getString("chapter_title_" + i + "_" + chapterIndex, "第" + (chapterIndex + 1) + "章");
+                    String title = sp.getString("chapter_title_" + i + "_" + chapterIndex, "第"
+                            + (chapterIndex + 1) + "章");
                     // 正文优先读文件缓存；旧书回退读 SP
                     String content = LocalBookParser.readChapterText(this, bookId, chapterIndex);
                     if (content == null || content.isEmpty()) {
                         content = sp.getString("chapter_content_" + i + "_" + chapterIndex, "");
                     }
                     
-                    android.util.Log.d("ReadActivity", "Read content length: " + content.length() + ", isEmpty: " + content.isEmpty());
+                    android.util.Log.d("ReadActivity", "Read content length: " + content.length()
+                            + ", isEmpty: " + content.isEmpty());
                     
                     if (!content.isEmpty()) {
                         chapterList.get(chapterIndex).setTitle(title);
@@ -1790,15 +1745,17 @@ public class ReadActivity extends BaseActivity {
                         setChapterContent(chapterIndex, content);
                         android.util.Log.d("ReadActivity", "Content loaded successfully");
                     } else {
-                        android.util.Log.e("ReadActivity", "Content is empty! Key: chapter_content_" + i + "_" + chapterIndex);
+                        android.util.Log.e("ReadActivity", "Content is empty! Key: chapter_content_"
+                                + i + "_" + chapterIndex);
                     }
 
-                    // ✅ 同步 HTML（本地书靠它保留书内样式）。此前漏写这一步，
+                    // 同步 HTML（本地书靠它保留书内样式）。此前漏写这一步，
                     //    导致按需加载后只能退化成纯文本渲染，书里的排版/字体样式全部丢失。
                     String html = LocalBookParser.readChapterHtml(this, bookId, chapterIndex);
                     setChapterHtml(chapterIndex, html != null ? html : "");
                 } else {
-                    android.util.Log.e("ReadActivity", "Chapter index out of range: " + chapterIndex + ", chCount=" + chCount);
+                    android.util.Log.e("ReadActivity", "Chapter index out of range: " + chapterIndex
+                            + ", chCount=" + chCount);
                 }
                 break;
             }
@@ -1852,10 +1809,11 @@ public class ReadActivity extends BaseActivity {
      */
     private void loadExternalChapterContent(int chapterIndex, int targetPage) {
         if (chapterIndex < 0 || chapterIndex >= chapterList.size()) return;
-        // ✅ 关键防御：externalChapters 与 chapterList 长度必须一致，否则跳过
+        // 关键防御：externalChapters 与 chapterList 长度必须一致，否则跳过
         // 避免异步加载途中共享缓存只写入一半时，目录点章触发 IndexOutOfBounds 崩溃
         if (externalChapters == null || chapterIndex >= externalChapters.length) {
-            android.util.Log.w("ReadActivity", "loadExternalChapterContent: externalChapters missing for index=" + chapterIndex
+            android.util.Log.w("ReadActivity", "loadExternalChapterContent: externalChapters missing for index="
+                    + chapterIndex
                     + ", chapters.len=" + (externalChapters == null ? "null" : externalChapters.length)
                     + ", list.size=" + chapterList.size());
             runOnUiThread(() -> Hint.show(this, "章节信息缺失，请稍候重试"));
@@ -1869,9 +1827,9 @@ public class ReadActivity extends BaseActivity {
         String chapterUrl = pair.length > 1 ? pair[1] : "";
         String title = chapterList.get(chapterIndex).getTitle();
         
-        // 检查章节URL是否有效
         if (chapterUrl == null || chapterUrl.isEmpty()) {
-            android.util.Log.w("ReadActivity", "loadExternalChapterContent: empty chapterUrl for index=" + chapterIndex);
+            android.util.Log.w("ReadActivity", "loadExternalChapterContent: empty chapterUrl for index="
+                    + chapterIndex);
             String noUrlContent = "【章节链接缺失，请返回目录选择其他章节】";
             chapterContents.set(chapterIndex, noUrlContent);   // 失败标记：重试与缓存守卫仍依赖它
             if (currentChapterIndex == chapterIndex) {
@@ -1900,7 +1858,7 @@ public class ReadActivity extends BaseActivity {
                 final int finalPage = targetPage;
                 runOnUiThread(() -> renderChapterContent(finalChapterIndex, finalTitle, finalCached, finalPage));
             } else if (pendingChapterIndex == chapterIndex) {
-                // ✅ 跨章在途跳转（外站书）：正文缓存已到位 → 走统一渲染推进索引
+                // 跨章在途跳转（外站书）：正文缓存已到位 → 走统一渲染推进索引
                 //    （修复最后一页向后翻第一次没反应、需再翻一次才到下一章）
                 boolean goLast = pendingGoLastPage;
                 int pendingPage = pendingChapterPage;
@@ -1971,7 +1929,7 @@ public class ReadActivity extends BaseActivity {
                                 }
                             });
                         } else if (wasPendingJump && ok) {
-                            // ✅ 跨章在途跳转（外站书）：网络正文到位 → 走统一渲染推进索引
+                            // 跨章在途跳转（外站书）：网络正文到位 → 走统一渲染推进索引
                             //    （修复最后一页向后翻第一次没反应、需再翻一次才到下一章）
                             boolean goLast = pendingGoLastPage;
                             int pendingPage = pendingChapterPage;
@@ -2008,7 +1966,7 @@ public class ReadActivity extends BaseActivity {
             java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     private void preloadNextExternalChapter(int currentIndex) {
-        // ✅ 由近及远预取当前章前后各 CHAPTER_PREFETCH_RADIUS 章（同距离先「下一章」）；
+        // 由近及远预取当前章前后各 CHAPTER_PREFETCH_RADIUS 章（同距离先「下一章」）；
         //    内存/磁盘已命中的自动跳过，成功结果落盘（writeExternalContentToDisk），
         //    第二次打开本书或翻回已读章即点即看。
         for (int d = 1; d <= CHAPTER_PREFETCH_RADIUS; d++) {
@@ -2167,7 +2125,7 @@ public class ReadActivity extends BaseActivity {
         try {
         // ===== 外站书籍：走在线 API 获取章节正文 =====
         if (isExternalBook) {
-            // ✅ 跨章在途跳转（pendingChapterIndex==chapterIndex，章节边界翻页触发）必须保留 pending：
+            // 跨章在途跳转（pendingChapterIndex==chapterIndex，章节边界翻页触发）必须保留 pending：
             //    loadExternalChapterContent 在正文到位后按 pending 走 showPendingChapter 统一渲染。
             //    之前在这里就清掉 pending，而其渲染守卫是 currentChapterIndex==chapterIndex
             //    （此刻索引还是旧章，守卫永不满足）→ 内容到位只写缓存不渲染，
@@ -2187,7 +2145,7 @@ public class ReadActivity extends BaseActivity {
                     ? chapterHtmlContents.get(chapterIndex) : "";
             boolean hasHtml = html != null && !html.isEmpty();
             if (!isChapterContentPending(content) || hasHtml) {
-                // ✅ 与服务器章节路径保持一致：渲染前先把「当前章」切过来，
+                // 与服务器章节路径保持一致：渲染前先把「当前章」切过来，
                 //    否则翻章后进度、章节标题、上一章/下一章按钮仍停在旧章。
                 currentChapterIndex = chapterIndex;
                 updateChapterButtons();
@@ -2200,9 +2158,10 @@ public class ReadActivity extends BaseActivity {
             return;
         }
         
-        // ✅ 简化：直接检查索引范围
+        // 简化：直接检查索引范围
         if (chapterIndex < 0 || chapterIndex >= chapterList.size()) {
-            android.util.Log.e("ReadActivity", "fetchChapterContent: chapterIndex out of range! index=" + chapterIndex + ", size=" + chapterList.size());
+            android.util.Log.e("ReadActivity", "fetchChapterContent: chapterIndex out of range! index="
+                    + chapterIndex + ", size=" + chapterList.size());
             if (pendingChapterIndex == chapterIndex) clearPendingChapterJump();
             setChapterLoading(false);   // 该分支不会触发渲染，别让动画一直转
             Hint.show(this, "章节加载中，请稍后...");
@@ -2210,7 +2169,8 @@ public class ReadActivity extends BaseActivity {
         }
         
         long chapterId = chapterList.get(chapterIndex).getId();
-        android.util.Log.d("ReadActivity", "fetchChapterContent: chapterIndex=" + chapterIndex + ", chapterId=" + chapterId);
+        android.util.Log.d("ReadActivity", "fetchChapterContent: chapterIndex=" + chapterIndex
+                + ", chapterId=" + chapterId);
         
         if (chapterId <= 0) {
             // 章节ID无效通常是章节列表还未加载完成，静默等待服务器数据返回即可
@@ -2233,23 +2193,28 @@ public class ReadActivity extends BaseActivity {
                     chapterContents.set(chapterIndex, realContent);
                     cacheChapterContent(currentBook.getId(), chapterIndex, realContent);
                     
-                    android.util.Log.d("ReadActivity", "fetchChapterContent onResponse: chapterIndex=" + chapterIndex + ", currentChapterIndex=" + currentChapterIndex + ", content length=" + realContent.length());
+                    android.util.Log.d("ReadActivity", "fetchChapterContent onResponse: chapterIndex="
+                            + chapterIndex + ", currentChapterIndex=" + currentChapterIndex
+                            + ", content length=" + realContent.length());
                     
                     if (pendingChapterIndex == chapterIndex) {
-                        // ✅ 用户是在章节边界翻页触发的加载：正文到位后再切换过去（之前没推进过索引，
+                        // 用户是在章节边界翻页触发的加载：正文到位后再切换过去（之前没推进过索引，
                         //    所以这里不会出现"加载完直接跳两章"）
                         boolean goLast = pendingGoLastPage;
                         int pendingPage = pendingChapterPage;
                         clearPendingChapterJump();
-                        android.util.Log.d("ReadActivity", "Pending chapter jump done: chapterIndex=" + chapterIndex + ", goLastPage=" + goLast + ", page=" + pendingPage);
+                        android.util.Log.d("ReadActivity", "Pending chapter jump done: chapterIndex="
+                                + chapterIndex + ", goLastPage=" + goLast + ", page=" + pendingPage);
                         runOnUiThread(() -> showPendingChapter(chapterIndex, realContent, goLast, pendingPage));
                     } else if (currentChapterIndex == chapterIndex) {
-                        // ✅ 复用池修复：正文异步到达时沿用「恢复目标页码」重渲染，
+                        // 复用池修复：正文异步到达时沿用「恢复目标页码」重渲染，
                         //    否则默认 page=1 会把恢复位置冲掉，导致「重新打开总落第 1 页」。
                         //    若 restoreTargetPage<=0（如未指定），则回退首页。
                         int _restorePage = (restoreTargetPage > 0) ? restoreTargetPage : 1;
-                        android.util.Log.d("ReadActivity", "Re-rendering chapter " + chapterIndex + " with fetched content, restoreTargetPage=" + _restorePage);
-                        renderChapterContent(chapterIndex, chapterList.get(chapterIndex).getTitle(), realContent, _restorePage);
+                        android.util.Log.d("ReadActivity", "Re-rendering chapter " + chapterIndex
+                                + " with fetched content, restoreTargetPage=" + _restorePage);
+                        renderChapterContent(chapterIndex, chapterList.get(chapterIndex).getTitle(),
+                                realContent, _restorePage);
                     } else {
                         android.util.Log.d("ReadActivity", "Not current chapter, skip re-render");
                     }
@@ -2260,7 +2225,8 @@ public class ReadActivity extends BaseActivity {
             }
 
             @Override
-            public void onFailure(@NonNull Call<ApiResponse<com.example.myapplication.bean.Chapter>> call, @NonNull Throwable t) {
+            public void onFailure(@NonNull Call<ApiResponse<com.example.myapplication.bean.Chapter>> call,
+                    @NonNull Throwable t) {
                 if (pendingChapterIndex == chapterIndex) clearPendingChapterJump();
                 runOnUiThread(() -> showLoadFail("加载出错，请稍后再试"));
             }
@@ -2284,11 +2250,11 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
-     * ✅ 支持传入目标页码，避免先显示第1页再动画跳转
+     * 支持传入目标页码，避免先显示第1页再动画跳转
      * @param startPage 从1开始的页码；传 <=0 表示不指定(=第1页)
      */
     private void renderChapterContent(int chapterIndex, String title, String content, int startPage) {
-        // ✅ 每次外部渲染请求都生成新代次：使在途的旧延迟重试自动失效
+        // 每次外部渲染请求都生成新代次：使在途的旧延迟重试自动失效
         final int myGen = ++renderGeneration;
         renderChapterContentInternal(chapterIndex, title, content, startPage, myGen);
     }
@@ -2298,7 +2264,8 @@ public class ReadActivity extends BaseActivity {
      * WebView 未就绪时的 50ms 延迟重试若发现代次已过期（期间有更新的渲染请求），
      * 则直接丢弃——不渲染、不写 currentChapterIndex。
      */
-    private void renderChapterContentInternal(int chapterIndex, String title, String content, int startPage, int myGen) {
+    private void renderChapterContentInternal(int chapterIndex, String title, String content,
+            int startPage, int myGen) {
         try {
             // ★ 占位/未加载：正文用零宽字符顶替 —— 页面由「章节加载中」动画接管，
             //   不再把哨兵串「【章节加载中...】」当正文画出来。
@@ -2309,7 +2276,7 @@ public class ReadActivity extends BaseActivity {
             if (pendingContent) setChapterLoading(true);
             else hideLoadFail();   // 渲染到真实正文 → 失败态自动退场（上次失败重试成功后也走这里）
 
-            // ✅ 关键修复（复用池回归）：渲染必须等 WebView 真正完成布局、拿到有效宽度后再分页。
+            // 关键修复（复用池回归）：渲染必须等 WebView 真正完成布局、拿到有效宽度后再分页。
             //    复用的 WebView 在 onCreate 阶段 isWebViewReady 已被提前置 true（reader.html 预加载完成），
             //    但此时 WebView 尚未 attach/测量，window.innerWidth == 0；若在此宽度分页会得到退化的 pages，
             //    导致「恢复总落到第 1 页」且「翻页/换章失效」。故额外用 getWidth()>0 兜底，
@@ -2324,7 +2291,7 @@ public class ReadActivity extends BaseActivity {
                             + webView.getWidth() + ")，延迟分页等待布局, chapter=" + chapterIndex + ", page=" + startPage);
                 }
                 mainHandler.postDelayed(() -> {
-                    // ✅ 过期重试丢弃：已有更新的渲染请求发生（例如服务器正文已渲染目标章），本次作废
+                    // 过期重试丢弃：已有更新的渲染请求发生（例如服务器正文已渲染目标章），本次作废
                     if (myGen != renderGeneration) return;
                     // 复用本次代次递归，避免自增导致前一次永远过期
                     renderChapterContentInternal(finalChapterIndex, finalTitle, finalContent, finalPage, myGen);
@@ -2340,11 +2307,11 @@ public class ReadActivity extends BaseActivity {
             String escapedContent = escapeJavaScript(pendingContent ? "\u200B" : safeContent);
             int bookProgress = (!chapterList.isEmpty()) ?
                     (int)((currentChapterIndex + 1) * 100f / chapterList.size()) : 0;
-            // ✅ -1 表示跳到最后一页（loadChapterContentToLastPage 使用），必须原样传给 JS
+            // -1 表示跳到最后一页（loadChapterContentToLastPage 使用），必须原样传给 JS
             //    否则会被转成 null，JS loadContent 命中 else 分支回到第一页
             String pageArg = (startPage == -1) ? "-1" : (startPage > 0 ? String.valueOf(startPage) : "null");
 
-            // ✅ 排版缓存：非占位内容时，按 layout signature 读取上次退出本章时的分页结果；
+            // 排版缓存：非占位内容时，按 layout signature 读取上次退出本章时的分页结果；
             //    命中则随 loadContent 直接恢复，跳过整章重排（这是「进入书籍不再每次重排」的关键）。
             //    占位内容不读也不写缓存（避免把零宽占位串的排版缓存成真章节的排版）。
             String cachedJson = null;
@@ -2356,7 +2323,7 @@ public class ReadActivity extends BaseActivity {
             String escapedCacheKey = (cacheKey != null) ? escapeJavaScript(cacheKey) : "null";
             String escapedCachedJson = (cachedJson != null) ? escapeJavaScript(cachedJson) : "null";
 
-            // ✅ 本地 EPUB 且存在保留样式的 HTML → 走 HTML 渲染模式（展示样式而非纯文本）
+            // 本地 EPUB 且存在保留样式的 HTML → 走 HTML 渲染模式（展示样式而非纯文本）
             //    必须「一次性赋值」以保证 effectively final —— 下方 evaluateJavascript 的 lambda 内会引用它
             final String htmlForChapter = (isLocalBook && chapterIndex >= 0
                     && chapterIndex < chapterHtmlContents.size())
@@ -2376,11 +2343,12 @@ public class ReadActivity extends BaseActivity {
                         "}" +
                         "})()";
             } else {
-                // ✅ 包装 loadContent 在 JS try/catch 中，捕获 JS 渲染异常并回传
+                // 包装 loadContent 在 JS try/catch 中，捕获 JS 渲染异常并回传
                 js = "(function(){" +
                         "try{" +
                         "var r=loadContent(" + chapterIndex + "," + escapedTitle + "," + escapedContent + "," +
-                        pageArg + "," + isLocalBook + "," + bookProgress + "," + escapedCachedJson + "," + escapedCacheKey + ");" +
+                        pageArg + "," + isLocalBook + "," + bookProgress + "," + escapedCachedJson
+                                + "," + escapedCacheKey + ");" +
                         "return 'ok';" +
                         "}catch(e){" +
                         "return 'error:'+e.message;" +
@@ -2390,7 +2358,7 @@ public class ReadActivity extends BaseActivity {
             webView.evaluateJavascript(js, value -> {
                 // 真实正文已渲染到位 → 收起「章节加载中」动画。
                 // 放在 JS 回调里收（而不是发指令前），确保版面确实换成了正文再撤掉遮罩。
-                // ⚠️ 本地书存在「纯文本是占位、但带保留样式的 HTML」（题图页等）：这种情况走 HTML 分支
+                // 本地书存在「纯文本是占位、但带保留样式的 HTML」（题图页等）：这种情况走 HTML 分支
                 //    照样渲染成功，纯文本却仍是占位 —— 只按纯文本判会让动画一直转下去，必须一并放行。
                 boolean htmlRendered = htmlForChapter != null && !htmlForChapter.isEmpty();
                 if (!pendingContent || htmlRendered) setChapterLoading(false);
@@ -2401,8 +2369,10 @@ public class ReadActivity extends BaseActivity {
                         // 本地 HTML 渲染失败 → 回退纯文本，保证可读
                         android.util.Log.w("ReadActivity", "HTML 渲染失败，回退纯文本: " + errMsg);
                         final String fbJs = "(function(){" +
-                                "try{var r=loadContent(" + chapterIndex + "," + escapedTitle + "," + escapedContent + "," +
-                                pageArg + "," + isLocalBook + "," + bookProgress + "," + escapedCachedJson + "," + escapedCacheKey + ");return 'ok';" +
+                                "try{var r=loadContent(" + chapterIndex + "," + escapedTitle
+                                        + "," + escapedContent + "," +
+                                pageArg + "," + isLocalBook + "," + bookProgress + ","
+                                        + escapedCachedJson + "," + escapedCacheKey + ");return 'ok';" +
                                 "}catch(e){return 'error:'+e.message;}})()";
                         webView.evaluateJavascript(fbJs, null);
                     } else {
@@ -2426,7 +2396,7 @@ public class ReadActivity extends BaseActivity {
             // 仅需在加载新内容后重新设置翻页模式（仿真模式需要重建 flipbook）
             webView.evaluateJavascript("setPageTurnMode('" + pageTurnMode + "')", null);
 
-            // ✅ 关键修复（覆盖全部主题模式）：从排版缓存恢复章节时，loadContent 直接把「上次分页时固化的文字色/
+            // 关键修复（覆盖全部主题模式）：从排版缓存恢复章节时，loadContent 直接把「上次分页时固化的文字色/
             //    背景」赋值给 pages 并立即绘制；而 onPageFinished 里的 applySettingsToWebView 在 loadContent 之前调用
             //    （彼时 pages 尚为空，setNightMode/setTextColor 遍历空数组无效），chapterRestoredFromCache 分支又跳过了
             //    applySettingsToWebView_inner（含 setNightMode / applyBackgroundColorToWebView）。
@@ -2452,7 +2422,7 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
-     * ✅ 应用页眉页脚设置到 WebView
+     * 应用页眉页脚设置到 WebView
      */
     private void applyHeaderFooterSettings() {
         if (isWebViewReady) {
@@ -2464,7 +2434,7 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
-     * ✅ 应用字体大小到 WebView
+     * 应用字体大小到 WebView
      */
     private void applyFontSizeToWebView() {
         if (isWebViewReady) {
@@ -2475,7 +2445,7 @@ public class ReadActivity extends BaseActivity {
     /**
      * 应用字体族到 WebView
      */
-    private void applyFontFamilyToWebView() {
+    void applyFontFamilyToWebView() {
         if (!isWebViewReady) return;
         if (FONT_SYSTEM_CSS.equals(currentFontFamily)) {
             // 系统字体：使用 sans-serif（WebView 默认跟随系统字体）
@@ -2553,12 +2523,12 @@ public class ReadActivity extends BaseActivity {
         if (!positionRestored) {
             positionRestored = true;
         }
-        // ✅ 章节边界翻页到位后同样触发预取（前后各 5 章，后台落盘）
+        // 章节边界翻页到位后同样触发预取（前后各 5 章，后台落盘）
         prefetchServerChaptersAround(chapterIndex);
     }
 
     /**
-     * ✅ 跨章无缝翻页（JS 桥）：解析邻章已就绪正文，供边界翻页复用换页动画。
+     * 跨章无缝翻页（JS 桥）：解析邻章已就绪正文，供边界翻页复用换页动画。
      * 返回 JSON {"index":N,"title":"...","content":"..."}；未就绪 / 异常一律返回空串。
      * 运行在 WebView 桥线程：只做只读访问（ArrayList 按索引读不会 CME；SP / LruCache 线程安全）。
      */
@@ -2616,9 +2586,9 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
-     * ✅ 获取当前电量和时间，更新到 WebView
+     * 获取当前电量和时间，更新到 WebView
      */
-    private void updateBatteryAndTime() {
+    void updateBatteryAndTime() {
         if (!showBatteryTime || !showHeaderFooter) return;
         if (!isWebViewReady) {
             // WebView 还没就绪（典型场景：onResume 早于 onPageFinished）。
@@ -2626,7 +2596,6 @@ public class ReadActivity extends BaseActivity {
             return;
         }
 
-        // 获取电量
         Intent batteryStatus = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         String batteryText = "";
         if (batteryStatus != null) {
@@ -2636,7 +2605,6 @@ public class ReadActivity extends BaseActivity {
             batteryText = pct + "%";
         }
 
-        // 获取当前时间
         String timeText = new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date());
 
         String js = "updateBatteryTime(" + JSONObject.quote(batteryText) + "," + JSONObject.quote(timeText) + ")";
@@ -2648,34 +2616,37 @@ public class ReadActivity extends BaseActivity {
         // 服务端进度比本地新时允许越过「已恢复位置」守卫重渲染一次（见 adoptServerPosition）
         boolean forced = forceRestorePosition;
         forceRestorePosition = false;
-        // ✅ 复用池修复：记住本次恢复的目标页码，正文异步到达后重渲染沿用（见 fetchChapterContent.onResponse）
+        // 复用池修复：记住本次恢复的目标页码，正文异步到达后重渲染沿用（见 fetchChapterContent.onResponse）
         restoreTargetPage = (page > 0) ? page : 1;
         try {
-        android.util.Log.d("ReadActivity", "loadChapterContentWithPage: chapterIndex=" + chapterIndex + ", page=" + page + ", chapterList.size()=" + chapterList.size());
+        android.util.Log.d("ReadActivity", "loadChapterContentWithPage: chapterIndex=" + chapterIndex
+                + ", page=" + page + ", chapterList.size()=" + chapterList.size());
 
-        // ✅ 防止重复渲染：如果已经正确恢复了位置，跳过（避免 fetchServerProgress 等后续调用导致闪屏）
+        // 防止重复渲染：如果已经正确恢复了位置，跳过（避免 fetchServerProgress 等后续调用导致闪屏）
         if (positionRestored && !forced) {
             android.util.Log.d("ReadActivity", "positionRestored already true, skip loadChapterContentWithPage");
             return;
         }
 
         if (chapterIndex < 0 || chapterIndex >= chapterList.size()) {
-            android.util.Log.e("ReadActivity", "loadChapterContentWithPage: chapterIndex out of range! Will wait for full chapter list...");
-            // ✅ 修正：如果索引超出范围，不直接返回，而是等待完整章节列表加载
+            android.util.Log.e("ReadActivity",
+                    "loadChapterContentWithPage: chapterIndex out of range! Will wait for full chapter list...");
+            // 修正：如果索引超出范围，不直接返回，而是等待完整章节列表加载
             // 这种情况通常发生在章节列表尚未完全加载时
             return;
         }
 
         String title = chapterList.get(chapterIndex).getTitle();
-        // ✅ 防御：chapterContents 越界时自动补齐
+        // 防御：chapterContents 越界时自动补齐
         if (chapterIndex >= chapterContents.size()) {
             while (chapterContents.size() < chapterList.size()) chapterContents.add("【正在加载...】");
         }
         String content = chapterContents.get(chapterIndex);
 
-        android.util.Log.d("ReadActivity", "loadChapterContentWithPage: title=" + title + ", content length=" + (content != null ? content.length() : 0));
+        android.util.Log.d("ReadActivity", "loadChapterContentWithPage: title=" + title
+                + ", content length=" + (content != null ? content.length() : 0));
 
-        // ✅ 检查内容是否有效，如果无效则重新从本地缓存加载
+        // 检查内容是否有效，如果无效则重新从本地缓存加载
         boolean isPlaceholder = isChapterContentPending(content);
         if (isLocalBook && isPlaceholder) {
             android.util.Log.d("ReadActivity", "Local book content is placeholder, reloading");
@@ -2695,13 +2666,13 @@ public class ReadActivity extends BaseActivity {
 
         renderChapterContent(chapterIndex, title, content, page);
 
-        // ✅ 应用设置到 WebView
+        // 应用设置到 WebView
         applyHeaderFooterSettings();
         applyFontSizeToWebView();
         applyFontFamilyToWebView();
         if (!isNightMode) applyBackgroundColorToWebView(currentBgColor);
 
-        // ✅ 修正：成功调用 loadContent 后，设置 positionRestored 标志
+        // 修正：成功调用 loadContent 后，设置 positionRestored 标志
         if (!positionRestored) {
             positionRestored = true;
             android.util.Log.d("ReadActivity", "positionRestored set to true after loadChapterContentWithPage");
@@ -2721,13 +2692,13 @@ public class ReadActivity extends BaseActivity {
         try {
         if (chapterIndex < 0 || chapterIndex >= chapterList.size()) return;
         String title = chapterList.get(chapterIndex).getTitle();
-        // ✅ 防御：chapterContents 越界自动补齐
+        // 防御：chapterContents 越界自动补齐
         if (chapterIndex >= chapterContents.size()) {
             while (chapterContents.size() < chapterList.size()) chapterContents.add("【正在加载...】");
         }
         String content = chapterContents.get(chapterIndex);
 
-        // ✅ 检查内容是否有效，如果无效则重新从本地缓存加载
+        // 检查内容是否有效，如果无效则重新从本地缓存加载
         boolean isPlaceholder = isChapterContentPending(content);
         if (isLocalBook && isPlaceholder) {
             // 本地书内容缺失，尝试重新加载
@@ -2746,7 +2717,7 @@ public class ReadActivity extends BaseActivity {
 
         renderChapterContent(chapterIndex, title, content, -1);
 
-        // ✅ 应用设置到 WebView
+        // 应用设置到 WebView
         applyHeaderFooterSettings();
         applyFontSizeToWebView();
         applyFontFamilyToWebView();
@@ -2798,7 +2769,7 @@ public class ReadActivity extends BaseActivity {
         }
         sb.append("fontFamily='").append(cssFont.replace("'", "\\'")).append("';");
 
-        // ✅ 如果是已下载的自定义字体，注入 FontFace 加载路径（在 loadContent 后加载并重绘）
+        // 如果是已下载的自定义字体，注入 FontFace 加载路径（在 loadContent 后加载并重绘）
         if (!FONT_SYSTEM_CSS.equals(currentFontFamily) && !FONT_DEFAULT_CSS.equals(currentFontFamily)) {
             java.io.File fontFile = new java.io.File(getFilesDir(), "fonts/" + currentFontFamily + ".ttf");
             if (fontFile.exists()) {
@@ -2816,7 +2787,7 @@ public class ReadActivity extends BaseActivity {
         } else {
             int mode = currentBgColor;
             if (mode >= 10 && mode - 10 < BG_TEXTURE_FILES.length) {
-                // ✅ 纹理背景：设置基础底色防止首帧白屏，然后启动纹理加载
+                // 纹理背景：设置基础底色防止首帧白屏，然后启动纹理加载
                 int texIdx = mode - 10;
                 sb.append("bgColor='#FFFFFF';");
                 sb.append("textColor='#1D1D1F';");
@@ -2839,10 +2810,10 @@ public class ReadActivity extends BaseActivity {
         // 更新 body 背景色以避免白闪
         sb.append("document.body.style.backgroundColor=bgColor;");
 
-        // ✅ 启动加载待加载的字体/纹理资源（在 HTML 加载完成后立即开始，比等 loadContent 调用更快）
+        // 启动加载待加载的字体/纹理资源（在 HTML 加载完成后立即开始，比等 loadContent 调用更快）
         sb.append("if (typeof startPendingResources === 'function') { startPendingResources(); }");
 
-        // ✅ 关键修复：如果是仿真模式，立即展示书本占位容器，而不是显示空 canvas
+        // 关键修复：如果是仿真模式，立即展示书本占位容器，而不是显示空 canvas
         // 容器会显示正确的背景色/纹理，与最终内容呈现风格一致，避免"空白米黄页"
         if ("simulation".equals(pageTurnMode)) {
             sb.append("if (typeof showSimulationPlaceholder === 'function') { showSimulationPlaceholder(); }");
@@ -2854,7 +2825,7 @@ public class ReadActivity extends BaseActivity {
     private void applySettingsToWebView() {
         webView.evaluateJavascript("beginSettingsBatch()", null);
         applySettingsToWebView_inner();
-        // ✅ 页眉页脚 / 电量时间也要一起应用：从本地缓存恢复章节时只走这个方法，
+        // 页眉页脚 / 电量时间也要一起应用：从本地缓存恢复章节时只走这个方法，
         // 之前漏掉它就导致页脚电量时间不显示
         applyHeaderFooterSettings();
         webView.evaluateJavascript("finishSettingsBatch()", null);
@@ -2865,7 +2836,7 @@ public class ReadActivity extends BaseActivity {
     /** 内部方法：应用字体、背景等设置（不含 batch 包装和翻页模式） */
     private void applySettingsToWebView_inner() {
         webView.evaluateJavascript("setFontSize(" + currentFontSize + ")", null);
-        // ✅ 间距设置（行距/段距/边距）：与字号同批注入；padTB=-1 时 JS 侧走默认公式保持旧视觉
+        // 间距设置（行距/段距/边距）：与字号同批注入；padTB=-1 时 JS 侧走默认公式保持旧视觉
         webView.evaluateJavascript("setTypesetting(" + lineSpacingRatio + "," + paraGapRatio
                 + "," + padLR + "," + padTB + ")", null);
         applyFontFamilyToWebView();
@@ -2877,7 +2848,7 @@ public class ReadActivity extends BaseActivity {
         }
     }
 
-    private void applyBackgroundColorToWebView(int mode) {
+    void applyBackgroundColorToWebView(int mode) {
         if (mode >= 10 && mode - 10 < BG_TEXTURE_FILES.length) {
             // 纹理模式：加载图片作为背景
             int texIdx = mode - 10;
@@ -2898,7 +2869,7 @@ public class ReadActivity extends BaseActivity {
      * 取指定背景模式对应的「基准色」（不改动 UI）：纹理取预览底色，纯色取自身。
      * 导航栏/浮窗的派生配色以它为输入。
      */
-    private int resolveBaseForMode(int mode) {
+    int resolveBaseForMode(int mode) {
         if (mode >= 10 && mode - 10 < BG_TEXTURE_PREVIEW_COLORS.length) {
             return BG_TEXTURE_PREVIEW_COLORS[mode - 10];
         }
@@ -2934,7 +2905,7 @@ public class ReadActivity extends BaseActivity {
             @Override
             public boolean onSingleTapConfirmed(@NonNull MotionEvent e) {
                 float x = e.getRawX();
-                // ⚠️ 关键：MotionEvent 会先派发给最上层的左右热区 View（activity_read.xml 里
+                // 关键：MotionEvent 会先派发给最上层的左右热区 View（activity_read.xml 里
                 // view_left_tap / view_right_tap 排在 WebView 之后 → 层级更高），
                 // e.getX() 是「相对该热区」的坐标，而热区只有 80dp 宽，
                 // 直接用会让点右侧也落进左 1/3 分支 → 翻到上一页。
@@ -3174,7 +3145,8 @@ public class ReadActivity extends BaseActivity {
         if (bottomNavHeight <= 0) {
             int w = getResources().getDisplayMetrics().widthPixels;
             int widthSpec = android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY);
-            int heightSpec = android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED);
+            int heightSpec = android.view.View.MeasureSpec.makeMeasureSpec(0,
+                    android.view.View.MeasureSpec.UNSPECIFIED);
             layoutBottomNav.measure(widthSpec, heightSpec);
             bottomNavHeight = layoutBottomNav.getMeasuredHeight();
         }
@@ -3257,7 +3229,7 @@ public class ReadActivity extends BaseActivity {
         }
     }
 
-    private void resetAutoHideTimer() {
+    void resetAutoHideTimer() {
         mainHandler.removeCallbacks(hideNavRunnable);
         mainHandler.postDelayed(hideNavRunnable, 5000);
     }
@@ -3271,257 +3243,11 @@ public class ReadActivity extends BaseActivity {
         if (fontsPopupWindow != null && fontsPopupWindow.isShowing()) fontsPopupWindow.dismiss();
     }
 
-    // ==================== 目录 / 书签弹窗 ====================
+    // ==================== 目录 / 书签弹窗（实现见 ReadTocPopupController） ====================
+    private void showChapterPopup() { tocController.showChapterPopup(); }
 
-    /**
-     * 目录/书签浮窗顶部的书籍信息头：封面 / 书名 / 作者。
-     * 书名作者优先取 currentBook（从书架/详情/阅读记录带过来），缺失时回落到本地书 SP 记录；
-     * 封面取 currentBook 的封面，其次本地封面文件，最后本地书里的封面串（可能是 base64 或 URL）。
-     */
-    private void bindPopupBookInfoHeader(View popupView) {
-        try {
-            ImageView ivCover = popupView.findViewById(R.id.iv_popup_book_cover);
-            TextView tvTitle = popupView.findViewById(R.id.tv_popup_book_title);
-            TextView tvAuthor = popupView.findViewById(R.id.tv_popup_book_author);
-            if (ivCover == null || tvTitle == null || tvAuthor == null) return;
-
-            String title = (currentBook == null || currentBook.getTitle() == null)
-                    ? "" : currentBook.getTitle().trim();
-            if (title.isEmpty() && currentBook != null && currentBook.getBookName() != null) {
-                title = currentBook.getBookName().trim();
-            }
-            if (title.isEmpty() && localBookName != null) title = localBookName.trim();
-            tvTitle.setText(title.isEmpty() ? "未知书名" : title);
-
-            String author = (currentBook == null || currentBook.getAuthor() == null)
-                    ? "" : currentBook.getAuthor().trim();
-            if (author.isEmpty() && localBookAuthor != null) author = localBookAuthor.trim();
-            tvAuthor.setText(author.isEmpty() ? "未知作者" : author);
-
-            // 封面优先级：currentBook.cover → 本地封面文件 → 本地封面串
-            String cover = (currentBook == null || currentBook.getCover() == null)
-                    ? "" : currentBook.getCover().trim();
-            if (cover.isEmpty() && localBookCoverPath != null && !localBookCoverPath.isEmpty()
-                    && new java.io.File(localBookCoverPath).exists()) {
-                cover = localBookCoverPath;
-            }
-            if (cover.isEmpty() && localBookCover != null) cover = localBookCover.trim();
-
-            if (cover.isEmpty()) {
-                ivCover.setImageResource(R.drawable.default_book_cover);
-            } else {
-                Glide.with(this)
-                        .load(RetrofitClient.getFullImageUrl(cover))
-                        .placeholder(R.drawable.default_book_cover)
-                        .error(R.drawable.default_book_cover)
-                        .into(ivCover);
-            }
-        } catch (Throwable t) {
-            android.util.Log.e("ReadActivity", "目录浮窗书籍信息头填充失败", t);
-        }
-    }
-
-    @SuppressLint("InflateParams")
-    private void showChapterPopup() {
-        try {
-            if (chapterList == null || chapterList.isEmpty()) {
-                Hint.show(this, "章节列表还在加载中，请稍候");
-                return;
-            }
-            View popupView = LayoutInflater.from(this).inflate(R.layout.popup_chapter_list, null);
-            TabLayout tabLayout = popupView.findViewById(R.id.tab_layout_popup);
-            ViewPager2 vpPopup = popupView.findViewById(R.id.view_pager_popup);
-
-            // 顶部书籍信息头（封面 / 书名 / 作者），目录与书签共用
-            bindPopupBookInfoHeader(popupView);
-
-            vpPopup.setAdapter(createPopupPagerAdapter());
-            new TabLayoutMediator(tabLayout, vpPopup, (tab, position) -> tab.setText(position == 0 ? "目录" : "书签")).attach();
-
-            // ✅ 目录浮窗外壳（TabLayout 等）跟随日/夜间配色；列表项由各 Fragment/Adapter 自行着色
-            themeViewTree(popupView);
-
-            int popupWidth = (int)(getResources().getDisplayMetrics().widthPixels * 0.75f);
-            chapterPopupWindow = new PopupWindow(popupView, popupWidth, WindowManager.LayoutParams.MATCH_PARENT, true);
-            chapterPopupWindow.setAnimationStyle(R.style.LeftSlideAnimation);
-            chapterPopupWindow.showAtLocation(layoutBottomNav, Gravity.START, 0, 0);
-
-            // ViewPager2 里的 Fragment 在 attach 之后才走 onCreateView，首帧着色覆盖不到；
-            // 这里 post 一次整体重染，并在切到「书签」页时再染一次，保证两页都跟随背景色。
-            popupView.post(() -> themeViewTree(popupView));
-            vpPopup.registerOnPageChangeCallback(new androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
-                @Override public void onPageSelected(int position) {
-                    popupView.post(() -> themeViewTree(popupView));
-                }
-            });
-
-            // 书签页（最后一页）继续左滑 → 平滑收起目录弹窗
-            setupChapterPopupEdgeSwipe(vpPopup);
-
-            mainHandler.removeCallbacks(hideNavRunnable);
-            chapterPopupWindow.setOnDismissListener(this::resetAutoHideTimer);
-            popupView.setOnTouchListener((v, event) -> { v.performClick(); chapterPopupWindow.dismiss(); return true; });
-        } catch (Throwable t) {
-            android.util.Log.e("ReadActivity", "showChapterPopup 崩溃", t);
-            showPopupErrorDialog("目录弹窗无法打开：" + t.getMessage());
-        }
-    }
-
-    /**
-     * 书签页（ViewPager2 最后一页，索引 1）继续左滑时，平滑收起目录弹窗。
-     * 只在“当前页 == 最后一页”且为左滑（横向位移大于纵向）时触发，
-     * 避免与「目录 → 书签」的正常分页滑动冲突。
-     */
-    private void setupChapterPopupEdgeSwipe(ViewPager2 vpPopup) {
-        try {
-            RecyclerView pagerRv = (RecyclerView) vpPopup.getChildAt(0);
-            if (pagerRv == null) return;
-            final int touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
-            final float[] downX = {0f};
-            final float[] downY = {0f};
-            final int[] startPage = {-1};
-            RecyclerView.SimpleOnItemTouchListener listener = new RecyclerView.SimpleOnItemTouchListener() {
-                private void track(RecyclerView rv, MotionEvent e) {
-                    switch (e.getActionMasked()) {
-                        case MotionEvent.ACTION_DOWN:
-                            downX[0] = e.getX();
-                            downY[0] = e.getY();
-                            startPage[0] = vpPopup.getCurrentItem();
-                            break;
-                        case MotionEvent.ACTION_UP:
-                        case MotionEvent.ACTION_CANCEL:
-                            float dx = downX[0] - e.getX();          // 左滑 dx > 0
-                            float dy = Math.abs(downY[0] - e.getY());
-                            // 必须“按下时已经在书签页”才收起，避免目录页左滑分页到书签时误关闭
-                            if (dx > touchSlop && dx > dy && startPage[0] == 1) {
-                                dismissChapterPopup();
-                            }
-                            break;
-                    }
-                }
-
-                @Override
-                public boolean onInterceptTouchEvent(@NonNull RecyclerView rv, @NonNull MotionEvent e) {
-                    track(rv, e);
-                    return false; // 不拦截，交给 ViewPager2 正常处理
-                }
-
-                @Override
-                public void onTouchEvent(@NonNull RecyclerView rv, @NonNull MotionEvent e) {
-                    track(rv, e);
-                }
-            };
-            pagerRv.addOnItemTouchListener(listener);
-        } catch (Throwable t) {
-            android.util.Log.e("ReadActivity", "setupChapterPopupEdgeSwipe 失败", t);
-        }
-    }
-
-    /** 收起目录弹窗（带左滑出动画，由 PopupWindow 动画样式决定） */
-    private void dismissChapterPopup() {
-        if (chapterPopupWindow != null && chapterPopupWindow.isShowing()) {
-            chapterPopupWindow.dismiss();
-        }
-    }
-
-    private PopupPagerAdapter createPopupPagerAdapter() {
-        List<Fragment> fragments = new ArrayList<>();
-        // 防御性拷贝：避免底层 chapterList 在加载完服务器新列表时被 replaceAll 清空导致 Popup 渲染崩溃/空白
-        final List<Chapter> safeCopy = new ArrayList<>(chapterList);
-        final int safeIndex = Math.max(0, Math.min(currentChapterIndex, safeCopy.size() - 1));
-        // 分卷结构按「当前 chapterList」推得，保证与 safeCopy 下标严格一致
-        final List<LocalBookParser.VolumeInfo> safeVolumes = new ArrayList<>(currentVolumes());
-        PopupChapterFragment chapterFragment = new PopupChapterFragment(safeCopy, safeIndex, safeVolumes);
-        chapterFragment.setOnChapterSelectedListener(chapterIndex -> {
-            if (chapterPopupWindow != null) chapterPopupWindow.dismiss();
-            if (chapterIndex < 0 || chapterIndex >= chapterList.size()) {
-                Hint.show(ReadActivity.this, "章节索引无效，列表可能刚更新");
-                return;
-            }
-            try {
-                if (chapterIndex != currentChapterIndex) {
-                    loadChapterContent(chapterIndex);
-                }
-            } catch (Throwable t) {
-                android.util.Log.e("ReadActivity", "目录切章崩溃", t);
-                showPopupErrorDialog("切换章节失败：" + t.getMessage());
-            }
-        });
-        fragments.add(chapterFragment);
-        fragments.add(createBookmarkFragment());
-        return new PopupPagerAdapter(this, fragments);
-    }
-
-    /**
-     * 当前书的分卷结构（阅读器目录浮窗用，每次打开目录浮窗都会重新推导）。
-     *
-     * <p>本地书：直接返回 {@link #localVolumes}（导入时持久化的卷表，其 start/end 即 chapterList 下标）。
-     * <p>服务器书：用 {@link #serverMajorChapters} 与「当前 {@link #chapterList} 的 sortKey」实时推导，
-     * 因此缓存恢复 / {@link #mergeServerData} / 切章之后，卷区间始终对齐最新 chapterList 的下标，
-     * 不会错位；数据缺失或卷数小于 2 时 {@link VolumeDeriver} 返回空，目录退回平铺。
-     * <p>外站书：无分卷结构，返回空（保持平铺）。
-     */
-    private List<LocalBookParser.VolumeInfo> currentVolumes() {
-        if (isLocalBook) return localVolumes;
-        if (isExternalBook) return new ArrayList<>();
-        List<String> sortKeys = new ArrayList<>(chapterList.size());
-        for (Chapter c : chapterList) sortKeys.add(c.getSortKey());
-        return VolumeDeriver.derive(sortKeys, serverMajorChapters);
-    }
-
-    /** 目录弹窗相关报错时统一弹对话框（替代白屏/崩回详情页） */
-    private void showPopupErrorDialog(String reason) {
-        String msg = (reason == null ? "" : reason)
-                + "\n\n若问题持续，请先返回书籍详情页从「目录」入口打开章节列表。";
-        new AlertDialog.Builder(this)
-                .setTitle("操作失败")
-                .setMessage(msg)
-                .setCancelable(true)
-                .setNegativeButton("知道了", null)
-                .setPositiveButton("返回详情", (d, w) -> finish())
-                .show();
-    }
-
-    private PopupBookmarkFragment createBookmarkFragment() {
-        PopupBookmarkFragment bookmarkFragment = new PopupBookmarkFragment();
-        // ✅ 关键修复：外站书 currentBook.getId() 返回 null（Long 对象），
-        // 若直接 setBookId(currentBook.getId()) 会触发 Long->long 自动拆箱 NPE：
-        // "Attempt to invoke virtual method 'long java.lang.Long.longValue()' on a null object reference"
-        Long rawId = currentBook.getId();
-        long safeBookId = (rawId == null || rawId <= 0) ? 0L : rawId;
-        bookmarkFragment.setBookId(safeBookId);
-        bookmarkFragment.setIsLocalBook(isLocalBook);
-        if (currentBook != null) {
-            bookmarkFragment.setSourceType(currentBook.getSourceType());
-            bookmarkFragment.setSourceBookId(currentBook.getSourceUrl());
-        }
-        bookmarkFragment.setOnBookmarkSelectedListener(bookmark -> {
-            try {
-                if (bookmark == null) return;
-                Integer chIdxObj = bookmark.getChapterIndex();
-                Integer scrollObj = bookmark.getScrollPosition();
-                int chIdx = chIdxObj == null ? 0 : chIdxObj;
-                int scrollPos = scrollObj == null ? 0 : scrollObj;
-                if (chIdx < 0 || chIdx >= chapterList.size()) {
-                    Hint.show(ReadActivity.this, "书签章节索引已失效");
-                    return;
-                }
-                if (chIdx != currentChapterIndex) {
-                    loadChapterContent(chIdx);
-                    webView.postDelayed(() -> {
-                        try { webView.evaluateJavascript("jumpToPage(" + scrollPos + ")", null); } catch (Throwable ignored) {}
-                    }, 300);
-                } else {
-                    try { webView.evaluateJavascript("jumpToPage(" + scrollPos + ")", null); } catch (Throwable ignored) {}
-                }
-                if (chapterPopupWindow != null) chapterPopupWindow.dismiss();
-            } catch (Throwable t) {
-                android.util.Log.e("ReadActivity", "书签选择回调崩溃", t);
-                showPopupErrorDialog("书签跳转失败：" + t.getMessage());
-            }
-        });
-        return bookmarkFragment;
-    }
+    /** 目录弹窗相关报错时统一弹对话框（实现见 ReadTocPopupController） */
+    private void showPopupErrorDialog(String reason) { tocController.showPopupErrorDialog(reason); }
 
     // ==================== 进度保存 ====================
     private void saveReadingRecord() {
@@ -3565,20 +3291,17 @@ public class ReadActivity extends BaseActivity {
         }
         if (existIndex == -1) { existIndex = count; editor.putInt("record_count", count + 1); }
 
-        // 保存书籍基本信息
         editor.putLong("record_bookId_" + existIndex, bidForSave);
         editor.putString("record_bookName_" + existIndex, currentBook.getBookName());
         editor.putString("record_author_" + existIndex, currentBook.getAuthor() != null ? currentBook.getAuthor() : "");
         editor.putString("record_cover_" + existIndex, currentBook.getCover() != null ? currentBook.getCover() : "");
 
-        // 保存章节信息
         editor.putInt("record_chapterIndex_" + existIndex, currentChapterIndex);
         String chapterTitle = (currentChapterIndex < chapterList.size()) ?
                 chapterList.get(currentChapterIndex).getTitle() : "";
         editor.putString("record_chapterTitle_" + existIndex, chapterTitle);
         editor.putInt("record_totalChapters_" + existIndex, chapterList.size());
 
-        // 保存阅读进度
         editor.putInt("record_page_" + existIndex, currentPageInChapter);
         editor.putInt("record_totalPages_" + existIndex, totalPagesInChapter);
         // 使用实际章节标题来计算进度，避免特殊章节影响
@@ -3586,7 +3309,6 @@ public class ReadActivity extends BaseActivity {
                 (int)((currentChapterIndex + 1) * 100f / chapterList.size()) : 0;
         editor.putInt("record_progress_" + existIndex, bookProgress);
 
-        // 保存时间戳
         editor.putLong("record_readTime_" + existIndex, System.currentTimeMillis());
 
         editor.apply();
@@ -3617,7 +3339,8 @@ public class ReadActivity extends BaseActivity {
         // 阅读偏好（字号/夜间/背景色）刻意不上传：App 的偏好只存本地 read_settings，
         // 后端进度记录是 web 与 App 共用的，上传这些字段会覆盖 web 端的偏好设置。
         RetrofitClient.getApiService().saveProgress(p).enqueue(new Callback<ApiResponse<ReadingProgress>>() {
-            @Override public void onResponse(@NonNull Call<ApiResponse<ReadingProgress>> call, @NonNull Response<ApiResponse<ReadingProgress>> response) {}
+            @Override public void onResponse(@NonNull Call<ApiResponse<ReadingProgress>> call,
+                    @NonNull Response<ApiResponse<ReadingProgress>> response) {}
             @Override public void onFailure(@NonNull Call<ApiResponse<ReadingProgress>> call, @NonNull Throwable t) {}
         });
     }
@@ -3648,7 +3371,8 @@ public class ReadActivity extends BaseActivity {
                 okhttp3.MediaType.parse("application/json"), json);
         RetrofitClient.getApiService().saveExternalProgress("Bearer " + LoginHelper.getToken(this), rb)
                 .enqueue(new Callback<ApiResponse<Void>>() {
-                    @Override public void onResponse(@NonNull Call<ApiResponse<Void>> call, Response<ApiResponse<Void>> r) {}
+                    @Override public void onResponse(@NonNull Call<ApiResponse<Void>> call,
+                            Response<ApiResponse<Void>> r) {}
                     @Override public void onFailure(@NonNull Call<ApiResponse<Void>> call, @NonNull Throwable t) {}
                 });
     }
@@ -3661,7 +3385,7 @@ public class ReadActivity extends BaseActivity {
 
     /**
      * 定时亮屏模式到期：主动把本窗口背光压到 0（真正的物理熄屏，无需任何权限）。
-     * ⚠️ 不能只 clearFlags(FLAG_KEEP_SCREEN_ON) 放行系统熄屏——系统熄屏时点从「最后一次
+     * 不能只 clearFlags(FLAG_KEEP_SCREEN_ON) 放行系统熄屏——系统熄屏时点从「最后一次
      * 触摸」起算（vivo 的该值很长且实测不执行短超时），结果只会进入系统压暗阶段迟迟不灭，
      * 用户感知为「到点不熄屏只压暗」。这里保留 KEEP_SCREEN_ON 让屏幕处于「亮着但背光为 0」
      * 的黑屏态：触摸任意位置由 onUserInteraction 恢复，按电源键则真熄屏。
@@ -3685,7 +3409,7 @@ public class ReadActivity extends BaseActivity {
     }
 
     /** 按当前 screenOnTimeoutMs 应用亮屏策略（进书/切换设置/回到前台时调用）。 */
-    private void applyScreenKeepAlive() {
+    void applyScreenKeepAlive() {
         mainHandler.removeCallbacks(screenOffRunnable);
         // 任何策略（重）应用时先恢复正常背光（清除可能残留的黑屏态）
         setReaderBacklight(true);
@@ -3720,35 +3444,35 @@ public class ReadActivity extends BaseActivity {
         currentFontSize = sp.getFloat("font_size", 28f);
         isNightMode = sp.getBoolean("night_mode", false);
         currentBgColor = sp.getInt("bg_color", 0);
-        // ✅ 黑色背景(#1A1A1A)≡夜间模式，两者统一为一个状态：
+        // 黑色背景(#1A1A1A)≡夜间模式，两者统一为一个状态：
         // 旧版本允许「日间 + 黑色背景」（bg_color=3），会导致日/夜切换按钮动画两端同色、看似无反应。
         // 加载时把该残留状态归一为夜间模式；退出夜间时由 animateNightModeTo(false) 兜底回退纯白。
         if (currentBgColor == 3) isNightMode = true;
-        // ✅ 加载页眉页脚设置
+        // 加载页眉页脚设置
         showHeaderFooter = sp.getBoolean("show_header_footer", true);
         headerFooterFontSize = sp.getFloat("header_footer_font_size", 12f); // 默认值改为12
         showBatteryTime = sp.getBoolean("show_battery_time", false);
         volumeKeyPageTurn = sp.getBoolean("volume_key_page_turn", true);
         swipePageTurn = sp.getBoolean("swipe_page_turn", true);
         pageTurnMode = sp.getString("page_turn_mode", "cover");
-        // ✅ 加载字体设置
+        // 加载字体设置
         currentFontFamily = sp.getString("font_family", "sans-serif");
-        // ✅ 间距设置（缺省时保持旧行为：行距1.8 / 段距0.5行 / 边距走默认公式）
+        // 间距设置（缺省时保持旧行为：行距1.8 / 段距0.5行 / 边距走默认公式）
         lineSpacingRatio = sp.getFloat("line_spacing_ratio", 1.8f);
         paraGapRatio = sp.getFloat("para_gap_ratio", 0.5f);
         padLR = sp.getInt("padding_lr", 16);
         padTB = sp.getInt("padding_tb", -1);
-        // ✅ 加载自动翻页设置（间隔与开关状态都持久化）
+        // 加载自动翻页设置（间隔与开关状态都持久化）
         autoPageEnabled = sp.getBoolean("auto_page", false);
         autoPageInterval = sp.getInt("auto_page_interval", 5000);
-        // ✅ 加载阅读亮屏时间设置
+        // 加载阅读亮屏时间设置
         screenOnTimeoutMs = sp.getLong("screen_on_timeout", 0L);
         // 展示名也要持久化：否则重启后未打开字体弹窗时只能回退到 cssName
         currentFontDisplay = sp.getString("font_display", "默认字体");
         downloadedFonts = new java.util.HashSet<>(sp.getStringSet("downloaded_fonts", new java.util.HashSet<>()));
     }
 
-    private void saveReadingPreferences() {
+    void saveReadingPreferences() {
         SharedPreferences sp = getSharedPreferences("read_settings", MODE_PRIVATE);
         sp.edit()
                 .putFloat("font_size", currentFontSize)
@@ -3756,26 +3480,26 @@ public class ReadActivity extends BaseActivity {
                 .putInt("brightness", currentBrightness)
                 .putBoolean("follow_system_brightness", followSystemBrightness)
                 .putInt("bg_color", currentBgColor)
-                // ✅ 保存页眉页脚设置
+                // 保存页眉页脚设置
                 .putBoolean("show_header_footer", showHeaderFooter)
                 .putFloat("header_footer_font_size", headerFooterFontSize)
                 .putBoolean("show_battery_time", showBatteryTime)
                 .putBoolean("volume_key_page_turn", volumeKeyPageTurn)
                 .putBoolean("swipe_page_turn", swipePageTurn)
                 .putString("page_turn_mode", pageTurnMode)
-                // ✅ 保存字体设置
+                // 保存字体设置
                 .putString("font_family", currentFontFamily)
-                // ✅ 保存间距设置
+                // 保存间距设置
                 .putFloat("line_spacing_ratio", lineSpacingRatio)
                 .putFloat("para_gap_ratio", paraGapRatio)
                 .putInt("padding_lr", padLR)
                 .putInt("padding_tb", padTB)
-                // ✅ 保存自动翻页设置
+                // 保存自动翻页设置
                 .putBoolean("auto_page", autoPageEnabled)
                 .putInt("auto_page_interval", autoPageInterval)
                 .putString("font_display", currentFontDisplay)
                 .putStringSet("downloaded_fonts", downloadedFonts)
-                // ✅ 保存阅读亮屏时间设置
+                // 保存阅读亮屏时间设置
                 .putLong("screen_on_timeout", screenOnTimeoutMs)
                 .apply();
         uploadProgressToServer();
@@ -3799,597 +3523,55 @@ public class ReadActivity extends BaseActivity {
         return super.onKeyDown(keyCode, event);
     }
 
-    // ==================== 背景派生配色（上下导航栏 / 浮窗跟随当前背景色） ====================
-    // 目标：导航栏与所有浮窗的底色不再是「日间白 / 夜间黑」两个写死值，而是由当前选中的
-    // 背景色派生出「比它深一点」的同色系底色；文字与图标按背景明暗自动切换深浅，
-    // 于是选黑色背景时天然等价于夜间模式，选牛皮纸/护眼绿时导航条也跟着变成同色系深色。
-    //
-    // 派生规则（压暗强度：浅色 6%，深色 20% —— 深色背景等比压暗几乎看不出差别，需额外补偿 14%）：
-    //   L  = 相对亮度(base)；isDark = L < 0.42
-    //   c1 = mix(base, #000, isDark ? 0.20 : 0.06)      // 上下导航 + 浮窗主背景
-    //   c2 = mix(c1,   #000, isDark ? 0.20 : 0.12)      // 二级底（分组底 / 胶囊 / TabLayout）
-    //   ln = isDark ? mix(c1, #FFF, 0.13) : mix(c1, #000, 0.16)   // 分隔线
-    //   t1 = isDark ? #FFFFFF : #1D1D1F                  // 主文字 & 图标 tint
-    //   t2 = isDark ? #98989D : #8E8E93                  // 次文字
-    //   ac = isDark ? #0A84FF : #007AFF                  // 强调色（进度条 / 返回键）
-    private static final float CHROME_SHADE       = 0.06f;  // 浅色背景压暗比例
-    private static final float CHROME_SHADE_DARK  = 0.20f;  // 深色背景压暗比例（6% + 14% 补偿）
-    private static final float CHROME_SHADE_2     = 0.12f;  // 二级底（浅色）
-    private static final float CHROME_SHADE_2_DARK= 0.20f;  // 二级底（深色）
-    private static final double DARK_LUM_THRESHOLD = 0.42;  // 低于该亮度即视为深色背景
+    // ==================== 配色与主题：实现见 ReadThemeController（2026-10-02 拆出） ====================
 
-    // 目录浮窗「定位当前章节」悬浮按钮：圆盘 = 浮窗主底向主文字色微调 TOC_LOCATE_DISC_TINT_RATIO，
-    // 再叠加 TOC_LOCATE_DISC_ALPHA 的半透明；图标用主文字色（浅色主题即近黑，夜间自动转近白）。
-    private static final float TOC_LOCATE_DISC_TINT_RATIO = 0.10f;
-    private static final int   TOC_LOCATE_DISC_ALPHA      = 0xC0;
+    private final ReadThemeController themeController = new ReadThemeController(this);
 
-    private static int sChrome1 = 0xFFEFEFEF;   // 当前派生：导航 / 浮窗主底（白底 6% 压暗的初值）
-    private static int sChrome2 = 0xFFD2D2D2;   // 当前派生：二级底
-    private static int sLine    = 0xFFC8C8C8;   // 当前派生：分隔线
-    private static int sText1   = 0xFF1D1D1F;   // 当前派生：主文字
-    private static int sText2   = 0xFF8E8E93;   // 当前派生：次文字
-    private static int sAccent  = 0xFF007AFF;   // 当前派生：强调色
-    private static int sNavText = 0xFF1D1D1F;   // 当前派生：上下导航栏文字（浅色模式用近黑，深色模式沿用浅灰）
-    private static boolean sIsDark = false;
-    /** 日间⇄夜间切换的过渡时长（毫秒）。对应预览中选中的「平滑色彩渐变 / 1000ms」。 */
-    private static final long NIGHT_TRANSITION_MS = 1000;
-    // 历史上派发过的派生色集合：浮窗会被反复重着色（换背景 / 切夜间 / 换页），
-    // 单靠「上一次」的 sPrev* 在「连续派生两次但只染一次」的场景会漏掉陈旧底色，
-    // 用集合记录所有派发过的色值即可无条件收敛到当前色。
-    private static final java.util.Set<Integer> sIssuedChrome1 = new java.util.HashSet<>();
-    private static final java.util.Set<Integer> sIssuedChrome2 = new java.util.HashSet<>();
-    private static final java.util.Set<Integer> sIssuedLine    = new java.util.HashSet<>();
+    /** 前台活跃实例维护（onResume/onPause 调用），供浮窗染色的宿主判定。 */
+    static void noteActiveInstance(ReadActivity a) { ReadThemeController.noteActive(a); }
+    static void clearActiveInstance(ReadActivity a) { ReadThemeController.clearActive(a); }
 
-    /**
-     * 当前前台活跃的 ReadActivity 实例（仅在 onResume/onPause 维护）。
-     * <p>
-     * 用于 themeViewTree 的宿主判定：只有当前 Activity 是某个 ReadActivity 实例时，浮窗/列表
-     * 才能被派生配色覆盖。书城/书架/设置等外部页在前台时，sActiveInstance == null，
-     * 任何迟到的 themeViewTree 调用都会被静默忽略，杜绝「书城等也跟随背景色」。
-     * <p>
-     * 设计要点：用「前台实例引用」而非上一版的 isReaderHost(ctx)。后者在 PopupWindow +
-     * ViewPager2 嵌套时 itemView.getContext() 的 ContextWrapper 层级与判定不一致，
-     * 导致阅读器自己的目录/书签浮窗也被错判拒绝——上一轮反馈「目录书签页不跟随」。
-     * 现在改为 Activity 生命周期级别的判定：PopupWindow 不会触发 onPause，
-     * 所以目录浮窗打开时 ReadActivity 仍在 onResume → sActiveInstance 仍指向自己 → 染色成功。
-     */
-    private static volatile ReadActivity sActiveInstance;
-
-    /** 当前派生配色是否为深色（决定文字/图标用浅色还是深色）。 */
-    public static boolean isChromeDark() { return sIsDark; }
-
-    // ---- 派生色取值接口：供浮窗内 Fragment / Adapter 直接取用，避免再写死 #007AFF 之类 ----
-    public static int getAccentColor()            { return sAccent;  }  // 强调色（当前章节 / 进度条）
-    public static int getTextPrimaryColor()       { return sText1;   }  // 主文字
-    public static int getTextSecondaryColor()     { return sText2;   }  // 次文字
-    public static int getChromeBgColor()          { return sChrome1; }  // 浮窗主底
-    public static int getChromeBgSecondaryColor() { return sChrome2; }  // 二级底 / 分组底
-    public static int getChromeLineColor()        { return sLine;    }  // 分隔线
-
-    /** sRGB 相对亮度（WCAG 公式），用于判定背景明暗。 */
-    private static double relativeLuminance(int color) {
-        double r = ((color >> 16) & 0xFF) / 255.0;
-        double g = ((color >> 8) & 0xFF) / 255.0;
-        double b = (color & 0xFF) / 255.0;
-        r = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
-        g = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
-        b = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
-        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    }
-
+    // ---- 静态取色/染色接口（浮窗 Fragment / Adapter 使用），委托控制器 ----
+    public static boolean isChromeDark() { return ReadThemeController.isChromeDark(); }
+    public static int getAccentColor() { return ReadThemeController.getAccentColor(); }
+    public static int getTextPrimaryColor() { return ReadThemeController.getTextPrimaryColor(); }
+    public static int getTextSecondaryColor() { return ReadThemeController.getTextSecondaryColor(); }
+    public static int getChromeBgColor() { return ReadThemeController.getChromeBgColor(); }
+    public static int getChromeBgSecondaryColor() { return ReadThemeController.getChromeBgSecondaryColor(); }
+    public static int getChromeLineColor() { return ReadThemeController.getChromeLineColor(); }
+    public static int getNavTextColor() { return ReadThemeController.getNavTextColor(); }
+    public static void themeViewTree(@Nullable View root) { ReadThemeController.themeViewTree(root); }
     /** 按 a 的比例把 c1 混向 c2（a=0 得 c1，a=1 得 c2）。 */
-    private static int mixColors(int c1, int c2, float a) {
-        int r = (int) ((((c1 >> 16) & 0xFF) + ((((c2 >> 16) & 0xFF) - ((c1 >> 16) & 0xFF)) * a)));
-        int g = (int) ((((c1 >> 8) & 0xFF) + ((((c2 >> 8) & 0xFF) - ((c1 >> 8) & 0xFF)) * a)));
-        int b = (int) (((c1 & 0xFF) + (((c2 & 0xFF) - (c1 & 0xFF)) * a)));
-        r = Math.max(0, Math.min(255, r));
-        g = Math.max(0, Math.min(255, g));
-        b = Math.max(0, Math.min(255, b));
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
-    }
+    static int mixColors(int c1, int c2, float a) { return ReadThemeController.mixColors(c1, c2, a); }
 
-    /**
-     * 取派生配色的基准色 = 页面实际显示的背景色（effectiveBgBase）。
-     * 纹理背景用其预览底色，夜间模式固定 #1A1A1A。
-     */
-    private int getChromeBaseColor() {
-        return effectiveBgBase;
-    }
-
-    /** 由当前背景色重新计算派生配色（不动 UI，仅更新静态色值）。 */
-    private void updateChromePalette() {
-        int base = getChromeBaseColor();
-        boolean dark = relativeLuminance(base) < DARK_LUM_THRESHOLD;
-
-        sIsDark  = dark;
-        sChrome1 = mixColors(base, Color.BLACK, dark ? CHROME_SHADE_DARK : CHROME_SHADE);
-        sChrome2 = mixColors(sChrome1, Color.BLACK, dark ? CHROME_SHADE_2_DARK : CHROME_SHADE_2);
-        sLine    = dark ? mixColors(sChrome1, Color.WHITE, 0.13f)
-                        : mixColors(sChrome1, Color.BLACK, 0.16f);
-        sText1   = dark ? Color.WHITE : Color.parseColor("#1D1D1F");
-        sText2   = dark ? Color.parseColor("#98989D") : Color.parseColor("#8E8E93");
-        // 上下导航栏文字：浅色模式统一用近黑（原灰色 sText2 改黑），深色模式沿用浅灰保证对比度
-        sNavText = dark ? sText2 : Color.parseColor("#1D1D1F");
-        sAccent  = dark ? Color.parseColor("#0A84FF") : Color.parseColor("#007AFF");
-
-        // 记录本轮派发过的色值，供后续重着色时识别「陈旧派生色」
-        sIssuedChrome1.add(sChrome1);
-        sIssuedChrome2.add(sChrome2);
-        sIssuedLine.add(sLine);
-    }
-
-    /**
-     * 应用派生配色：状态栏图标明暗 + 上下导航栏 + 图标/文字，并让已显示的浮窗实时跟随。
-     * 取代原先只按 isNightMode 二值切换的 applyNightModeToNavOnly()。
-     */
-    private void applyChromeTheme() {
-        updateChromePalette();
-        applyChromeColorsWith(sChrome1, sChrome2, sLine, sText1, sText2, sNavText, sAccent, sIsDark);
-        // 已显示的浮窗（目录 / 设置 / 更多 / 背景 / 字体）实时跟随
-        themeShowingPopups();
-    }
-
-    /**
-     * 用给定的一组配色刷新上下导航栏、图标、文字与状态栏图标明暗。
-     * 供「平滑色彩渐变」过渡逐帧调用（传入插值后的中间色）。
-     */
-    private void applyChromeColorsWith(int chrome1, int chrome2, int line,
-                                       int text1, int text2, int navText, int accent, boolean dark) {
-        // 状态栏图标：浅色背景用深色图标，深色背景用浅色图标
-        View decorView = getWindow().getDecorView();
-        int flags = decorView.getSystemUiVisibility();
-        if (dark) {
-            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-        } else {
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-        }
-        decorView.setSystemUiVisibility(flags);
-
-        layoutTopNav.setBackgroundColor(chrome1);
-        layoutBottomNav.setBackgroundColor(chrome1);
-        tvToolbarTitle.setTextColor(text1);
-
-        // 底栏顶部 0.5dp 分隔线（布局里的第一个子 View）
-        if (layoutBottomNav instanceof ViewGroup && ((ViewGroup) layoutBottomNav).getChildCount() > 0) {
-            View sep = ((ViewGroup) layoutBottomNav).getChildAt(0);
-            if (sep != null) sep.setBackgroundColor(line);
-        }
-        // 章节进度条（液态滑块）：从面板底色派生中性配色，随日/夜平滑渐变逐帧刷新
-        try {
-            liquidSlider.setChrome(chrome1, text1, dark);
-        } catch (Throwable ignored) { }
-
-        ivNightModeIcon.setImageResource(dark ? R.drawable.ic_day : R.drawable.ic_night);
-        tvNightModeText.setText(dark ? "日间" : "夜间");
-        tvNightModeText.setTextColor(navText);
-
-        setIconsForThemeWith(text1, accent, navText, dark);
-    }
-
-    private void setIconsForTheme() {
-        setIconsForThemeWith(sText1, sAccent, sNavText, sIsDark);
-    }
-
-    private void setIconsForThemeWith(int text1, int accent, int navText, boolean dark) {
-        // 图标 drawable 自身颜色会被 ImageView 的 tint 覆盖，因此仅切换 src 无效，
-        // 必须同步切换 tint 才能让图标在深色背景上都清晰可见。
-        // 配色不再按日/夜二值写死，而是取当前背景派生出的主文字色与强调色。
-        int tint = text1;
-
-        ImageView ivBack = findViewById(R.id.iv_back);
-        ImageView ivMore = findViewById(R.id.iv_more);
-        ivBack.setImageResource(dark ? R.drawable.ic_back_white : R.drawable.ic_back_black);
-        ivMore.setImageResource(dark ? R.drawable.ic_more_vert_white : R.drawable.ic_more_vert_black);
-        // 返回键使用强调色，其余图标与主文字同色
-        ivBack.setImageTintList(ColorStateList.valueOf(accent));
-        ivMore.setImageTintList(ColorStateList.valueOf(tint));
-
-        ImageView ivCatalog = findViewById(R.id.iv_catalog_icon);
-        ImageView ivSettings = findViewById(R.id.iv_settings_icon);
-        ivCatalog.setImageResource(dark ? R.drawable.ic_list_white : R.drawable.ic_list_black);
-        ivSettings.setImageResource(dark ? R.drawable.ic_settings_white : R.drawable.ic_settings_black);
-        ivCatalog.setImageTintList(ColorStateList.valueOf(tint));
-        ivSettings.setImageTintList(ColorStateList.valueOf(tint));
-
-        // 夜间/日间切换图标自身也要跟随 tint（XML 中 tint 固定为深色，夜间会看不清）
-        ivNightModeIcon.setImageTintList(ColorStateList.valueOf(tint));
-
-        int textColor = navText;
-        ((TextView) findViewById(R.id.tv_prev_chapter)).setTextColor(textColor);
-        ((TextView) findViewById(R.id.tv_next_chapter)).setTextColor(textColor);
-        ((TextView) findViewById(R.id.tv_catalog_text)).setTextColor(textColor);
-        ((TextView) findViewById(R.id.tv_settings_text)).setTextColor(textColor);
-        // 主题切换会重置图标 tint；若此时设置浮窗仍开着，需把「设置」图标的选中态补回来
-        if (settingsPopupWindow != null && settingsPopupWindow.isShowing()) setSettingsNavActive(true);
-    }
-
-    // ==================== 日间 ⇄ 夜间 平滑过渡（平滑色彩渐变） ====================
-    /**
-     * 带「平滑色彩渐变」过渡地切换日/夜间：
-     * <ul>
-     *   <li>原生上下导航栏：用 {@link ValueAnimator} + {@link ArgbEvaluator} 在「旧配色→新配色」间逐帧补间；</li>
-     *   <li>WebView 阅读区：调用 JS {@code animateNightMode(...)}，由 Canvas 逐帧重绘背景与文字色；</li>
-     *   <li>过渡时长见 {@link #NIGHT_TRANSITION_MS}（默认 1000ms）。</li>
-     * </ul>
-     * 浮窗（目录/设置等）在过渡结束后再统一刷新，避免逐帧重染开销。
-     */
-    private void animateNightModeToggle() {
-        animateNightModeTo(!isNightMode);
-    }
-
-    /**
-     * 带目标态的夜间切换动画。底栏日/夜按钮与背景色块（黑色≡夜间）共用。
-     * 统一语义：黑色背景(#1A1A1A)与夜间模式是同一个状态——
-     * 退出夜间时若日间背景残留为黑色（旧版本数据），回退纯白，
-     * 避免「黑→黑」两端同色导致动画看似无反应。
-     */
-    private void animateNightModeTo(boolean toNight) {
-        if (!toNight && currentBgColor == 3) currentBgColor = 0;
-
-        // ---- WebView 阅读区起止颜色 ----
-        final String dayBg  = dayWebBgHex();
-        final String dayTx  = dayWebTextHex();
-        final String nightBg = "#1A1A1A";
-        final String nightTx = "#AAAAAA";
-        final String fromBg, fromTx, toBg, toTx;
-        if (toNight) { fromBg = dayBg;  fromTx = dayTx;  toBg = nightBg; toTx = nightTx; }
-        else         { fromBg = nightBg; fromTx = nightTx; toBg = dayBg;  toTx = dayTx;  }
-
-        // ---- 原生导航栏：先快照「旧」配色，翻转后再算「新」配色 ----
-        final int fromC1 = sChrome1, fromC2 = sChrome2, fromLine = sLine;
-        final int fromT1 = sText1,   fromT2 = sText2,   fromNav = sNavText, fromAcc = sAccent;
-        final boolean fromDark = sIsDark;
-
-        isNightMode = toNight;
-        effectiveBgBase = toNight ? Color.parseColor("#1A1A1A") : resolveBaseForMode(currentBgColor);
-        updateChromePalette(); // 此时静态字段 = 目标配色
-        final int toC1 = sChrome1, toC2 = sChrome2, toLine = sLine;
-        final int toT1 = sText1,   toT2 = sText2,   toNav = sNavText, toAcc = sAccent;
-        // 动画期间把静态字段回退为「旧」，避免其它读取方（浮窗/Getter）出现半成品
-        sChrome1 = fromC1; sChrome2 = fromC2; sLine = fromLine;
-        sText1 = fromT1;   sText2 = fromT2;   sNavText = fromNav; sAccent = fromAcc; sIsDark = fromDark;
-
-        // 状态栏图标按目标明暗立即切换（系统层不做补间）
-        applyChromeColorsWith(fromC1, fromC2, fromLine, fromT1, fromT2, fromNav, fromAcc, toNight);
-
-        // ---- WebView 阅读区补间（逐帧重绘）----
-        String js = "animateNightMode(" + toNight + "," + NIGHT_TRANSITION_MS + ",'"
-                + fromBg + "','" + fromTx + "','" + toBg + "','" + toTx + "')";
-        webView.evaluateJavascript(js, null);
-
-        // ---- 原生导航栏补间 ----
-        final ArgbEvaluator eval = new ArgbEvaluator();
-        ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f);
-        anim.setDuration(NIGHT_TRANSITION_MS);
-        anim.setInterpolator(new AccelerateDecelerateInterpolator());
-        anim.addUpdateListener(a -> {
-            float t = (float) a.getAnimatedValue();
-            applyChromeColorsWith(
-                    (int) eval.evaluate(t, fromC1, toC1),
-                    (int) eval.evaluate(t, fromC2, toC2),
-                    (int) eval.evaluate(t, fromLine, toLine),
-                    (int) eval.evaluate(t, fromT1, toT1),
-                    (int) eval.evaluate(t, fromT2, toT2),
-                    (int) eval.evaluate(t, fromNav, toNav),
-                    (int) eval.evaluate(t, fromAcc, toAcc),
-                    toNight);
-        });
-        anim.addListener(new AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(Animator animation) {
-                // 落定为目标配色
-                sChrome1 = toC1; sChrome2 = toC2; sLine = toLine;
-                sText1 = toT1;   sText2 = toT2;   sNavText = toNav; sAccent = toAcc; sIsDark = toNight;
-                applyChromeTheme(); // 完整刷新（含图标/状态栏/浮窗）
-                // 退出夜间模式后恢复当前选中的背景纹理/纯色（与原逻辑一致）
-                if (!toNight) applyBackgroundColorToWebView(currentBgColor);
-                saveReadingPreferences();
-            }
-        });
-        anim.start();
-    }
-
-    /** 当前选中背景（日间）在 WebView 中的底色十六进制串。 */
-    private String dayWebBgHex() {
-        int m = currentBgColor;
-        if (m >= 10) {
-            int tex = m - 10;
-            if (tex >= 0 && tex < BG_TEXTURE_PREVIEW_COLORS.length) return toHex(BG_TEXTURE_PREVIEW_COLORS[tex]);
-            return "#FFFFFF";
-        }
-        if (m < 0 || m >= BG_COLORS.length) m = 0;
-        return BG_COLORS[m];
-    }
-
-    /** 当前选中背景（日间）在 WebView 中的文字色十六进制串。 */
-    private String dayWebTextHex() {
-        int m = currentBgColor;
-        if (m >= 10) return "#1D1D1F"; // 纹理模式统一用近黑文字
-        if (m < 0 || m >= BG_TEXT_COLORS.length) m = 0;
-        return BG_TEXT_COLORS[m];
-    }
-
-    /** 打包色值 → "#RRGGBB"（供 JS 调用）。 */
-    private static String toHex(int c) {
-        return String.format("#%06X", c & 0xFFFFFF);
-    }
-
-    // ==================== 浮窗配色跟随当前背景色 ====================
-    // 浮窗布局里写死的是 iOS 浅色（ios_bg / ios_bg_grouped / ios_separator / ios_text_*），
-    // 之前靠一张固定的「浅↔深」映射表在夜间模式下整体翻色，与具体背景色无关。
-    // 现在改为映射到「由当前背景色派生出的配色」（见 updateChromePalette），
-    // 于是护眼绿背景得到偏绿的导航/浮窗底，黑色背景得到夜间效果。
-    // 旧映射表里的日/夜两套硬编码色仍然保留在识别列表中，保证历史颜色也能被正确收敛。
-    private static final int LEGACY_NIGHT_BG_PRIMARY   = 0xFF000000;
-    private static final int LEGACY_NIGHT_BG_SECONDARY = 0xFF1C1C1E;
-    private static final int LEGACY_NIGHT_DIVIDER      = 0xFF38383A;
-    private static final int LEGACY_CAPSULE_NORMAL     = 0xFF2C2C2E;
-    private static final int LEGACY_CAPSULE_INNER      = 0xFF48484A;
-    private static final int LEGACY_CAPSULE_PRESSED    = 0xFF3A3A3C;
-    private static final int LEGACY_DAY_TEXT_SECONDARY = 0xFF8E8E93;
-    private static final int LEGACY_NIGHT_TEXT_SECONDARY = 0xFF98989D;
-
-    /**
-     * 递归为浮窗视图树应用当前派生配色：背景、分割线、文字、TabLayout。
-     * <p>宿主判定：当前台 Activity 不是某个 ReadActivity 实例时（例如书城/书架/设置在前台，
-     * 而某个迟到的异步回调仍想调本方法），本方法会直接 return，杜绝外部页被染色。
-     * <p>判定依据是 {@link #sActiveInstance}（生命周期维护），而不是 root.getContext() 的
-     * ContextWrapper 链——后者在 PopupWindow + ViewPager2 嵌套时不可靠。
-     */
-    public static void themeViewTree(@Nullable View root) {
-        if (root == null) return;
-        ReadActivity owner = sActiveInstance;
-        if (owner == null || owner.isFinishing() || owner.isDestroyed()) return;
-        // ✅ 二次校验：owner 必须仍在 onResume（防御 paused 状态下的漏判）；
-        // ✅ root 的 Context 必须能从 ContextWrapper 链回溯到 owner，否则拒绝染色。
-        // 阅读器内的 popup（chapter/settings/moreMenu 等）虽然走独立 Window，
-        // 但它们的 Context 都是从 ReadActivity(this) 出发创建的，链上一定能找到 owner。
-        // BookDetailActivity 等外部页面的 view，Context 链只能回到 BookDetailActivity 自身，
-        // 永远找不到 owner → 被拒绝，杜绝「阅读器外页被染色」。
-        if (!owner.activityResumed) return;
-        if (!isContextTraceableTo(root, owner)) return;
-        applyThemeRecursive(root);
-    }
-
-    /**
-     * 沿 ContextWrapper 链向上追溯 root.getContext()，看是否能找到 owner Activity。
-     * 命中则说明 root 是 owner 这条线创建的（阅读器内的 view 或内部 popup）；
-     * 追不到说明 root 来自外部 Activity（书城 / 书架 / 详情等），必须拒绝。
-     */
-    private static boolean isContextTraceableTo(View root, ReadActivity owner) {
-        try {
-            Context ctx = root.getContext();
-            int safety = 0;
-            while (ctx != null && safety++ < 16) {
-                if (ctx == owner) return true;
-                if (!(ctx instanceof ContextWrapper)) break;
-                Context base = ((ContextWrapper) ctx).getBaseContext();
-                if (base == ctx) break;
-                ctx = base;
-            }
-            return false;
-        } catch (Throwable t) {
-            return false;
-        }
-    }
-
-    private static void applyThemeRecursive(View view) {
-        // 打了 tag_keep_own_color 的子树（如背景色块）必须显示自己的真实颜色，跳过
-        if (Boolean.TRUE.equals(view.getTag(R.id.tag_keep_own_color))) return;
-
-        // 0) 目录浮窗「定位当前章节」悬浮按钮：半透明圆盘 + 主文字色图标。
-        //    圆盘底色由浮窗主底向主文字色微调（浅色主题=奶油白盘+深图标、夜间=深灰盘+浅图标），
-        //    因此不能走下面那张「已知色 → 派生色」的映射表（自定义混色不在表内），
-        //    这里直接按当前调色板生成，夜间切换时由 themeShowingPopups → 本方法实时重刷。
-        if (view.getId() == R.id.btn_toc_locate) {
-            try {
-                android.graphics.drawable.GradientDrawable disc = new android.graphics.drawable.GradientDrawable();
-                disc.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-                int base = mixColors(sChrome1, sText1, TOC_LOCATE_DISC_TINT_RATIO);
-                disc.setColor((TOC_LOCATE_DISC_ALPHA << 24) | (base & 0x00FFFFFF));
-                view.setBackground(disc);
-                if (view instanceof ImageView) {
-                    ((ImageView) view).setImageTintList(ColorStateList.valueOf(sText1));
-                }
-            } catch (Throwable ignored) { }
-            return;
-        }
-
-        // 1) 背景：纯色 / shape / selector / layer-list 递归重着色
-        //    本项目的夜间模式是「手动」的（未调用 AppCompatDelegate），
-        //    因此 res/drawable-night 资源限定符不会生效；胶囊这类 <selector> 必须在代码里
-        //    逐个子 <shape> 重着色，否则深色背景下仍是浅底 + 白字 = 内容不可见。
-        if (themeDrawable(view.getBackground())) view.invalidate();
-
-        // 1b) SeekBar 的进度轨道不是 background，需单独重着色
-        if (view instanceof android.widget.SeekBar) {
-            try {
-                if (themeDrawable(((android.widget.SeekBar) view).getProgressDrawable())) {
-                    view.invalidate();
-                }
-            } catch (Throwable ignored) { }
-        }
-
-        // 2) 文字颜色
-        if (view instanceof TextView && !(view instanceof android.widget.Button)) {
-            TextView tv = (TextView) view;
-            int tc = tv.getCurrentTextColor();
-            int mapped = mapTextColor(tc);
-            if (mapped != tc) tv.setTextColor(mapped);
-        }
-
-        // 3) TabLayout：标签栏背景与文字（不递归进其内部 tab 子视图，避免与 setTabTextColors 冲突）
-        if (view instanceof TabLayout) {
-            TabLayout tl = (TabLayout) view;
-            tl.setBackgroundColor(sChrome2);
-            tl.setTabTextColors(sText2, sAccent);
-            tl.setSelectedTabIndicatorColor(sAccent);
-            return;
-        }
-
-        // 4) 递归子节点（RecyclerView 仅返回已 attach 的可见项，遍历成本可控）
-        if (view instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) view;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                applyThemeRecursive(vg.getChildAt(i));
-            }
-        }
-    }
-
-    /**
-     * 把布局里写死的浅色体系映射到当前派生配色。
-     * 除了原始色值，也识别「历史上派发过的派生值」（sIssuedChrome*），
-     * 这样反复重着色时不依赖调用顺序，也不会残留旧底色。
-     */
-    private static int mapBgColor(int c) {
-        // 主背景：ios_bg / 旧夜间主底 / 任意一轮派发过的主底
-        if (c == 0xFFFFFFFF || c == 0xFFFAFAFA || c == 0xFFF5F5F5
-                || c == LEGACY_NIGHT_BG_PRIMARY || sIssuedChrome1.contains(c)) {
-            return sChrome1;
-        }
-        // 二级底：ios_bg_grouped / 旧夜间次底 / 任意一轮派发过的二级底
-        if (c == 0xFFF2F2F7 || c == 0xFFEFEFF4
-                || c == LEGACY_NIGHT_BG_SECONDARY || c == LEGACY_CAPSULE_NORMAL
-                || sIssuedChrome2.contains(c)) {
-            return sChrome2;
-        }
-        // 分隔线：ios_separator / 旧夜间分割线 / 任意一轮派发过的分隔线
-        if (c == 0xFFE5E5EA || c == 0xFFC6C7CC || c == 0xFFE0E0E0 || c == 0xFFEEEEEE
-                || c == LEGACY_NIGHT_DIVIDER || c == LEGACY_CAPSULE_PRESSED
-                || sIssuedLine.contains(c)) {
-            return sLine;
-        }
-        // 胶囊内胆（白胶囊）：与浮窗主底同级
-        if (c == LEGACY_CAPSULE_INNER) return sChrome1;
-        return c;
-    }
-
-    /** 文字颜色：主文字 / 次文字 / 三级文字 → 派生文字色。 */
-    private static int mapTextColor(int c) {
-        int rgb = c & 0x00FFFFFF;   // 去掉 alpha：?android:attr/textColorSecondary 会解析出带透明度的灰
-        if (rgb == 0x1D1D1F || rgb == 0x333333 || rgb == 0x000000 || rgb == 0xFFFFFF) return sText1;
-        if (rgb == 0x8E8E93 || rgb == 0x98989D || rgb == 0xC7C7CC
-                || rgb == 0x666666 || rgb == 0x999999) return sText2;
-        // 通用兜底：布局里用 ?android:attr/textColorPrimary / textColorSecondary 时，
-        // 解析出来的系统灰阶色（#000000、#8A000000…）不在上面的清单里，
-        // 会导致书签条目的标题/预览在深色背景上依旧是深色字（看起来"没跟随"）。
-        // 规则：低饱和（灰阶）文字 → 近黑/近白归主文字、中间灰归次文字；
-        //      有彩色（橙色备注 #FF6600、红色 #FF4444 等强调色）保持原样。
-        float[] hsv = new float[3];
-        Color.colorToHSV(0xFF000000 | rgb, hsv);
-        if (hsv[1] <= 0.25f) {
-            return (hsv[2] >= 0.85f || hsv[2] <= 0.45f) ? sText1 : sText2;
-        }
-        return c;
-    }
-
-    /**
-     * 对 drawable 重着色，并递归处理 selector / layer-list / inset / scale 的子图。
-     * 全部走同一张派生色表（胶囊与面板已在派生规则里区分层级：胶囊底 = 二级底）。
-     * @return 是否发生变化
-     */
-    private static boolean themeDrawable(Drawable d) {
-        if (d == null) return false;
-        // ✅ 关键修复：先 mutate() 脱离「共享 ConstantState」。
-        // 从同一资源（@color/ios_bg、@drawable/bg_xxx 等）inflate 出来的 Drawable 在
-        // 进程内共享同一份 ConstantState；直接 setColor() 会改到全局共享状态，导致书城 /
-        // 书架 / 设置 / 详情等所有使用 ios_bg 的界面背景被「染色」跟随阅读器背景。
-        // mutate() 让本实例拿到一份独立状态，着色只作用于当前浮窗，不再泄漏到全 App。
-        d = d.mutate();
-        boolean changed = false;
-        try {
-            if (d instanceof ColorDrawable) {
-                int c = ((ColorDrawable) d).getColor();
-                int mapped = mapBgColor(c);
-                if (mapped != c) {
-                    ((ColorDrawable) d).setColor(mapped);
-                    changed = true;
-                }
-            } else if (d instanceof GradientDrawable) {
-                android.content.res.ColorStateList csl = ((GradientDrawable) d).getColor(); // API29+
-                if (csl != null) {
-                    int c = csl.getDefaultColor();
-                    int mapped = mapBgColor(c);
-                    if (mapped != c) {
-                        ((GradientDrawable) d).setColor(mapped);
-                        changed = true;
-                    }
-                }
-            } else if (d instanceof android.graphics.drawable.StateListDrawable) {
-                // <selector>：逐个重着色子 <shape>（常态 / 按下态）
-                android.graphics.drawable.Drawable.ConstantState cs = d.getConstantState();
-                if (cs instanceof android.graphics.drawable.DrawableContainer.DrawableContainerState) {
-                    android.graphics.drawable.DrawableContainer.DrawableContainerState dcs =
-                            (android.graphics.drawable.DrawableContainer.DrawableContainerState) cs;
-                    for (int i = 0; i < dcs.getChildCount(); i++) {
-                        changed |= themeDrawable(dcs.getChild(i));
-                    }
-                }
-            } else if (d instanceof android.graphics.drawable.LayerDrawable) {
-                android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) d;
-                for (int i = 0; i < ld.getNumberOfLayers(); i++) {
-                    changed |= themeDrawable(ld.getDrawable(i));
-                }
-            } else if (d instanceof android.graphics.drawable.InsetDrawable) {
-                changed |= themeDrawable(((android.graphics.drawable.InsetDrawable) d).getDrawable());
-            } else if (d instanceof android.graphics.drawable.ScaleDrawable) {
-                changed |= themeDrawable(((android.graphics.drawable.ScaleDrawable) d).getDrawable());
-            }
-        } catch (Throwable ignored) { }
-        return changed;
-    }
-
-    /** 夜间模式切换时，对当前已显示的浮窗视图树重新着色，实现实时跟随。 */
-    private void themeShowingPopups() {
-        themeIfShowing(chapterPopupWindow);
-        themeIfShowing(moreMenuPopupWindow);
-        themeIfShowing(settingsPopupWindow);
-        themeIfShowing(moreSettingsPopupWindow);
-        themeIfShowing(bgColorsPopupWindow);
-        themeIfShowing(fontsPopupWindow);
-        // 翻页分段：指示器底色需按新主题重着色（thumb 打了 keep_own_color 不走通用重刷），文字选中恒深需重设
-        if (settingsPopupWindow != null && settingsPopupWindow.isShowing() && settingsPageSegRefresher != null) {
-            settingsPageSegRefresher.run();
-        }
-    }
-
-    private void themeIfShowing(PopupWindow pw) {
-        if (pw != null && pw.isShowing()) themeViewTree(pw.getContentView());
-    }
-
-    /**
-     * 设置系列浮窗的定位偏移：让浮窗底缘停在底部「目录/夜间/设置」这一行（第二行）的上沿，
-     * 从而盖住其上方的「上一章/下一章」行，同时露出底栏本行、不被覆盖也不变暗。
-     * 底栏第二行固定高度 60dp，故偏移取该值（含 0.5dp 分隔线误差可忽略）。
-     */
-    private int getNavBarHeightPx() {
-        return (int) (60 * getResources().getDisplayMetrics().density);
-    }
+    void applyChromeTheme() { themeController.applyChromeTheme(); }
+    private void animateNightModeToggle() { themeController.animateNightModeToggle(); }
+    void animateNightModeTo(boolean toNight) { themeController.animateNightModeTo(toNight); }
+    private int getNavBarHeightPx() { return themeController.getNavBarHeightPx(); }
 
     /**
      * 设置浮窗开启时：「设置」图标由描边齿轮切换为<b>实心齿轮</b>（不加圆底），
      * 齿轮颜色与平时保持一致（不随之变色）；底部「设置」文字颜色也不变。
      * 关闭时恢复为描边齿轮 + 主题次色文字。
      */
-    private void setSettingsNavActive(boolean active) {
+    void setSettingsNavActive(boolean active) {
         ImageView iv = findViewById(R.id.iv_settings_icon);
         TextView tv = findViewById(R.id.tv_settings_text);
         if (iv == null || tv == null) return;
 
         // 齿轮颜色不随选中态改变：日间跟随主文字色（近黑），夜间跟随其他图标用白色
-        int gearColor = sText1;
+        int gearColor = getTextPrimaryColor();
 
         iv.setBackground(null);       // 不加圆底
         iv.setPadding(0, 0, 0, 0);
         iv.clearColorFilter();
         iv.setImageResource(active ? R.drawable.ic_settings_filled
-                : (sIsDark ? R.drawable.ic_settings_white : R.drawable.ic_settings_black));
+                : (isChromeDark() ? R.drawable.ic_settings_white : R.drawable.ic_settings_black));
         // 用 setImageTintList（与 XML 的 app:tint 同通道），setColorFilter 会被 AppCompat tint 覆盖
         iv.setImageTintList(ColorStateList.valueOf(gearColor));
 
         if (!active) {
-            tv.setTextColor(sNavText);
+            tv.setTextColor(getNavTextColor());
         }
         // active 时文字颜色保持不变（不改成蓝色）
     }
@@ -4620,7 +3802,7 @@ public class ReadActivity extends BaseActivity {
     /** 二级弹窗（间距抽屉/更多阅读设置/选择字体/选择背景）滑出时联动：设置面板收回。
      *  窗口保持显示（scrim 不动，双层遮罩暗度与旧行为一致），仅面板平移出窗口下沿，
      *  与二级弹窗的入场滑出同步交叉（同 220ms Accelerate/Decelerate 对偶）。 */
-    private void retractSettingsPanelForSub() {
+    void retractSettingsPanelForSub() {
         if (settingsPopupWindow == null || !settingsPopupWindow.isShowing()) return;
         final View panel = settingsPanelView;
         if (panel == null) return;
@@ -4635,7 +3817,7 @@ public class ReadActivity extends BaseActivity {
     }
 
     /** 二级弹窗收起时联动：设置面板重新滑出（复用入场动画；整窗正在收回流程中则不抢） */
-    private void restoreSettingsPanelFromSub() {
+    void restoreSettingsPanelFromSub() {
         if (settingsPopupWindow == null || !settingsPopupWindow.isShowing()) return;
         if (settingsPanelDismissing) return;
         final View panel = settingsPanelView;
@@ -4674,7 +3856,7 @@ public class ReadActivity extends BaseActivity {
     private void addBookmark() {
         if (currentBook == null) return;
         
-        // ✅ 修正：本地书籍使用本地存储，网络书籍使用服务器
+        // 修正：本地书籍使用本地存储，网络书籍使用服务器
         if (isLocalBook) {
             addLocalBookmark();
         } else {
@@ -4688,7 +3870,7 @@ public class ReadActivity extends BaseActivity {
     private void addLocalBookmark() {
         String chapterTitle = chapterList.get(currentChapterIndex).getTitle();
         
-        // ✅ 修正：从 WebView 获取当前页的内容作为预览
+        // 修正：从 WebView 获取当前页的内容作为预览
         final String[] contentPreview = {""};
         
         if (isWebViewReady) {
@@ -4778,7 +3960,7 @@ public class ReadActivity extends BaseActivity {
 
         String chapterTitle = chapterList.get(currentChapterIndex).getTitle();
         
-        // ✅ 修正：从 WebView 获取当前页的内容作为预览
+        // 修正：从 WebView 获取当前页的内容作为预览
         final String[] contentPreview = {""};
         
         if (isWebViewReady) {
@@ -4822,7 +4004,8 @@ public class ReadActivity extends BaseActivity {
 
         RetrofitClient.getApiService().addBookmark(bookmark).enqueue(new Callback<ApiResponse<Bookmark>>() {
             @Override
-            public void onResponse(@NonNull Call<ApiResponse<Bookmark>> call, @NonNull Response<ApiResponse<Bookmark>> response) {
+            public void onResponse(@NonNull Call<ApiResponse<Bookmark>> call,
+                    @NonNull Response<ApiResponse<Bookmark>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     Hint.show(ReadActivity.this, "书签已添加");
                 } else {
@@ -4835,7 +4018,8 @@ public class ReadActivity extends BaseActivity {
                         }
                     } catch (Exception ignored) {
                     }
-                    android.util.Log.e("ReadActivity", "saveNetworkBookmark failed: code=" + response.code() + ", msg=" + errMsg);
+                    android.util.Log.e("ReadActivity", "saveNetworkBookmark failed: code="
+                            + response.code() + ", msg=" + errMsg);
                     Hint.show(ReadActivity.this, errMsg);
                 }
             }
@@ -4927,13 +4111,13 @@ public class ReadActivity extends BaseActivity {
             final int idx = i;
             bgSwatches[i].setOnClickListener(v -> {
                 if (idx == 3) {
-                    // ✅ 黑色背景 ≡ 夜间模式（同为 #1A1A1A，统一为一个状态）：
+                    // 黑色背景 ≡ 夜间模式（同为 #1A1A1A，统一为一个状态）：
                     // 点黑块即进入夜间（带渐变动画）；已处于夜间则仅刷新高亮。
                     // currentBgColor 不写 3，日间背景保持原选择，供退出夜间时恢复。
                     if (!isNightMode) animateNightModeTo(true);
                 } else {
                     currentBgColor = idx;
-                    // ✅ 关键修复：选中自定义背景即退出夜间模式。夜间模式与自定义背景互斥
+                    // 关键修复：选中自定义背景即退出夜间模式。夜间模式与自定义背景互斥
                     // （夜间关时由 applyBackgroundColorToWebView(currentBgColor) 恢复背景），
                     // 若不置 false，夜间下选背景时 night_mode 仍存 true，重进阅读器会被 setNightMode(true)
                     // 覆盖回夜间、显示不出用户切换的背景。
@@ -5057,7 +4241,7 @@ public class ReadActivity extends BaseActivity {
 
         view.findViewById(R.id.tv_more_settings).setOnClickListener(v -> showMoreSettingsDialog());
 
-        // ✅ 间距行：行段间距 / 页面边距 两个胶囊入口 → 底部抽屉
+        // 间距行：行段间距 / 页面边距 两个胶囊入口 → 底部抽屉
         updateSpacingPillTexts(view);
         view.findViewById(R.id.btn_line_spacing).setOnClickListener(v -> showSpacingDrawer(true));
         view.findViewById(R.id.btn_page_margin).setOnClickListener(v -> showSpacingDrawer(false));
@@ -5320,7 +4504,7 @@ public class ReadActivity extends BaseActivity {
             return false;
         });
         spacingPopup.showAtLocation(layoutBottomNav, Gravity.NO_GRAVITY, 0, 0);
-        // ✅ 联动：抽屉滑出时设置面板收回；抽屉收起（scrim/返回键/跟手下滑/按钮任一路径 dismiss）时面板重新滑出
+        // 联动：抽屉滑出时设置面板收回；抽屉收起（scrim/返回键/跟手下滑/按钮任一路径 dismiss）时面板重新滑出
         retractSettingsPanelForSub();
         spacingPopup.setOnDismissListener(this::restoreSettingsPanelFromSub);
         // 布局完成后重新定位指示器（首次定位时 track 宽度才就绪）
@@ -5391,928 +4575,25 @@ public class ReadActivity extends BaseActivity {
         }
     }
 
-    /**
-     * 显示更多背景弹窗（纯色 + 纹理）
-     */
-    @SuppressLint({"InflateParams", "SetTextI18n"})
-    private void showBgColorsDialog() {
-        View popupView = LayoutInflater.from(this).inflate(R.layout.popup_bg_colors, null);
-        LinearLayout solidContainer = popupView.findViewById(R.id.container_solid_colors);
-        LinearLayout texContainer = popupView.findViewById(R.id.container_textures);
+    // ========== 弹窗控制器（背景/字体/更多设置；2026-10-02 拆出，实现见同名 Controller 类） ==========
+    private final ReadBackgroundPopupController bgPopupController = new ReadBackgroundPopupController(this);
+    private final ReadFontPopupController fontPopupController = new ReadFontPopupController(this);
+    private final ReadMoreSettingsPopupController moreSettingsPopupController = new ReadMoreSettingsPopupController(this);
 
-        float density = getResources().getDisplayMetrics().density;
-        int swatchSize = (int) (44 * density);
-        int ringSize = swatchSize;
-        int frameSize = (int) (52 * density);
-        int marginEnd = (int) (8 * density);
-        float ringCorner = 8 * density;
+    /** 显示更多背景弹窗（纯色 + 纹理） */
+    private void showBgColorsDialog() { bgPopupController.show(); }
 
-        // ===== 构建纯色网格 =====
-        int colsPerRow = 5;
-        LinearLayout currentRow = null;
-        for (int i = 0; i < BG_COLORS.length; i++) {
-            if (i % colsPerRow == 0) {
-                currentRow = new LinearLayout(this);
-                currentRow.setOrientation(LinearLayout.HORIZONTAL);
-                currentRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
-                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                rowParams.bottomMargin = (int) (8 * density);
-                solidContainer.addView(currentRow, rowParams);
-            }
-            FrameLayout frame = new FrameLayout(this);
-            frame.setLayoutParams(new LinearLayout.LayoutParams(frameSize, frameSize));
-            ((LinearLayout.LayoutParams) frame.getLayoutParams()).setMargins(0, 0, marginEnd, 0);
+    /** 显示字体选择弹窗 */
+    private void showFontsDialog() { fontPopupController.show(); }
 
-            // 色块（圆角长方形）
-            View swatch = new View(this);
-            FrameLayout.LayoutParams swatchLp = new FrameLayout.LayoutParams(swatchSize, swatchSize);
-            swatchLp.gravity = android.view.Gravity.CENTER;
-            swatch.setLayoutParams(swatchLp);
-            GradientDrawable circle = new GradientDrawable();
-            circle.setShape(GradientDrawable.RECTANGLE);
-            circle.setCornerRadius(8 * density);
-            circle.setColor(Color.parseColor(BG_COLORS[i]));
-            if (BG_COLORS[i].equals("#FFFFFF")) circle.setStroke(2, Color.parseColor("#CCCCCC"));
-            swatch.setBackground(circle);
-            // 色块必须显示真实背景色，不能被「跟随背景色」重着色
-            swatch.setTag(R.id.tag_keep_own_color, true);
+    /** 显示更多设置弹窗（页眉页脚等） */
+    private void showMoreSettingsDialog() { moreSettingsPopupController.show(); }
 
-            // 选中环
-            View ring = new View(this);
-            FrameLayout.LayoutParams ringLp = new FrameLayout.LayoutParams(ringSize, ringSize);
-            ringLp.gravity = android.view.Gravity.CENTER;
-            ring.setLayoutParams(ringLp);
-            ring.setBackgroundResource(R.drawable.bg_color_ring);
-            try { GradientDrawable rd = (GradientDrawable) ring.getBackground(); rd.mutate(); rd.setCornerRadius(ringCorner); } catch (Exception ignore) {}
-            ring.setVisibility((i == currentBgColor || (i == 3 && isNightMode)) ? View.VISIBLE : View.GONE);
+    /** 启动后后台预拉取字体列表（实现见 ReadFontPopupController） */
+    private void preloadBackendFontsIfNeeded() { fontPopupController.preloadIfNeeded(); }
 
-            frame.addView(swatch);
-            frame.addView(ring);
-
-            // 点击选择
-            final int idx = i;
-            swatch.setOnClickListener(v -> {
-                if (idx == 3) {
-                    // ✅ 黑色背景 ≡ 夜间模式（同主面板处理器，统一状态不写 currentBgColor=3）
-                    if (!isNightMode) animateNightModeTo(true);
-                } else {
-                    currentBgColor = idx;
-                    // ✅ 关键修复：选中自定义背景即退出夜间模式（详见主面板纯色处理器说明）
-                    isNightMode = false;
-                    applyBackgroundColorToWebView(idx);
-                    applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景
-                    saveReadingPreferences();
-                }
-                refreshPopupSelection(solidContainer, texContainer);
-            });
-            currentRow.addView(frame);
-        }
-
-        // ===== 构建纹理网格 =====
-        LinearLayout texRow = null;
-        for (int i = 0; i < BG_TEXTURE_FILES.length; i++) {
-            if (i % colsPerRow == 0) {
-                texRow = new LinearLayout(this);
-                texRow.setOrientation(LinearLayout.HORIZONTAL);
-                texRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
-                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                rowParams.bottomMargin = (int) (8 * density);
-                texContainer.addView(texRow, rowParams);
-            }
-            FrameLayout frame = new FrameLayout(this);
-            frame.setLayoutParams(new LinearLayout.LayoutParams(frameSize, frameSize));
-            ((LinearLayout.LayoutParams) frame.getLayoutParams()).setMargins(0, 0, marginEnd, 0);
-
-            // 纹理预览图（从assets加载bitmap，裁为圆形）
-            ImageView swatch = new ImageView(this);
-            FrameLayout.LayoutParams swatchLp = new FrameLayout.LayoutParams(swatchSize, swatchSize);
-            swatchLp.gravity = android.view.Gravity.CENTER;
-            swatch.setLayoutParams(swatchLp);
-            swatch.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            swatch.setContentDescription(BG_TEXTURE_LABELS[i]);
-            try {
-                InputStream is = getAssets().open("backgrounds/" + BG_TEXTURE_FILES[i]);
-                Bitmap bmp = BitmapFactory.decodeStream(is);
-                is.close();
-                Bitmap scaled = Bitmap.createScaledBitmap(bmp, swatchSize, swatchSize, true);
-                RoundedBitmapDrawable drawable = RoundedBitmapDrawableFactory.create(getResources(), scaled);
-                drawable.setCornerRadius(8 * density);
-                swatch.setImageDrawable(drawable);
-            } catch (Exception e) {
-                // 加载失败时用预览色兜底（圆角长方形）
-                GradientDrawable fallback = new GradientDrawable();
-                fallback.setShape(GradientDrawable.RECTANGLE);
-                fallback.setCornerRadius(8 * density);
-                fallback.setColor(BG_TEXTURE_PREVIEW_COLORS[i]);
-                swatch.setBackground(fallback);
-            }
-
-            // 选中环
-            View ring = new View(this);
-            FrameLayout.LayoutParams ringLp = new FrameLayout.LayoutParams(ringSize, ringSize);
-            ringLp.gravity = android.view.Gravity.CENTER;
-            ring.setLayoutParams(ringLp);
-            ring.setBackgroundResource(R.drawable.bg_color_ring);
-            try { GradientDrawable rd = (GradientDrawable) ring.getBackground(); rd.mutate(); rd.setCornerRadius(ringCorner); } catch (Exception ignore) {}
-            int texModeIdx = 10 + i;
-            ring.setVisibility(texModeIdx == currentBgColor ? View.VISIBLE : View.GONE);
-
-            frame.addView(swatch);
-            frame.addView(ring);
-
-            // 点击选择纹理
-            final int texIdx = texModeIdx;
-            swatch.setOnClickListener(v -> {
-                currentBgColor = texIdx;
-                // ✅ 关键修复：选中纹理背景即退出夜间模式（详见主面板纯色处理器说明）
-                isNightMode = false;
-                applyBackgroundColorToWebView(texIdx);
-                applyChromeTheme();   // 导航栏 / 浮窗底色跟随新背景（纹理取预览底色）
-                saveReadingPreferences();
-                refreshPopupSelection(solidContainer, texContainer);
-            });
-            texRow.addView(frame);
-        }
-
-        // 关闭按钮（色块点击即生效，无需"确定"按钮）
-        popupView.findViewById(R.id.iv_bg_popup_close).setOnClickListener(v -> {
-            SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
-            if (h != null) h.dismissAnimated();
-            else if (bgColorsPopupWindow != null) bgColorsPopupWindow.dismiss();
-        });
-
-        // ✅ 背景色选择浮窗外壳跟随主题（色块本身为实际背景色，不在映射表内故不会被改）
-        themeViewTree(popupView);
-
-        // 弹窗高度固定为屏幕一半，内容过多时由内部 ScrollView 滚动
-        android.util.DisplayMetrics bgDm = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(bgDm);
-        int bgPopupHeight = bgDm.heightPixels / 2;
-
-        // 以全屏透明窗口 + 跟手下滑容器承载面板（面板下移时不会被半屏窗口边界裁掉）
-        bgColorsPopupWindow = showSwipeDismissPopup(popupView, bgPopupHeight, "bg");
-        // ✅ 联动：弹窗滑出时设置面板收回；弹窗收起（关闭按钮/跟手下滑任一路径 dismiss）时面板重新滑出
-        retractSettingsPanelForSub();
-        suspendAutoPage();
-        mainHandler.removeCallbacks(hideNavRunnable);
-        bgColorsPopupWindow.setOnDismissListener(() -> {
-            resetAutoHideTimer();
-            resumeAutoPageIfSuspended();
-            restoreSettingsPanelFromSub();
-        });
-    }
-
-    /**
-     * 刷新弹窗中所有色块的选中状态
-     */
-    private void refreshPopupSelection(LinearLayout solidContainer, LinearLayout texContainer) {
-        // 纯色
-        int solidIdx = 0;
-        for (int r = 0; r < solidContainer.getChildCount(); r++) {
-            LinearLayout row = (LinearLayout) solidContainer.getChildAt(r);
-            for (int c = 0; c < row.getChildCount(); c++) {
-                FrameLayout frame = (FrameLayout) row.getChildAt(c);
-                View ring = frame.getChildAt(1);
-                // 黑色背景(index 3) ≡ 夜间模式：夜间态下黑块显示选中
-                ring.setVisibility((solidIdx == currentBgColor || (solidIdx == 3 && isNightMode)) ? View.VISIBLE : View.GONE);
-                solidIdx++;
-            }
-        }
-        // 纹理（索引从10开始）
-        int texIdx = 0;
-        for (int r = 0; r < texContainer.getChildCount(); r++) {
-            LinearLayout row = (LinearLayout) texContainer.getChildAt(r);
-            for (int c = 0; c < row.getChildCount(); c++) {
-                FrameLayout frame = (FrameLayout) row.getChildAt(c);
-                View ring = frame.getChildAt(1);
-                ring.setVisibility((10 + texIdx) == currentBgColor ? View.VISIBLE : View.GONE);
-                texIdx++;
-            }
-        }
-    }
-
-    /**
-     * 字体网格卡片数据项
-     */
-    private static class FontCardItem {
-        final String displayName;
-        final String cssName;
-        final boolean isBackend;
-        final com.example.myapplication.bean.FontItem backendFont;
-
-        FontCardItem(String displayName, String cssName, boolean isBackend,
-                     com.example.myapplication.bean.FontItem backendFont) {
-            this.displayName = displayName;
-            this.cssName = cssName;
-            this.isBackend = isBackend;
-            this.backendFont = backendFont;
-        }
-    }
-
-    /**
-     * 显示字体选择弹窗
-     */
-    @SuppressLint({"InflateParams", "SetTextI18n"})
-    private void showFontsDialog() {
-        View popupView = LayoutInflater.from(this).inflate(R.layout.popup_fonts, null);
-        LinearLayout container = popupView.findViewById(R.id.container_fonts);
-
-        // 构建字体列表
-        rebuildFontList(container);
-
-        // 关闭按钮
-        popupView.findViewById(R.id.iv_font_popup_close).setOnClickListener(v -> {
-            SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
-            if (h != null) h.dismissAnimated();
-            else if (fontsPopupWindow != null) fontsPopupWindow.dismiss();
-        });
-
-        themeViewTree(popupView);
-
-        // 弹窗高度固定为屏幕一半，内容过多时由内部 ScrollView 滚动
-        android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(dm);
-        int popupHeight = dm.heightPixels / 2;
-
-        // 以全屏透明窗口 + 跟手下滑容器承载面板
-        fontsPopupWindow = showSwipeDismissPopup(popupView, popupHeight, "font");
-        // ✅ 联动：弹窗滑出时设置面板收回；弹窗收起（关闭按钮/跟手下滑任一路径 dismiss）时面板重新滑出
-        retractSettingsPanelForSub();
-        suspendAutoPage();
-        mainHandler.removeCallbacks(hideNavRunnable);
-        fontsPopupWindow.setOnDismissListener(() -> {
-            resetAutoHideTimer();
-            resumeAutoPageIfSuspended();
-            restoreSettingsPanelFromSub();
-        });
-    }
-
-    /**
-     * 从后端获取字体列表。container 为 null 时仅用于后台预加载（不刷新弹窗 UI，
-     * 但会在拿到列表后刷新「切换字体」按钮文案，避免未打开弹窗时显示 cssName）。
-     */
-    private void fetchFontsFromBackend(LinearLayout container) {
-        RetrofitClient.getApiService().getFonts().enqueue(new retrofit2.Callback<ApiResponse<java.util.List<com.example.myapplication.bean.FontItem>>>() {
-            @Override
-            public void onResponse(@NonNull retrofit2.Call<ApiResponse<java.util.List<com.example.myapplication.bean.FontItem>>> call,
-                                   @NonNull retrofit2.Response<ApiResponse<java.util.List<com.example.myapplication.bean.FontItem>>> response) {
-                if (response.isSuccessful() && response.body() != null && response.body().getData() != null) {
-                    backendFonts = response.body().getData();
-                    runOnUiThread(() -> {
-                        if (container != null) {
-                            // 移除加载提示并重建 3 列网格
-                            View loading = container.findViewWithTag("tv_loading");
-                            if (loading != null) container.removeView(loading);
-                            rebuildFontList(container);
-                        }
-                        // 列表就绪后刷新「切换字体」按钮：可能已从 cssName 解析出中文展示名
-                        applyCurrentFontToSwitchButton();
-                    });
-                } else {
-                    runOnUiThread(() -> {
-                        if (container != null) {
-                            View loading = container.findViewWithTag("tv_loading");
-                            if (loading instanceof TextView) {
-                                ((TextView) loading).setText("暂无在线字体");
-                            }
-                        }
-                    });
-                }
-            }
-
-            @Override
-            public void onFailure(@NonNull retrofit2.Call<ApiResponse<java.util.List<com.example.myapplication.bean.FontItem>>> call,
-                                  @NonNull Throwable t) {
-                runOnUiThread(() -> {
-                    if (container != null) {
-                        View loading = container.findViewWithTag("tv_loading");
-                        if (loading instanceof TextView) {
-                            ((TextView) loading).setText("网络异常，请稍后再试");
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    /**
-     * 启动后后台预拉取字体列表：仅当当前选中的是在线字体且列表尚未加载时，
-     * 这样即使从未打开过字体弹窗，「切换字体」按钮也能显示中文名而非 cssName。
-     */
-    private void preloadBackendFontsIfNeeded() {
-        if (!FONT_SYSTEM_CSS.equals(currentFontFamily)
-                && !FONT_DEFAULT_CSS.equals(currentFontFamily)
-                && backendFonts.isEmpty()) {
-            fetchFontsFromBackend(null);
-        }
-    }
-
-    /**
-     * 长按已下载字体 → 弹出删除确认对话框
-     */
-    private void showDeleteFontDialog(FontCardItem item, LinearLayout container) {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("删除字体")
-                .setMessage("确定要删除「" + item.displayName + "」吗？删除后需重新下载。")
-                .setPositiveButton("删除", (d, w) -> deleteDownloadedFont(item, container))
-                .setNegativeButton("取消", null)
-                .show();
-    }
-
-    /**
-     * 删除已下载的在线字体：删除本地文件 + 移除已下载记录 + 必要时回退当前字体
-     */
-    private void deleteDownloadedFont(FontCardItem item, LinearLayout container) {
-        // 1. 删除内部存储中的字体文件
-        java.io.File f = new java.io.File(getFilesDir(), "fonts/" + item.cssName + ".ttf");
-        if (f.exists()) f.delete();
-        // 2. 从已下载集合移除
-        downloadedFonts.remove(item.cssName);
-        // 3. 若当前正在使用该字体，回退到默认字体
-        if (currentFontFamily.equals(item.cssName)) {
-            currentFontFamily = FONT_DEFAULT_CSS;
-            applyFontFamilyToWebView();
-        }
-        // 4. 持久化并刷新列表
-        saveReadingPreferences();
-        rebuildFontList(container);
-        applyCurrentFontToSwitchButton();
-        Hint.show(this, "已删除「" + item.displayName + "」");
-    }
-
-    /**
-     * 处理字体卡片点击：已下载/内置直接切换；未下载在线字体触发下载并显示进度
-     */
-    private void onFontCardClick(FontCardItem item, View card, LinearLayout container) {
-        boolean downloaded = !item.isBackend || downloadedFonts.contains(item.cssName);
-        if (item.isBackend && !downloaded) {
-            if (downloadingFonts.contains(item.cssName)) return; // 已在下载中
-            downloadingFonts.add(item.cssName);
-
-            // 切换到下载进度 UI
-            TextView tvName = card.findViewWithTag("font_name");
-            TextView tvProgress = card.findViewWithTag("font_progress_text");
-            android.widget.ProgressBar pb = card.findViewWithTag("font_progress_bar");
-            if (tvName != null) tvName.setAlpha(0.6f);
-            if (tvProgress != null) {
-                tvProgress.setVisibility(View.VISIBLE);
-                tvProgress.setText("0%");
-            }
-            if (pb != null) {
-                pb.setVisibility(View.VISIBLE);
-                pb.setProgress(0);
-            }
-
-            downloadFontFromUrl(item.backendFont.getId(), item.cssName, item.displayName,
-                    card, container);
-            return;
-        }
-
-        currentFontFamily = item.cssName;
-        currentFontDisplay = item.displayName;
-        applyFontFamilyToWebView();
-        saveReadingPreferences();
-        rebuildFontList(container);
-        applyCurrentFontToSwitchButton();
-    }
-
-    /**
-     * 计算当前字体对应的 Typeface（用于「切换字体」按钮文字预览）
-     * 默认字体 / 系统字体 → 系统默认样式；在线字体 → 已下载到本地的字体文件
-     */
-    private android.graphics.Typeface currentFontTypeface() {
-        // 默认字体 / 系统字体 用系统默认样式；在线字体用下载到本地的字体文件预览
-        if (!FONT_SYSTEM_CSS.equals(currentFontFamily) && !FONT_DEFAULT_CSS.equals(currentFontFamily)) {
-            if (downloadedFonts.contains(currentFontFamily)) {
-                java.io.File f = new java.io.File(getFilesDir(), "fonts/" + currentFontFamily + ".ttf");
-                if (f.exists()) {
-                    try {
-                        return android.graphics.Typeface.createFromFile(f);
-                    } catch (Exception ignored) {
-                        // 回退到默认
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 计算当前字体的展示名称（用于「切换字体」按钮文字）
-     * 默认/系统字体用固定文案；在线字体从后端字体列表中取 displayName
-     */
-    private String currentFontDisplayName() {
-        if (FONT_SYSTEM_CSS.equals(currentFontFamily)) return "系统字体";
-        if (FONT_DEFAULT_CSS.equals(currentFontFamily)) return "默认字体";
-        if (currentFontDisplay != null && !currentFontDisplay.isEmpty()
-                && !"默认字体".equals(currentFontDisplay) && !"系统字体".equals(currentFontDisplay)) {
-            return currentFontDisplay;
-        }
-        for (com.example.myapplication.bean.FontItem font : backendFonts) {
-            if (font.getCssName().equals(currentFontFamily)) {
-                return font.getName();
-            }
-        }
-        return currentFontFamily;
-    }
-
-    /**
-     * 更新「切换字体」按钮：文字显示当前字体名 + 字体跟随当前字体样式
-     */
-    private void updateSwitchFontButton(TextView tv) {
-        if (tv == null) return;
-        tv.setText(currentFontDisplayName() + " >");
-        tv.setTypeface(currentFontTypeface());
-    }
-
-    /**
-     * 让「切换字体 >」按钮的文字与字体跟随当前选中的字体
-     * 仅在阅读设置弹窗显示时生效
-     */
-    private void applyCurrentFontToSwitchButton() {
-        if (settingsPopupWindow == null || !settingsPopupWindow.isShowing()) return;
-        TextView tv = settingsPopupWindow.getContentView().findViewById(R.id.tv_switch_font);
-        updateSwitchFontButton(tv);
-    }
-
-    /**
-     * 构建 3 列网格中的单个字体卡片
-     */
-    @SuppressLint("SetTextI18n")
-    private View buildFontCard(FontCardItem item, float density, int cardHeight, boolean downloaded) {
-        boolean isCurrent = item.cssName.equals(currentFontFamily);
-        boolean isDownloading = item.isBackend && !downloaded && downloadingFonts.contains(item.cssName);
-
-        // 已下载的在线字体：用字体文件本身预览字体名
-        android.graphics.Typeface preview = null;
-        if (item.isBackend && downloaded) {
-            java.io.File f = new java.io.File(getFilesDir(), "fonts/" + item.cssName + ".ttf");
-            if (f.exists()) {
-                try {
-                    preview = android.graphics.Typeface.createFromFile(f);
-                } catch (Exception ignored) {
-                    preview = null;
-                }
-            }
-        }
-
-        // 卡片配色跟随「当前阅读调色板」，而非写死日/夜两套值：
-        // 这样更换阅读背景/夜间后，卡片与字体弹窗背景同色系，永不脱节、始终协调。
-        // 选中态用 sAccent（默认墨韵主题即朱印红）表达；描边进一步弱化（1dp + 向底色混 50%）以显高级。
-        boolean isDark = sIsDark;
-        int chrome  = sChrome1;            // 字体弹窗主底，卡片与之同色系
-        int textPri = sText1;              // 卡片主文字（随主题取深/浅）
-        int accent  = sAccent;             // 当前主题强调色（朱印红系）
-        // 普通卡片：在弹窗底色上做「顶受光、底背光」的细微明度偏移，浮出层次
-        int cardTop = mixColors(chrome, 0xFFFFFF, isDark ? 0.05f : 0.07f);
-        int cardMid = chrome;
-        int cardBot = mixColors(chrome, 0x000000, isDark ? 0.06f : 0.04f);
-        int strokeN = mixColors(chrome, 0x000000, isDark ? 0.18f : 0.12f);
-        // 选中卡片：底色向强调色轻微晕染（克制、不突兀）；描边用弱化后的强调色（宽度仅 1dp）
-        int washTop = mixColors(chrome, accent, isDark ? 0.14f : 0.10f);
-        int washMid = mixColors(chrome, accent, isDark ? 0.10f : 0.07f);
-        int washBot = mixColors(chrome, accent, isDark ? 0.07f : 0.05f);
-        int selStroke = mixColors(accent, chrome, 0.50f);
-
-        // 卡片容器
-        android.widget.FrameLayout card = new android.widget.FrameLayout(this);
-        int radius = (int) (12 * density);
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        bg.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM);
-        if (isCurrent) {
-            bg.setColors(new int[]{ washTop, washMid, washBot });
-            bg.setStroke((int) (1 * density), selStroke);
-        } else {
-            bg.setColors(new int[]{ cardTop, cardMid, cardBot });
-            bg.setStroke((int) (1 * density), strokeN);
-        }
-        bg.setCornerRadius(radius);
-        card.setBackground(bg);
-        // ✅ 字体卡片是「可选项 + 选中态」的功能性组件：底色必须表达自身状态，
-        // 不能被浮窗重着色（否则白色底色会被映射成阅读器派生底色，切换字体重建卡片时
-        // 整片卡片颜色跳变，且选中/未选中的区分消失；深色背景下卡片文字还会被改成白字而不可见）。
-        card.setTag(R.id.tag_keep_own_color, true);
-        card.setClickable(true);
-        card.setFocusable(true);
-        card.setForeground(getRippleOrNull());
-
-        // 字体名（居中）
-        TextView tvName = new TextView(this);
-        tvName.setTag("font_name");
-        tvName.setText(item.displayName);
-        tvName.setTextSize(16);
-        tvName.setTextColor(isCurrent ? accent : textPri);
-        tvName.setGravity(android.view.Gravity.CENTER);
-        if (preview != null) tvName.setTypeface(preview);
-        if (isDownloading) tvName.setAlpha(0.6f);
-        android.widget.FrameLayout.LayoutParams nameLp = new android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                android.view.Gravity.CENTER);
-        tvName.setLayoutParams(nameLp);
-        card.addView(tvName);
-
-        // 下载进度：百分比文字 + 水平进度条（未下载时默认隐藏，点击后显示）
-        TextView tvProgress = new TextView(this);
-        tvProgress.setTag("font_progress_text");
-        tvProgress.setText("0%");
-        tvProgress.setTextSize(10);
-        tvProgress.setTextColor(accent);
-        tvProgress.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
-        android.widget.FrameLayout.LayoutParams pctLp = new android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        pctLp.bottomMargin = (int) (10 * density);
-        tvProgress.setLayoutParams(pctLp);
-        card.addView(tvProgress);
-
-        android.widget.ProgressBar pb = new android.widget.ProgressBar(this, null,
-                android.R.attr.progressBarStyleHorizontal);
-        pb.setTag("font_progress_bar");
-        pb.setIndeterminate(false);
-        pb.setProgressDrawable(getResources().getDrawable(android.R.drawable.progress_horizontal, getTheme()));
-        pb.getProgressDrawable().mutate().setColorFilter(accent, android.graphics.PorterDuff.Mode.SRC_IN);
-        pb.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
-        pb.setProgress(0);
-        pb.setMax(100);
-        int pbWidth = (int) (cardHeight * 1.2f);
-        android.widget.FrameLayout.LayoutParams pbLp = new android.widget.FrameLayout.LayoutParams(
-                pbWidth, (int) (3 * density),
-                android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        pbLp.bottomMargin = (int) (5 * density);
-        pb.setLayoutParams(pbLp);
-        card.addView(pb);
-
-        // 立体感：悬浮阴影（近淡远深；选中态用强调色投影，更突出「抬起」）
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            card.setOutlineSpotShadowColor(isCurrent ? accent : mixColors(chrome, 0x000000, 0.20f));
-        }
-        card.setElevation(isCurrent ? 8f * density : 3f * density);
-
-        return card;
-    }
-
-    /**
-     * 获取 Android 波纹前景（如可用），否则返回 null
-     */
-    private android.graphics.drawable.Drawable getRippleOrNull() {
-        android.util.TypedValue typedVal = new android.util.TypedValue();
-        if (getTheme().resolveAttribute(android.R.attr.selectableItemBackground, typedVal, true)) {
-            try {
-                return getResources().getDrawable(typedVal.resourceId, getTheme());
-            } catch (Exception e) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 刷新字体选择弹窗 — 重建整个列表以保证状态一致
-     */
-    private void refreshFontSelection(LinearLayout container) {
-        rebuildFontList(container);
-    }
-
-    /**
-     * 构建/重建字体列表：按图中 3 列网格卡片样式
-     */
-    private void rebuildFontList(LinearLayout container) {
-        container.removeAllViews();
-        float density = getResources().getDisplayMetrics().density;
-
-        // 收集全部卡片数据：系统字体 + 默认字体 + 在线字体
-        java.util.List<FontCardItem> items = new java.util.ArrayList<>();
-        items.add(new FontCardItem("系统字体", FONT_SYSTEM_CSS, false, null));
-        items.add(new FontCardItem("默认字体", FONT_DEFAULT_CSS, false, null));
-        for (com.example.myapplication.bean.FontItem font : backendFonts) {
-            items.add(new FontCardItem(font.getName(), font.getCssName(), true, font));
-        }
-
-        if (items.size() == 2 && backendFonts.isEmpty()) {
-            // 在线字体尚未加载：先显示 loading，同时拉取列表
-            TextView tvLoading = new TextView(this);
-            tvLoading.setText("加载中...");
-            tvLoading.setTextSize(14);
-            tvLoading.setTextColor(Color.parseColor("#8E8E93"));
-            tvLoading.setPadding((int)(12 * density), (int)(16 * density), 0, (int)(16 * density));
-            tvLoading.setTag("tv_loading");
-            container.addView(tvLoading);
-            fetchFontsFromBackend(container);
-            return;
-        }
-
-        final int cols = 3;
-        int margin = (int) (6 * density);
-        int cardHeight = (int) (46 * density);
-
-        LinearLayout currentRow = null;
-        for (int i = 0; i < items.size(); i++) {
-            if (i % cols == 0) {
-                currentRow = new LinearLayout(this);
-                currentRow.setOrientation(LinearLayout.HORIZONTAL);
-                currentRow.setLayoutParams(new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-                container.addView(currentRow);
-            }
-            FontCardItem item = items.get(i);
-            View card = buildFontCard(item, density, cardHeight, item.isBackend && downloadedFonts.contains(item.cssName));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, cardHeight, 1);
-            lp.setMargins(margin, margin, margin, margin);
-            card.setLayoutParams(lp);
-            currentRow.addView(card);
-
-            // 点击切换 / 下载
-            card.setOnClickListener(v -> onFontCardClick(item, card, container));
-
-            // 已下载的在线字体可长按删除
-            if (item.isBackend && downloadedFonts.contains(item.cssName)) {
-                card.setOnLongClickListener(v -> {
-                    showDeleteFontDialog(item, container);
-                    return true;
-                });
-            }
-        }
-
-        // 补齐最后一行的空白占位，保持网格对齐
-        int remainder = items.size() % cols;
-        if (currentRow != null && remainder != 0) {
-            for (int i = 0; i < cols - remainder; i++) {
-                View spacer = new View(this);
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, cardHeight, 1);
-                lp.setMargins(margin, margin, margin, margin);
-                spacer.setLayoutParams(lp);
-                currentRow.addView(spacer);
-            }
-        }
-    }
-
-    /**
-     * 从 URL 下载字体文件到内部存储（在卡片内显示下载进度）
-     */
-    private void downloadFontFromUrl(long fontId, String cssName, String displayName,
-                                     View card, LinearLayout container) {
-        // 通过字体 id 走后端流式下载接口，避免 URL 中出现中文文件名导致下载失败（400/500）
-        final String fullUrl = RetrofitClient.getFullImageUrl("/api/fonts/file/" + fontId);
-        new Thread(() -> {
-            try {
-                java.io.File fontsDir = new java.io.File(getFilesDir(), "fonts");
-                if (!fontsDir.exists()) fontsDir.mkdirs();
-                java.io.File outFile = new java.io.File(fontsDir, cssName + ".ttf");
-
-                // 获取 token 并添加到请求头（修复401错误）
-                SharedPreferences sp = getSharedPreferences("user_info", MODE_PRIVATE);
-                String token = sp.getString("token", "");
-                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient();
-                okhttp3.Request request = new okhttp3.Request.Builder()
-                        .url(fullUrl)
-                        .header("Authorization", "Bearer " + token)
-                        .build();
-                okhttp3.Response response = client.newCall(request).execute();
-                if (!response.isSuccessful() || response.body() == null) {
-                    throw new java.io.IOException("下载失败: " + response.code());
-                }
-                long total = response.body().contentLength();
-                java.io.InputStream is = response.body().byteStream();
-                java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile);
-
-                byte[] buf = new byte[8192];
-                int len;
-                long downloadedBytes = 0;
-                while ((len = is.read(buf)) != -1) {
-                    fos.write(buf, 0, len);
-                    downloadedBytes += len;
-                    if (total > 0 && card != null) {
-                        final int pct = (int) (downloadedBytes * 100 / total);
-                        runOnUiThread(() -> updateFontCardProgress(card, pct));
-                    }
-                }
-                fos.close();
-                is.close();
-
-                runOnUiThread(() -> {
-                    downloadingFonts.remove(cssName);
-                    downloadedFonts.add(cssName);
-                    Hint.show(this, displayName + " 下载完成");
-                    // 自动切换到新下载的字体
-                    currentFontFamily = cssName;
-                    currentFontDisplay = displayName;
-                    applyFontFamilyToWebView();
-                    saveReadingPreferences();
-                    refreshFontSelection(container);
-                    applyCurrentFontToSwitchButton();
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    downloadingFonts.remove(cssName);
-                    Hint.show(this, "下载失败：" + e.getMessage());
-                    refreshFontSelection(container);
-                });
-            }
-        }).start();
-    }
-
-    /**
-     * 更新卡片下载进度 UI
-     */
-    private void updateFontCardProgress(View card, int pct) {
-        TextView tvProgress = card.findViewWithTag("font_progress_text");
-        android.widget.ProgressBar pb = card.findViewWithTag("font_progress_bar");
-        if (tvProgress != null) tvProgress.setText(pct + "%");
-        if (pb != null) pb.setProgress(pct);
-    }
-
-    /**
-     * 显示更多设置弹窗（页眉页脚等）
-     */
-    @SuppressLint("InflateParams")
-    private void showMoreSettingsDialog() {
-        View popupView = LayoutInflater.from(this).inflate(R.layout.popup_more_settings, null);
-
-        SwitchCompat switchHeaderFooter = popupView.findViewById(R.id.switch_header_footer);
-        switchHeaderFooter.setChecked(showHeaderFooter);
-
-        LinearLayout layoutHeaderFooterSize = popupView.findViewById(R.id.layout_header_footer_size);
-        layoutHeaderFooterSize.setAlpha(showHeaderFooter ? 1.0f : 0.4f);
-        layoutHeaderFooterSize.setEnabled(showHeaderFooter);
-
-        // 电量时间开关（次级设置，跟随页眉页脚）
-        LinearLayout layoutBatteryTime = popupView.findViewById(R.id.layout_battery_time);
-        SwitchCompat switchBatteryTime = popupView.findViewById(R.id.switch_battery_time);
-        switchBatteryTime.setChecked(showBatteryTime);
-        layoutBatteryTime.setAlpha(showHeaderFooter ? 1.0f : 0.4f);
-        layoutBatteryTime.setEnabled(showHeaderFooter);
-
-        switchHeaderFooter.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            showHeaderFooter = isChecked;
-            layoutHeaderFooterSize.setAlpha(isChecked ? 1.0f : 0.4f);
-            layoutHeaderFooterSize.setEnabled(isChecked);
-            layoutBatteryTime.setAlpha(isChecked ? 1.0f : 0.4f);
-            layoutBatteryTime.setEnabled(isChecked);
-            // 调用 JavaScript 接口更新页眉页脚显示
-            webView.evaluateJavascript("setShowHeaderFooter(" + isChecked + ")", null);
-            if (!isChecked) {
-                webView.evaluateJavascript("setShowBatteryTime(false)", null);
-                timeUpdateHandler.removeCallbacks(timeUpdateRunnable);
-            } else if (showBatteryTime) {
-                webView.evaluateJavascript("setShowBatteryTime(true)", null);
-                updateBatteryAndTime();
-                timeUpdateHandler.removeCallbacks(timeUpdateRunnable);
-                timeUpdateHandler.postDelayed(timeUpdateRunnable, 60000);
-            }
-            saveReadingPreferences();
-        });
-
-        switchBatteryTime.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            showBatteryTime = isChecked;
-            webView.evaluateJavascript("setShowBatteryTime(" + isChecked + ")", null);
-            if (isChecked) {
-                updateBatteryAndTime();
-                timeUpdateHandler.removeCallbacks(timeUpdateRunnable);
-                timeUpdateHandler.postDelayed(timeUpdateRunnable, 60000);
-            } else {
-                timeUpdateHandler.removeCallbacks(timeUpdateRunnable);
-            }
-            saveReadingPreferences();
-        });
-
-        layoutBatteryTime.setOnClickListener(v -> switchBatteryTime.setChecked(!switchBatteryTime.isChecked()));
-
-        // 音量键翻页开关
-        SwitchCompat switchVolumeKeyPage = popupView.findViewById(R.id.switch_volume_key_page);
-        switchVolumeKeyPage.setChecked(volumeKeyPageTurn);
-        switchVolumeKeyPage.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            volumeKeyPageTurn = isChecked;
-            saveReadingPreferences();
-        });
-
-        // 滑动翻页开关
-        SwitchCompat switchSwipePage = popupView.findViewById(R.id.switch_swipe_page);
-        switchSwipePage.setChecked(swipePageTurn);
-        switchSwipePage.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            swipePageTurn = isChecked;
-            // 同步给前端：关闭后 reader.html 不再启用跟手拖拽
-            if (isWebViewReady) webView.evaluateJavascript("setSwipeEnabled(" + swipePageTurn + ")", null);
-            saveReadingPreferences();
-        });
-
-        // ===== 屏幕亮屏时间（跟随系统 / 1分钟 / 5分钟 / 常亮）=====
-        // 复用自动翻页速度同款胶囊选中高亮（ios_blue / 灰底）
-        TextView tvScreenSystem = popupView.findViewById(R.id.tv_screen_system);
-        TextView tvScreen1Min = popupView.findViewById(R.id.tv_screen_1min);
-        TextView tvScreen5Min = popupView.findViewById(R.id.tv_screen_5min);
-        TextView tvScreenAlways = popupView.findViewById(R.id.tv_screen_always);
-        final TextView[] screenViews = {tvScreenSystem, tvScreen1Min, tvScreen5Min, tvScreenAlways};
-        final long[] screenValues = {0L, 60_000L, 300_000L, -1L};
-        int screenSel = 0;
-        for (int i = 0; i < screenValues.length; i++) {
-            if (screenValues[i] == screenOnTimeoutMs) { screenSel = i; break; }
-        }
-        final int[] screenSelRef = {screenSel};
-        updateAutoSpeedUI(screenViews, screenSelRef[0]);
-        for (int i = 0; i < screenViews.length; i++) {
-            final int idx = i;
-            screenViews[i].setOnClickListener(v -> {
-                screenSelRef[0] = idx;
-                screenOnTimeoutMs = screenValues[idx];
-                updateAutoSpeedUI(screenViews, idx);
-                applyScreenKeepAlive();
-                saveReadingPreferences();
-                if (idx == 0) {
-                    Hint.show(ReadActivity.this, "亮屏：跟随系统");
-                } else if (idx == 3) {
-                    Hint.show(ReadActivity.this, "阅读时屏幕常亮");
-                } else {
-                    Hint.show(ReadActivity.this, "阅读亮屏：" + (screenValues[idx] / 60000) + " 分钟（无操作后熄屏）");
-                }
-            });
-        }
-
-        // ===== 自动翻页速度（慢10s / 中5s / 快3s）=====
-        TextView tvAutoSlow = popupView.findViewById(R.id.tv_auto_slow);
-        TextView tvAutoNormal = popupView.findViewById(R.id.tv_auto_normal);
-        TextView tvAutoFast = popupView.findViewById(R.id.tv_auto_fast);
-        final TextView[] speedViews = {tvAutoSlow, tvAutoNormal, tvAutoFast};
-        final int[] speedValues = {10000, 5000, 3000};
-        // 当前选中的下标
-        int selIdx = 1;
-        for (int i = 0; i < speedValues.length; i++) {
-            if (speedValues[i] == autoPageInterval) { selIdx = i; break; }
-        }
-        final int[] selRef = {selIdx};
-        updateAutoSpeedUI(speedViews, selRef[0]);
-        for (int i = 0; i < speedViews.length; i++) {
-            final int idx = i;
-            speedViews[i].setOnClickListener(v -> {
-                selRef[0] = idx;
-                autoPageInterval = speedValues[idx];
-                updateAutoSpeedUI(speedViews, idx);
-                saveReadingPreferences();
-                // 若正在自动翻页，立即以新间隔重启
-                if (autoPageEnabled) {
-                    stopAutoPage();
-                    if (!autoPageSuspended) startAutoPage();
-                }
-                Hint.show(ReadActivity.this, "翻页间隔：" + (autoPageInterval / 1000) + " 秒");
-            });
-        }
-
-        TextView tvHeaderFooterMinus = popupView.findViewById(R.id.tv_header_footer_minus);
-        TextView tvHeaderFooterPlus = popupView.findViewById(R.id.tv_header_footer_plus);
-        TextView tvHeaderFooterSizeDisplay = popupView.findViewById(R.id.tv_header_footer_size_display);
-
-        tvHeaderFooterSizeDisplay.setText(String.valueOf((int) headerFooterFontSize));
-
-        tvHeaderFooterMinus.setOnClickListener(v -> {
-            if (headerFooterFontSize > 8) { // 最小值改为8
-                headerFooterFontSize -= 1;
-                tvHeaderFooterSizeDisplay.setText(String.valueOf((int) headerFooterFontSize));
-                // 调用 JavaScript 接口更新页眉页脚字体大小
-                webView.evaluateJavascript("setHeaderFooterFontSize(" + (int)headerFooterFontSize + ")", null);
-                saveReadingPreferences();
-            }
-        });
-
-        tvHeaderFooterPlus.setOnClickListener(v -> {
-            if (headerFooterFontSize < 24) { // 最大值改为24
-                headerFooterFontSize += 1;
-                tvHeaderFooterSizeDisplay.setText(String.valueOf((int) headerFooterFontSize));
-                // 调用 JavaScript 接口更新页眉页脚字体大小
-                webView.evaluateJavascript("setHeaderFooterFontSize(" + (int)headerFooterFontSize + ")", null);
-                saveReadingPreferences();
-            }
-        });
-
-        popupView.findViewById(R.id.tv_more_settings_done).setOnClickListener(v -> {
-            SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
-            if (h != null) h.dismissAnimated();
-            else if (moreSettingsPopupWindow != null) moreSettingsPopupWindow.dismiss();
-        });
-
-        themeViewTree(popupView);
-
-        // 弹窗高度固定为屏幕一半，内容过多时由内部 ScrollView 滚动
-        android.util.DisplayMetrics msDm = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(msDm);
-        int msPopupHeight = msDm.heightPixels / 2;
-
-        // 以全屏透明窗口 + 跟手下滑容器承载面板
-        moreSettingsPopupWindow = showSwipeDismissPopup(popupView, msPopupHeight, "more");
-        // ✅ 联动：弹窗滑出时设置面板收回；弹窗收起（完成按钮/跟手下滑任一路径 dismiss）时面板重新滑出
-        retractSettingsPanelForSub();
-        suspendAutoPage();
-
-        mainHandler.removeCallbacks(hideNavRunnable);
-        moreSettingsPopupWindow.setOnDismissListener(() -> {
-            resetAutoHideTimer();
-            resumeAutoPageIfSuspended();
-            restoreSettingsPanelFromSub();
-        });
-    }
+    /** 更新「切换字体」按钮文案与字体预览（实现见 ReadFontPopupController） */
+    private void updateSwitchFontButton(TextView tv) { fontPopupController.updateSwitchFontButton(tv); }
 
     private void applyFontSizeChange(TextView display) {
         display.setText(String.valueOf((int) currentFontSize));
@@ -6320,7 +4601,6 @@ public class ReadActivity extends BaseActivity {
         saveReadingPreferences();
     }
 
-    //更新跟随系统亮度图标的颜色
     private void updateFollowSystemIcon(ImageView iv, boolean follow) {
         iv.setColorFilter(follow ? Color.parseColor("#FF9500") : Color.parseColor("#8E8E93"));
     }
@@ -6349,331 +4629,40 @@ public class ReadActivity extends BaseActivity {
         window.setAttributes(lp);
     }
 
-    // ==================== 自动翻页 ====================
-    private long autoPageCycleStart = 0; // 当前翻页周期起点（用于页眉倒计时）
-    private final Runnable autoPageCountdownRunnable = new Runnable() {
-        @Override public void run() {
-            if (!autoPageEnabled || autoPageSuspended || !activityResumed) return;
-            if (autoPageInterval <= 0) return;
-            long elapsed = System.currentTimeMillis() - autoPageCycleStart;
-            long remaining = autoPageInterval - (elapsed % autoPageInterval);
-            int sec = (int) Math.ceil(remaining / 1000.0);
-            if (sec <= 0) sec = 1;
-            if (isWebViewReady) webView.evaluateJavascript("setAutoPageCountdown(" + sec + ")", null);
-            autoPageHandler.postDelayed(this, 1000);
-        }
-    };
+    // ==================== 自动翻页（实现见 ReadAutoPageController） ====================
+    void startAutoPage() { autoPageController.startAutoPage(); }
 
-    private void startAutoPage() {
-        if (!autoPageEnabled) return;
-        stopAutoPage();
-        autoPageCycleStart = System.currentTimeMillis();
-        autoPageRunnable = () -> {
-            // 仅在阅读器就绪且当前没有弹窗遮挡时翻页；翻页动画中 nextPage 会自动忽略
-            if (isWebViewReady && !isAnySettingsPopupShowing()) {
-                webView.evaluateJavascript("nextPage()", null);
-            }
-            // 翻页后开启新周期，让倒计时同步归位
-            autoPageCycleStart = System.currentTimeMillis();
-            autoPageHandler.postDelayed(autoPageRunnable, autoPageInterval);
-        };
-        autoPageHandler.postDelayed(autoPageRunnable, autoPageInterval);
-        // 启动页眉倒计时刷新（每秒一次）
-        autoPageHandler.removeCallbacks(autoPageCountdownRunnable);
-        autoPageHandler.postDelayed(autoPageCountdownRunnable, 1000);
+    void stopAutoPage() { autoPageController.stopAutoPage(); }
+
+    /** 用跟手下滑容器包住底部面板（实现见 SwipeDismissLayout.showPopup） */
+    PopupWindow showSwipeDismissPopup(View popupView, int panelHeight, String logTag) {
+        return SwipeDismissLayout.showPopup(this, popupView, panelHeight, logTag);
     }
 
-    /** 仅移除定时回调，保留 autoPageEnabled 状态（用于挂起/恢复）；同时隐藏页眉倒计时 */
-    private void stopAutoPage() {
-        if (autoPageRunnable != null) autoPageHandler.removeCallbacks(autoPageRunnable);
-        autoPageHandler.removeCallbacks(autoPageCountdownRunnable);
-        if (isWebViewReady) webView.evaluateJavascript("setAutoPageCountdown(0)", null);
-    }
+    void suspendAutoPage() { autoPageController.suspendAutoPage(); }
 
-    /**
-     * 跟手下滑关闭容器：作为 PopupWindow 的 contentView（全屏透明），内部承载底部面板。
-     * <p>之所以用「自定义 ViewGroup + onInterceptTouchEvent」而不是 OnTouchListener：
-     * 面板里有 ViewPager2 / RecyclerView / 按钮，它们会消费 ACTION_DOWN，挂在父布局上的
-     * OnTouchListener 根本收不到后续 MOVE；而 onInterceptTouchEvent 发生在子 View 之前，
-     * 能正确抢下手势。同时全屏容器保证面板下移时不会被 PopupWindow 的半屏窗口边界裁掉。
-     */
-    private static class SwipeDismissLayout extends FrameLayout {
-        private View panel;
-        private View retractView;    // 收回动画的作用对象（被容器裁剪的面板本体）
-        private View scrollable;
-        private Runnable dismissAction;
-        private float startRawX, startRawY;
-        private boolean dragging;
-        private boolean maybeDrag;
-        private boolean outsideDown;
-        private VelocityTracker vt;
-        private final float slop;
-        private final float threshold;
+    void resumeAutoPageIfSuspended() { autoPageController.resumeAutoPageIfSuspended(); }
 
-        SwipeDismissLayout(Context c) {
-            super(c);
-            float d = c.getResources().getDisplayMetrics().density;
-            slop = 8 * d;
-            threshold = 90 * d;
-            setClickable(true);          // 保证空白区域的 DOWN 也能进入 onTouchEvent
-            setClipChildren(false);      // 面板下移时不被容器裁掉
-        }
+    void syncAutoPageSwitchUI() { autoPageController.syncAutoPageSwitchUI(); }
 
-        void setPanel(View v) { panel = v; }
-        void setRetractView(View v) { retractView = v; }
-        void setScrollable(View v) { scrollable = v; }
-        void setDismissAction(Runnable r) { dismissAction = r; }
-
-        /** 可滚动内容是否已在顶部（只有置顶时才允许下拉关闭） */
-        private boolean canDrag() {
-            if (scrollable == null) return true;
-            if (scrollable instanceof ScrollView) return ((ScrollView) scrollable).getScrollY() <= 0;
-            if (scrollable instanceof AbsListView) {
-                AbsListView lv = (AbsListView) scrollable;
-                return lv.getChildCount() == 0
-                        || (lv.getFirstVisiblePosition() == 0 && lv.getChildAt(0).getTop() >= 0);
-            }
-            if (scrollable instanceof RecyclerView) return !((RecyclerView) scrollable).canScrollVertically(-1);
-            return scrollable.getScrollY() <= 0;
-        }
-
-        /** 跟手关闭：外层容器（panel）继续向下滑出屏幕后关闭，全程可见 */
-        void dismissByDrag() {
-            animateOut(panel, 180);
-        }
-
-        /** 收回关闭：面板（retractView，被容器裁剪）收回到「目录/夜间/设置」行内后关闭 */
-        void dismissAnimated() {
-            animateOut(retractView != null ? retractView : panel, 200);
-        }
-
-        private void animateOut(View target, long duration) {
-            if (target == null) { if (dismissAction != null) dismissAction.run(); return; }
-            float from = target.getTranslationY();
-            float to = target.getHeight() > 0 ? target.getHeight() : from + 300f;
-            if (to <= from) to = from + 1f;
-            target.animate().cancel();
-            target.animate().translationY(to)
-                    .setDuration(duration)
-                    .setInterpolator(new android.view.animation.AccelerateInterpolator())
-                    .withEndAction(() -> {
-                        target.setTranslationY(0f);
-                        if (dismissAction != null) dismissAction.run();
-                    }).start();
-        }
-
-        /** 从任意子 View 向上找到承载它的 SwipeDismissLayout（用于关闭按钮触发带动画关闭） */
-        static SwipeDismissLayout findHost(View v) {
-            android.view.ViewParent p = v != null ? v.getParent() : null;
-            while (p != null) {
-                if (p instanceof SwipeDismissLayout) return (SwipeDismissLayout) p;
-                p = p.getParent();
-            }
-            return null;
-        }
-
-        /** 按下点是否落在面板上方（面板之外的空白区域） */
-        private boolean isOutside(MotionEvent ev) {
-            if (panel == null) return false;
-            int[] loc = new int[2];
-            panel.getLocationOnScreen(loc);
-            return ev.getRawY() < loc[1] - 1;
-        }
-
-        private boolean shouldStartDrag(MotionEvent ev) {
-            if (panel == null || outsideDown) return false;
-            float dy = ev.getRawY() - startRawY;
-            float adx = Math.abs(ev.getRawX() - startRawX);
-            return dy > slop && dy > adx && canDrag();
-        }
-
-        @Override
-        public boolean onInterceptTouchEvent(MotionEvent ev) {
-            if (panel == null) return false;
-            switch (ev.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    startRawX = ev.getRawX();
-                    startRawY = ev.getRawY();
-                    dragging = false;
-                    maybeDrag = true;
-                    outsideDown = isOutside(ev);
-                    obtainVt(ev);
-                    return false; // 先让子 View 正常处理 DOWN
-                case MotionEvent.ACTION_MOVE:
-                    if (maybeDrag && !dragging && shouldStartDrag(ev)) {
-                        dragging = true;   // 抢下手势，子 View 会收到 ACTION_CANCEL
-                    }
-                    return dragging;
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    return dragging;
-            }
-            return false;
-        }
-
-        @Override
-        public boolean onTouchEvent(MotionEvent ev) {
-            if (panel == null) return false;
-            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) obtainVt(ev);
-            else if (vt != null) vt.addMovement(ev);
-            switch (ev.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    startRawX = ev.getRawX();
-                    startRawY = ev.getRawY();
-                    dragging = false;
-                    maybeDrag = true;
-                    outsideDown = isOutside(ev);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    if (maybeDrag && !dragging && shouldStartDrag(ev)) dragging = true;
-                    if (dragging) {
-                        panel.setTranslationY(Math.max(0f, ev.getRawY() - startRawY));
-                        return true;
-                    }
-                    return outsideDown; // 面板外按下：保持消费，便于抬起时关闭
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL: {
-                    boolean up = ev.getActionMasked() == MotionEvent.ACTION_UP;
-                    if (dragging) {
-                        if (vt != null) vt.computeCurrentVelocity(1000);
-                        float yv = vt != null ? vt.getYVelocity() : 0f;
-                        float ty = panel.getTranslationY();
-                        if (ty > threshold || yv > 1200) {
-                            dismissByDrag();   // 跟手：外层容器继续下滑出屏幕
-                        } else {
-                            panel.animate().translationY(0f).setDuration(160).start();
-                        }
-                        dragging = false;
-                        maybeDrag = false;
-                        releaseVt();
-                        return true;
-                    }
-                    maybeDrag = false;
-                    releaseVt();
-                    if (outsideDown && up && Math.abs(ev.getRawY() - startRawY) < slop
-                            && Math.abs(ev.getRawX() - startRawX) < slop) {
-                        dismissAnimated();   // 点击面板外部关闭
-                        return true;
-                    }
-                    return false;
-                }
-            }
-            return false;
-        }
-
-        private void obtainVt(MotionEvent ev) {
-            if (vt == null) vt = VelocityTracker.obtain(); else vt.clear();
-            vt.addMovement(ev);
-        }
-
-        private void releaseVt() {
-            if (vt != null) { vt.recycle(); vt = null; }
-        }
-    }
-
-    /** 用跟手下滑容器包住底部面板，并以全屏透明窗口承载（保证下滑时不被窗口边界裁掉） */
-    private PopupWindow showSwipeDismissPopup(View popupView, int panelHeight, String logTag) {
-        // 其它浮窗保持原有呈现：面板直接贴屏幕底（不抬高、不做容器裁剪），
-        // 仅用全屏透明窗口承载，使跟手下拉时面板不会被窗口边界裁掉。
-        SwipeDismissLayout host = new SwipeDismissLayout(this);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                panelHeight > 0 ? panelHeight : ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.gravity = Gravity.BOTTOM;
-        popupView.setLayoutParams(lp);
-        host.addView(popupView);
-        host.setPanel(popupView);
-        View sc = popupView.findViewById(R.id.popup_scroll);
-        if (sc != null) host.setScrollable(sc);
-
-        PopupWindow popup = new PopupWindow(host,
-                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, true);
-        // ❌ 不能用整窗位移动画：slide_in_bottom 的 100% 是相对「窗口高度」，
-        // 窗口改成全屏后位移 = 整屏高，面板前一半路程都在屏幕外，看上去就是「从屏幕底部飞入」。
-        // 改为取消整窗动画，只对面板本身做入场位移（仅在其最终位置范围内滑出）。
-        popup.setAnimationStyle(0);
-        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        host.setDismissAction(() -> popup.dismiss());
-        popup.showAtLocation(findViewById(android.R.id.content), Gravity.BOTTOM, 0, 0);
-
-        // 入场：必须在首帧绘制「之前」把面板移到容器下沿之外。
-        // 用 post() 会在首帧绘制「之后」才执行，于是先按最终位置画出完整面板（一闪），
-        // 接着才被移到屏幕外（消失），再滑回来 —— 即「全部显现 → 消失 → 从底部滑出」。
-        // 故与设置面板一致改用 OnPreDrawListener：首帧绘制前完成位移。
-        popupView.setVisibility(View.INVISIBLE); // INVISIBLE 仍参与测量布局，仅不绘制，避免首帧闪现
-        host.getViewTreeObserver().addOnPreDrawListener(
-                new android.view.ViewTreeObserver.OnPreDrawListener() {
-                    @Override
-                    public boolean onPreDraw() {
-                        float h = popupView.getHeight() > 0 ? popupView.getHeight() : (float) panelHeight;
-                        if (h <= 0) return true; // 尚未测量完成，等下一帧
-                        popupView.getViewTreeObserver().removeOnPreDrawListener(this);
-                        popupView.setVisibility(View.VISIBLE);
-                        popupView.setTranslationY(h);
-                        popupView.animate().translationY(0f).setDuration(220)
-                                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
-                        return true;
-                    }
-                });
-        return popup;
-    }
-
-    /** 打开设置弹窗时挂起自动翻页，避免页面在面板背后继续翻动 */
-    private void suspendAutoPage() {
-        if (autoPageEnabled && autoPageRunnable != null) {
-            stopAutoPage();
-            autoPageSuspended = true;
-        }
-    }
-
-    /** 设置弹窗关闭后，若仍处于开启状态且 Activity 在前台则恢复自动翻页 */
-    private void resumeAutoPageIfSuspended() {
-        if (autoPageEnabled && autoPageSuspended && activityResumed) {
-            autoPageSuspended = false;
-            startAutoPage();
-        }
-    }
-
-    /** 是否有任意设置类弹窗正在显示（自动翻页应暂停） */
-    private boolean isAnySettingsPopupShowing() {
-        return (settingsPopupWindow != null && settingsPopupWindow.isShowing())
-                || (moreSettingsPopupWindow != null && moreSettingsPopupWindow.isShowing())
-                || (fontsPopupWindow != null && fontsPopupWindow.isShowing())
-                || (bgColorsPopupWindow != null && bgColorsPopupWindow.isShowing());
-    }
-
-    /** 书末自动关闭时，若设置弹窗正打开则同步开关 UI */
-    private void syncAutoPageSwitchUI() {
-        if (settingsPopupWindow != null && settingsPopupWindow.isShowing()) {
-            SwitchCompat sw = settingsPopupWindow.getContentView().findViewById(R.id.switch_auto_page);
-            if (sw != null) sw.setChecked(false);
-        }
-    }
-
-    /** 高亮当前选中的自动翻页速度按钮（蓝字为选中） */
-    private void updateAutoSpeedUI(TextView[] views, int idx) {
-        for (int i = 0; i < views.length; i++) {
-            views[i].setTextColor(i == idx ? getColor(R.color.ios_blue) : getColor(R.color.ios_text_secondary));
-        }
-    }
+    void updateAutoSpeedUI(TextView[] views, int idx) { autoPageController.updateAutoSpeedUI(views, idx); }
 
     // ==================== 缓存与本地书 ====================
     private void cacheChapterListOnly(long bookId, List<ChapterDto> list) {
         SharedPreferences sp = getSharedPreferences("chapter_list_" + bookId, MODE_PRIVATE);
         sp.edit().putInt("count", list.size()).apply();
-        // ✅ 修正：统一使用循环索引 i 缓存标题和ID，不再使用 sortOrder
+        // 修正：统一使用循环索引 i 缓存标题和ID，不再使用 sortOrder
         for (int i = 0; i < list.size(); i++) {
             ChapterDto dto = list.get(i);
             cacheChapterTitle(bookId, i, dto.getTitle());
-            // ✅ 新增：缓存章节ID
+            // 新增：缓存章节ID
             cacheChapterId(bookId, i, dto.getId());
-            // ✅ 新增：缓存分卷键，供断网时仍能还原分卷结构（旧缓存无此键则退回平铺）
+            // 新增：缓存分卷键，供断网时仍能还原分卷结构（旧缓存无此键则退回平铺）
             cacheChapterSortKey(bookId, i, dto.getSortKey());
         }
     }
     
-    // ✅ 新增：章节ID缓存方法
+    // 新增：章节ID缓存方法
     private void cacheChapterId(long bookId, int index, long chapterId) {
         getSharedPreferences("chapter_meta_" + bookId, MODE_PRIVATE)
             .edit().putLong("id_" + index, chapterId).apply();
@@ -6757,8 +4746,9 @@ public class ReadActivity extends BaseActivity {
     private void cacheChapterTitle(long bookId, int index, String title) {
         getSharedPreferences("chapter_meta_" + bookId, MODE_PRIVATE).edit().putString("title_" + index, title).apply();
     }
-    private void cacheChapterContent(long bookId, int index, String content) {
-        getSharedPreferences("chapter_content_" + bookId, MODE_PRIVATE).edit().putString("content_" + index, content).apply();
+    void cacheChapterContent(long bookId, int index, String content) {
+        getSharedPreferences("chapter_content_" + bookId, MODE_PRIVATE).edit().putString("content_"
+                + index, content).apply();
     }
     private String getChapterContentCache(long bookId, int index) {
         return getSharedPreferences("chapter_content_" + bookId, MODE_PRIVATE).getString("content_" + index, null);
@@ -6766,198 +4756,23 @@ public class ReadActivity extends BaseActivity {
     private String getChapterTitleCache(long bookId, int index) {
         return getSharedPreferences("chapter_meta_" + bookId, MODE_PRIVATE).getString("title_" + index, null);
     }
-    // ========== 服务器书章节预取（当前章前后各 CHAPTER_PREFETCH_RADIUS 章，由近及远） ==========
+    // ========== 服务器书章节预取与列表合并：实现见 ReadChapterPrefetchController（2026-10-02 拆出） ==========
 
-    /** 预取去重：在途章节不重复请求。 */
-    private final java.util.Set<String> serverPrefetchInFlight =
-            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
-    /** 预取失败冷却：同一章 60 秒内不重试（离线/弱网时避免无效轮询）。 */
-    private final java.util.concurrent.ConcurrentHashMap<String, Long> serverPrefetchFailAt =
-            new java.util.concurrent.ConcurrentHashMap<>();
-    /** 单线程串行预取：由近及远排队，不与正文加载抢并发。 */
-    private final java.util.concurrent.ExecutorService serverPrefetchExecutor =
-            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
-                Thread t = new Thread(r, "server-chapter-prefetch");
-                t.setDaemon(true);
-                return t;
-            });
+    private final ReadChapterPrefetchController chapterPrefetch = new ReadChapterPrefetchController(this);
 
-    /**
-     * 服务器书预取：以 center 为中心、由近及远把前后 CHAPTER_PREFETCH_RADIUS 章补齐到内存并落盘
-     * （chapter_content_<bookId> SP）。第二次打开本书时 restoreFullChapterListFromCache 直接命中
-     * 窗口内缓存正文，点击即看、翻章零等待。全程后台执行，不渲染、不覆盖真实内容。
-     */
     private void prefetchServerChaptersAround(int center) {
-        if (isExternalBook || isLocalBook) return;
-        final long bookId = (currentBook == null) ? 0 : currentBook.getId();
-        if (bookId <= 0 || chapterList.isEmpty()) return;
-        final int size = Math.min(chapterList.size(), chapterContents.size());
-        final long now = System.currentTimeMillis();
-        for (int d = 1; d <= CHAPTER_PREFETCH_RADIUS; d++) {
-            // 同距离先「下一章」后「上一章」（向后读是主路径）
-            tryPrefetchServerChapter(bookId, center + d, size, now);
-            tryPrefetchServerChapter(bookId, center - d, size, now);
-        }
+        chapterPrefetch.prefetchServerChaptersAround(center);
     }
-
-    private void tryPrefetchServerChapter(long bookId, int idx, int size, long now) {
-        if (idx < 0 || idx >= size) return;
-        long chapterId = chapterList.get(idx).getId();
-        if (chapterId <= 0) return;
-        if (!isChapterContentPending(chapterContents.get(idx))) return;   // 已有正文
-        final String key = bookId + ":" + idx;
-        if (!serverPrefetchInFlight.add(key)) return;                     // 在途
-        Long failAt = serverPrefetchFailAt.get(key);
-        if (failAt != null && now - failAt < 60_000L) {                   // 失败冷却中
-            serverPrefetchInFlight.remove(key);
-            return;
-        }
-        serverPrefetchExecutor.execute(() -> {
-            try {
-                retrofit2.Response<ApiResponse<com.example.myapplication.bean.Chapter>> resp =
-                        RetrofitClient.getApiService().getChapterContent(chapterId).execute();
-                if (resp.isSuccessful() && resp.body() != null && resp.body().isSuccess()
-                        && resp.body().getData() != null) {
-                    String raw = resp.body().getData().getContent();
-                    final String content = (raw == null || raw.trim().isEmpty() || raw.equals("\uFEFF"))
-                            ? "【本章节内容暂缺】" : raw;
-                    serverPrefetchFailAt.remove(key);
-                    runOnUiThread(() -> {
-                        // 守卫：期间用户可能已翻到该章触发按需拉取 / merge 回填——绝不覆盖真实内容
-                        if (idx < chapterContents.size() && isChapterContentPending(chapterContents.get(idx))) {
-                            chapterContents.set(idx, content);
-                            cacheChapterContent(bookId, idx, content);
-                        }
-                    });
-                } else {
-                    serverPrefetchFailAt.put(key, System.currentTimeMillis());
-                }
-            } catch (Throwable ignored) {
-                serverPrefetchFailAt.put(key, System.currentTimeMillis());
-            } finally {
-                serverPrefetchInFlight.remove(key);
-            }
-        });
-    }
-
-    /** mergeServerData 代数守卫：后台缓存回填只作用于自己那次 merge 产出的列表；
-     *  期间若又发生一次 merge（章节列表整体重建），旧回填快照直接作废。 */
-    private final java.util.concurrent.atomic.AtomicInteger mergeGeneration =
-            new java.util.concurrent.atomic.AtomicInteger();
 
     private void mergeServerData(List<ChapterDto> serverList) {
-        final int gen = mergeGeneration.incrementAndGet();
-        final long bid = safeBookId();
-        // ✅ 外站书不走 chapter_content_ SP 缓存（bookId=0 时 key 全都重名）；
-        //    仅服务器/本地书 bookId>0 才走 SP 缓存
-        final boolean contentCacheable = !isExternalBook && bid > 0;
-
-        android.util.Log.d("ReadActivity", "mergeServerData: BEFORE clear, currentChapterIndex=" + currentChapterIndex);
-
-        // ✅ 性能修复：重建前先把「当前章 ±1」的正文从旧 chapterContents 内存捕获下来
-        //    （零 IO），重建后原位放回。此前这里逐章 getChapterContentCache 把全部缓存
-        //    正文在主线程重读一遍（几千章 = 几千次查找 + 大字符串重建），进书后服务器
-        //    列表一到就瞬卡一下。
-        final int oldSize = chapterContents.size();
-        final int cur = currentChapterIndex;
-        // ✅ 性能修复：重建前先把「当前章 ±CHAPTER_PREFETCH_RADIUS」的正文从旧 chapterContents
-        //    内存捕获下来（零 IO），重建后原位放回。此前这里逐章 getChapterContentCache 把全部缓存
-        //    正文在主线程重读一遍（几千章 = 几千次查找 + 大字符串重建），进书后服务器
-        //    列表一到就瞬卡一下。
-        final String[] keep = new String[CHAPTER_PREFETCH_RADIUS * 2 + 1];
-        for (int k = -CHAPTER_PREFETCH_RADIUS; k <= CHAPTER_PREFETCH_RADIUS; k++) {
-            int oi = cur + k;
-            if (oi >= 0 && oi < oldSize) keep[k + CHAPTER_PREFETCH_RADIUS] = chapterContents.get(oi);
-        }
-
-        chapterList.clear();
-        chapterContents.clear();
-        for (int i = 0; i < serverList.size(); i++) {
-            ChapterDto dto = serverList.get(i);
-            Chapter ch = new Chapter();
-            // 统一使用循环索引 i，不再使用 sortOrder，避免前后端索引不一致
-            ch.setIndex(i);
-            ch.setId(dto.getId());
-            ch.setTitle(dto.getTitle());
-            // 保留分卷键：目录浮窗据此按「最新 chapterList」实时推导分卷，保证下标一致
-            ch.setSortKey(dto.getSortKey());
-            chapterList.add(ch);
-            // 一律先占位：当前章 ±1 由上面捕获的旧内容立即回填（保证恢复渲染/顺滑翻页），
-            // 其余章节的缓存正文由下方后台线程回填（离线也能翻到读过的章），
-            // 未缓存的章翻到时按需拉取（isChapterContentPending 空串=true）
-            chapterContents.add("");
-
-            // ✅ 新增：调试日志，检查章节ID
-            if (i < 5 || dto.getId() <= 0) {
-                android.util.Log.d("ReadActivity", "mergeServerData: index=" + i + ", id=" + dto.getId() + ", title=" + dto.getTitle());
-            }
-        }
-
-        // 当前章 ±CHAPTER_PREFETCH_RADIUS 原位回填（仅位置有效且旧内容是真实正文时才回填）
-        final int newSize = chapterContents.size();
-        if (contentCacheable && newSize > 0) {
-            for (int k = -CHAPTER_PREFETCH_RADIUS; k <= CHAPTER_PREFETCH_RADIUS; k++) {
-                int ni = cur + k;
-                String kept = keep[k + CHAPTER_PREFETCH_RADIUS];
-                if (ni >= 0 && ni < newSize && !isChapterContentPending(kept)) {
-                    chapterContents.set(ni, kept);
-                }
-            }
-        }
-
-        // ✅ 其余章节的缓存正文改为后台批量回填（主线程零 SP 读）：
-        //    1) 回填绝不覆盖真实内容——用户翻到某章触发按需拉取、网络正文先到时跳过该章；
-        //    2) 代数守卫——期间若又发生一次 merge，本次快照整体作废；
-        //    3) 一次性批量应用到 UI 线程，避免逐章 post。
-        if (contentCacheable && newSize > 0) {
-            final int snapshotGen = gen;
-            final long fBid = bid;
-            final List<int[]> backfillIdx = new ArrayList<>();
-            final List<String> backfillContent = new ArrayList<>();
-            new Thread(() -> {
-                try {
-                    SharedPreferences sp = getSharedPreferences("chapter_content_" + fBid, MODE_PRIVATE);
-                    for (int i = 0; i < newSize; i++) {
-                        if (Math.abs(i - cur) <= CHAPTER_PREFETCH_RADIUS) continue;   // 已同步回填过
-                        String c = sp.getString("content_" + i, null);
-                        if (c == null || c.isEmpty()) continue;
-                        backfillIdx.add(new int[]{i});
-                        backfillContent.add(c);
-                    }
-                    runOnUiThread(() -> {
-                        if (mergeGeneration.get() != snapshotGen) return;
-                        int limit = Math.min(newSize, chapterContents.size());
-                        for (int k = 0; k < backfillIdx.size(); k++) {
-                            int idx = backfillIdx.get(k)[0];
-                            if (idx >= limit) continue;
-                            if (!isChapterContentPending(chapterContents.get(idx))) continue;
-                            chapterContents.set(idx, backfillContent.get(k));
-                        }
-                        // ✅ merge 就绪后触发一轮预取：窗口内缺失的章由后台补齐并落盘
-                        prefetchServerChaptersAround(cur);
-                    });
-                } catch (Throwable ignored) {}
-            }, "merge-content-backfill").start();
-        }
-
-        android.util.Log.d("ReadActivity", "mergeServerData: AFTER rebuild, currentChapterIndex=" + currentChapterIndex);
-        
-        // ✅ 新增：统计无效ID的章节数量
-        int invalidIdCount = 0;
-        for (Chapter ch : chapterList) {
-            if (ch.getId() <= 0) {
-                invalidIdCount++;
-            }
-        }
-        if (invalidIdCount > 0) {
-            android.util.Log.w("ReadActivity", "Found " + invalidIdCount + " chapters with invalid ID (<=0) out of " + chapterList.size() + " total chapters");
-        }
+        chapterPrefetch.mergeServerData(serverList);
     }
     private void loadLocalBookChapters(long bookId, int targetChapter) {
         SharedPreferences sp = getSharedPreferences("local_books", MODE_PRIVATE);
         int count = sp.getInt("count", 0);
 
-        android.util.Log.d("ReadActivity", "loadLocalBookChapters: bookId=" + bookId + ", targetChapter=" + targetChapter + ", totalBooks=" + count);
+        android.util.Log.d("ReadActivity", "loadLocalBookChapters: bookId=" + bookId
+                + ", targetChapter=" + targetChapter + ", totalBooks=" + count);
 
         chapterList.clear();
         chapterContents.clear();
@@ -6985,7 +4800,7 @@ public class ReadActivity extends BaseActivity {
                     ch.setIndex(j);
                     ch.setTitle(sp.getString("chapter_title_" + i + "_" + j, "第" + (j + 1) + "章"));
                     chapterList.add(ch);
-                    // ✅ 只建章节列表，不在开书时全量读正文/HTML：
+                    // 只建章节列表，不在开书时全量读正文/HTML：
                     //    1800 章正文 + 内联图片的 HTML 常驻内存会撑爆堆（此前主线程 OOM 直接闪退）。
                     //    这里统一填等长占位，真正翻到该章时由 fetchChapterContent → reloadLocalChapterContent 按需读入。
                     chapterContents.add(LOCAL_CHAPTER_PLACEHOLDER);
@@ -7012,7 +4827,7 @@ public class ReadActivity extends BaseActivity {
                 ", first chapter content length: " +
                 (!chapterContents.isEmpty() && chapterContents.get(0) != null ? chapterContents.get(0).length() : 0));
 
-        // ✅ 关键修复：用 targetChapter 更新 currentChapterIndex，保证 onPageFinished 渲染到正确章节
+        // 关键修复：用 targetChapter 更新 currentChapterIndex，保证 onPageFinished 渲染到正确章节
         if (!chapterList.isEmpty() && targetChapter >= 0 && targetChapter < chapterList.size()) {
             currentChapterIndex = targetChapter;
         }
@@ -7083,7 +4898,8 @@ public class ReadActivity extends BaseActivity {
             // 业务上以分钟计，接口以秒为准 → 传入前换算
             ReadTimeRequest request = new ReadTimeRequest(userId, bid, minutes * 60);
             RetrofitClient.getApiService().saveReadTime(request).enqueue(new Callback<ApiResponse<Void>>() {
-                @Override public void onResponse(@NonNull Call<ApiResponse<Void>> call, @NonNull Response<ApiResponse<Void>> response) {}
+                @Override public void onResponse(@NonNull Call<ApiResponse<Void>> call,
+                        @NonNull Response<ApiResponse<Void>> response) {}
                 @Override public void onFailure(@NonNull Call<ApiResponse<Void>> call, @NonNull Throwable t) {}
             });
         }
@@ -7113,7 +4929,7 @@ public class ReadActivity extends BaseActivity {
     // ==================== 生命周期 ====================
 
     /**
-     * ✅ 栈内复用入口：书籍详情页启动阅读器时带 FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_SINGLE_TOP，
+     * 栈内复用入口：书籍详情页启动阅读器时带 FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_SINGLE_TOP，
      * 当返回栈里已存在同书阅读器实例（典型路径：阅读器→书籍详情→目录选章）时，不再叠出第二个
      * ReadActivity，而是把新 Intent 投递给栈内实例。
      * 背景：复用池里只有一个共享 WebView，第二个阅读器实例 initView 时会把它从旧实例视图树上抢走，
@@ -7221,10 +5037,10 @@ public class ReadActivity extends BaseActivity {
     @Override protected void onPause() {
         super.onPause();
         activityResumed = false;
-        // ✅ 离开前台时清空 sActiveInstance：防止 paused 的 ReadActivity 仍被 themeViewTree
+        // 离开前台时清空活跃实例：防止 paused 的 ReadActivity 仍被 themeViewTree
         // 误判为「前台活跃」，导致迟到的回调（比如某些 popup post、RecyclerView bind 等）把
         // 当前 Activity（比如 BookDetailActivity / 书城 / 书架）的 view 染色。
-        if (sActiveInstance == this) sActiveInstance = null;
+        clearActiveInstance(this);
         // 离开阅读器时暂停自动翻页，回到前台再恢复
         suspendAutoPage();
         if (readStartTime > 0) {
@@ -7246,7 +5062,7 @@ public class ReadActivity extends BaseActivity {
         super.onResume();
         activityResumed = true;
         // 标记本实例为前台活跃，供 themeViewTree 宿主判定使用
-        sActiveInstance = this;
+        noteActiveInstance(this);
         readStartTime = System.currentTimeMillis();
         mainHandler.postDelayed(hideNavRunnable, 3000);
         // 回到前台重新应用亮屏策略（定时模式重新计时）
@@ -7263,9 +5079,9 @@ public class ReadActivity extends BaseActivity {
     private Thread.UncaughtExceptionHandler savedUncaughtHandler;
 
     @Override protected void onDestroy() {
-        // ✅ 清理亮屏计时回调（窗口销毁后触发无意义）
+        // 清理亮屏计时回调（窗口销毁后触发无意义）
         mainHandler.removeCallbacks(screenOffRunnable);
-        // ✅ 兜底：移除仍挂在复用 WebView 上的「布局就绪」监听（防止 observer 随 detach 失效后崩溃）
+        // 兜底：移除仍挂在复用 WebView 上的「布局就绪」监听（防止 observer 随 detach 失效后崩溃）
         if (layoutReadyListener != null) {
             try {
                 android.view.ViewTreeObserver obs = webView.getViewTreeObserver();
@@ -7273,7 +5089,7 @@ public class ReadActivity extends BaseActivity {
             } catch (Throwable ignored) {}
             layoutReadyListener = null;
         }
-        // ✅ 复用池：把 WebView 从本 Activity 视图树摘离并归还给池子（绝不 destroy），
+        // 复用池：把 WebView 从本 Activity 视图树摘离并归还给池子（绝不 destroy），
         //    下次进书直接复用，跳过「重建 WebView + 重载 reader.html」的冷启动。
         if (webView != null && webView.getParent() != null) {
             try { ((ViewGroup) webView.getParent()).removeView(webView); } catch (Throwable ignored) {}
@@ -7282,16 +5098,16 @@ public class ReadActivity extends BaseActivity {
         try {
             if (savedUncaughtHandler != null) Thread.currentThread().setUncaughtExceptionHandler(savedUncaughtHandler);
         } catch (Throwable ignored) {}
-        // ✅ 复用池：切断 JsBridge 对当前 Activity 的引用，避免已销毁 Activity 继续接收前端回调
+        // 复用池：切断 JsBridge 对当前 Activity 的引用，避免已销毁 Activity 继续接收前端回调
         try { JsBridge.detach(this); } catch (Throwable ignored) {}
         super.onDestroy();
         stopAutoPage();
         mainHandler.removeCallbacks(hideNavRunnable);
         timeUpdateHandler.removeCallbacks(timeUpdateRunnable);
         dismissPopups();
-        // ✅ 排版缓存写入池：退出时优雅关闭（已提交任务会跑完）
-        if (layoutExecutor != null) {
-            try { layoutExecutor.shutdown(); } catch (Throwable ignored) {}
+        // 排版缓存：退出时优雅关闭写入池（已提交任务会跑完）
+        if (layoutCache != null) {
+            layoutCache.shutdown();
         }
     }
     @SuppressWarnings("deprecation")
@@ -7327,7 +5143,7 @@ public class ReadActivity extends BaseActivity {
         public void setSortKey(String sortKey) { this.sortKey = sortKey; }
     }
 
-    private static class PopupPagerAdapter extends FragmentStateAdapter {
+    static class PopupPagerAdapter extends FragmentStateAdapter {
         private final List<Fragment> fragments;
         PopupPagerAdapter(@NonNull FragmentActivity activity, List<Fragment> fragments) {
             super(activity);

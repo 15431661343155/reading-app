@@ -49,10 +49,10 @@ import retrofit2.Response;
  *
  * <p>两个模式共用同一份书籍列表（顶部只有搜索框一行 + 右侧分类图标）：
  * <ul>
- *   <li>📚 <b>本站藏书</b>（默认）：本站数据库内的书籍，按阅读量/热度排序。
+ *   <li><b>本站藏书</b>（默认）：本站数据库内的书籍，按阅读量/热度排序。
  *       分类浏览已交给独立的「分类」页（底部导航第三个 tab），
  *       所以这里不再显示模式标题行，也没有一级分类 Tab。</li>
- *   <li>🌐 <b>外站书城</b>：某个具体书源的「分类 + 榜单/推荐」书籍，
+ *   <li><b>外站书城</b>：某个具体书源的「分类 + 榜单/推荐」书籍，
  *       顶部显示模式标题行 + 横滚二级分类。</li>
  * </ul>
  *
@@ -273,7 +273,6 @@ public class BookStoreFragment extends Fragment {
 
         ivClose.setOnClickListener(x -> dialog.dismiss());
 
-        // 加载书源列表
         swipeRefresh.setRefreshing(true);
         RetrofitClient.getApiService().getOnlineSources()
                 .enqueue(new Callback<ApiResponse<List<SourceInfo>>>() {
@@ -339,7 +338,7 @@ public class BookStoreFragment extends Fragment {
             e.putString(KEY_EXT_TYPE, externalSourceType == null ? "" : externalSourceType);
             e.putString(KEY_EXT_NAME, externalSourceName == null ? "" : externalSourceName);
 
-            // ✅ 正确策略：主线程 apply()（保证点击不被 FS 延迟卡顿→不会 ANR），
+            // 正确策略：主线程 apply()（保证点击不被 FS 延迟卡顿→不会 ANR），
             // 然后立刻在后台线程 commit() 一次强制刷盘，保证崩/划走/重启前已经落盘。
             e.apply();
             try {

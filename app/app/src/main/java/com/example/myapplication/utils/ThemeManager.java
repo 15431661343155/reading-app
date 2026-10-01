@@ -12,13 +12,11 @@ public class ThemeManager {
     public static final int THEME_DEFAULT = 0;
     public static final int THEME_SEASIDE = 1;
 
-    // 保存主题
     public static void saveTheme(Context context, int theme) {
         SharedPreferences sp = context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
         sp.edit().putInt(KEY_THEME, theme).apply();
     }
 
-    // 获取当前主题
     public static int getCurrentTheme(Context context) {
         SharedPreferences sp = context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
         return sp.getInt(KEY_THEME, THEME_DEFAULT);

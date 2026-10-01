@@ -102,11 +102,9 @@ public class UploadBookActivity extends BaseActivity {
             if(uri == null) return;
 
             selectedFileUri = uri;
-            //获取文件名
             selectedFileName = getFileName(uri);
             tvFileName.setText("已选择文件："+selectedFileName);
 
-            //校验后缀
             if(!isEbookFile(selectedFileName)){
                 Hint.show(this, "请选择 TXT 或 EPUB 电子书");
                 selectedFileUri = null;
@@ -115,7 +113,6 @@ public class UploadBookActivity extends BaseActivity {
         }
     }
 
-    //获取文件名
     private String getFileName(Uri uri) {
         String fileName = null;
         if ("content".equals(uri.getScheme())) {
@@ -136,7 +133,6 @@ public class UploadBookActivity extends BaseActivity {
         return fileName != null ? fileName : "未知文件";
     }
 
-    //判断是否是txt/epub
     private boolean isEbookFile(String name){
         if(name == null) return false;
         String lower = name.toLowerCase();

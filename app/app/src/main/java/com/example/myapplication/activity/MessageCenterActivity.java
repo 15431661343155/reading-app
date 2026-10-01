@@ -99,7 +99,6 @@ public class MessageCenterActivity extends BaseActivity {
                     TextView tvTitle = customView.findViewById(R.id.tv_tab_title);
                     tvTitle.setText(title);
 
-                    // 设置文字颜色适配主题
                     if (currentTheme == ThemeManager.THEME_SEASIDE) {
                         tvTitle.setTextColor(position == viewPager.getCurrentItem()
                                 ? 0xFF000000 : 0x99000000);

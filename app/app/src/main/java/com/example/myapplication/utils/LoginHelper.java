@@ -97,7 +97,7 @@ public final class LoginHelper {
         Window window = dialog.getWindow();
         if (window != null) {
             window.setGravity(Gravity.CENTER);
-            // ⚠️ 必须显式给宽度：inflate(layout, null) 会丢掉根布局的 layout_width，
+            // 必须显式给宽度：inflate(layout, null) 会丢掉根布局的 layout_width，
             //    只传 WRAP_CONTENT 的话窗口会被「最宽的固定子元素」（卡片 280dp）决定，
             //    而根会变成 MATCH_PARENT，与设计稿不符。
             //    312 = 卡片 280dp + 左右各 16dp（留卡片投影）。

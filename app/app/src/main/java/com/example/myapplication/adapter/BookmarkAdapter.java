@@ -76,7 +76,7 @@ public class BookmarkAdapter extends RecyclerView.Adapter<BookmarkAdapter.Bookma
         holder.tvPreview.setText(bookmark.getPreviewText());
         holder.tvTime.setText(formatTime(bookmark.getCreatedAt()));
 
-        // ✅ 书签条目（文字/分割线/背景）跟随阅读器背景派生配色；非阅读器宿主保持自身配色
+        // 书签条目（文字/分割线/背景）跟随阅读器背景派生配色；非阅读器宿主保持自身配色
         if (followReaderTheme) {
             ReadActivity.themeViewTree(holder.itemView);
         }

@@ -150,7 +150,8 @@ public class ReadingRecordActivity extends BaseActivity {
                     RetrofitClient.getApiService().deleteProgress(userId, r.getBookId())
                             .enqueue(new Callback<ApiResponse<Void>>() {
                                 @Override
-                                public void onResponse(Call<ApiResponse<Void>> call, Response<ApiResponse<Void>> response) {}
+                                public void onResponse(Call<ApiResponse<Void>> call,
+                                        Response<ApiResponse<Void>> response) {}
                                 @Override
                                 public void onFailure(Call<ApiResponse<Void>> call, Throwable t) {}
                             });
@@ -248,10 +249,10 @@ public class ReadingRecordActivity extends BaseActivity {
         }
         editor.apply();
 
-        // ✅ 清理旧版本遗留：reading_records 中可能被错误写入的同名外站书脏条目（bookId=0 + 相同书名作者）
+        // 清理旧版本遗留：reading_records 中可能被错误写入的同名外站书脏条目（bookId=0 + 相同书名作者）
         purgeDirtyExternalFromReadingRecords(record.getBookName(), record.getAuthor());
 
-        // ✅ 同步删除服务器侧阅读记录：否则下次启动 pullAll() 会把它重新拉回本地（"删了又出现"）
+        // 同步删除服务器侧阅读记录：否则下次启动 pullAll() 会把它重新拉回本地（"删了又出现"）
         ExternalSyncManager.getInstance(this)
                 .deleteReadingRecordRemote(record.getSourceType(), record.getSourceUrl());
     }
@@ -410,7 +411,7 @@ public class ReadingRecordActivity extends BaseActivity {
             record.setReadTime(sp.getLong("record_readTime_" + i, 0));
             record.setProgress(sp.getInt("record_progress_" + i, 0));
             record.setChapterProgress(sp.getInt("record_chapterProgress_" + i, 0));
-            // ✅ 过滤外站书籍脏数据（bookId==0 说明是之前被错误写入 reading_records 的外站书）
+            // 过滤外站书籍脏数据（bookId==0 说明是之前被错误写入 reading_records 的外站书）
             if (bid <= 0) {
                 hasDirty = true;
                 continue;
@@ -526,7 +527,7 @@ public class ReadingRecordActivity extends BaseActivity {
         book.setAuthor(record.getAuthor());
         book.setCover(record.getCover());
 
-        // ✅ 关键修复：检测是否为本地书（通过 local_books SharedPreferences）
+        // 关键修复：检测是否为本地书（通过 local_books SharedPreferences）
         SharedPreferences spLocal = getSharedPreferences("local_books", MODE_PRIVATE);
         int localBookCount = spLocal.getInt("count", 0);
         boolean isLocalBook = false;
@@ -567,7 +568,7 @@ public class ReadingRecordActivity extends BaseActivity {
         int saveIndex = 0;
         for (int i = 0; i < records.size(); i++) {
             ReadingRecord r = records.get(i);
-            // ✅ 关键：外站书籍不写入 reading_records（否则删除时无法清理，造成重复条目）
+            // 关键：外站书籍不写入 reading_records（否则删除时无法清理，造成重复条目）
             if (r.isExternal()) continue;
             editor.putLong("record_bookId_" + saveIndex, r.getBookId());
             editor.putString("record_bookName_" + saveIndex, r.getBookName());

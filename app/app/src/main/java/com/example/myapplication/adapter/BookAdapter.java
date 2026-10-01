@@ -99,7 +99,8 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
     }
 
     // 书架用 item_shelf_morph.xml（双模式）
-    public BookAdapter(Context context, List<Book> list, Map<Long, Integer> progressMap, Map<Long, String> chapterTitleMap) {
+    public BookAdapter(Context context, List<Book> list, Map<Long, Integer> progressMap,
+            Map<Long, String> chapterTitleMap) {
         this.context = context;
         this.bookList = list;
         this.progressMap = progressMap;
@@ -198,13 +199,15 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
                         .dontAnimate()
                         .listener(new RequestListener<Drawable>() {
                             @Override
-                            public boolean onLoadFailed(GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
+                            public boolean onLoadFailed(GlideException e, Object model,
+                                    Target<Drawable> target, boolean isFirstResource) {
                                 holder.applyCoverMatrixNow();
                                 return false;
                             }
 
                             @Override
-                            public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+                            public boolean onResourceReady(Drawable resource, Object model,
+                                    Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
                                 holder.applyCoverMatrixNow();
                                 return false;
                             }
@@ -245,7 +248,6 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
             }
         }
 
-        // 隐藏简介
         if (holder.tvIntro != null) {
             holder.tvIntro.setVisibility(View.GONE);
         }
@@ -395,7 +397,7 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
         h.cardBg.setLayoutParams(cp);
 
         // 封面盒：列表 14/15 处 72×96；宫格海报卡 (spanW-24)×133 @ (12,7)——封面贴满卡面顶/左/右。
-        // ⚠️ ②列表编辑态封面不再右移让位（选择框已移到卡片右侧），恒 14dp。
+        // ②列表编辑态封面不再右移让位（选择框已移到卡片右侧），恒 14dp。
         // 宫格卡面可视边界 = 白卡 margin(左右10) + drawable 内缩(左右2/上3) → 卡面恰为 (spanW-24) 宽，
         // 封面同宽同位即「贴边海报」；封面盒宽高与二次修正版完全一致，Matrix 等比裁切取景不变。
         int dp133 = Math.round(133 * d);
@@ -407,7 +409,7 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
         cvp.width = coverW;
         cvp.height = coverH;
         cvp.setMargins(coverLeft, coverTop, 0, 0);
-        // ⚠️ XML 里 cover_box 带 layout_marginStart=14dp：MarginLayoutParams 按方向解析时
+        // XML 里 cover_box 带 layout_marginStart=14dp：MarginLayoutParams 按方向解析时
         // startMargin 会覆盖 setMargins 写入的 leftMargin（实测封面左侧多留 4dp、右侧戳出卡面 2dp）。
         // 必须显式同步 marginStart，宫格贴边与列表编辑位移才真正生效。
         cvp.setMarginStart(coverLeft);
@@ -439,7 +441,7 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
         // 多选框：列表=卡片右侧垂直居中（距卡右缘 14dp），封面原位不再让位；
         // 宫格=海报卡右下角内缩——相对 item_root 为右 20/下 60，即距海报卡右下角 8/6dp，
         // 圆框完整落在封面内（修复圆框骑出封面/卡外的溢出）。
-        // ⚠️ 方向解析坑（真机实测）：XML 定义了 layout_marginStart 后，只要 start/end 任一被定义，
+        // 方向解析坑（真机实测）：XML 定义了 layout_marginStart 后，只要 start/end 任一被定义，
         // resolveLayoutDirection 会用 start/end 重写 left/right——marginEnd 未定义时 rightMargin
         // 被清零（END gravity 下圆框直接顶到 item 右缘、半张骑出封面，且 bottomMargin 不受影响）。
         // 因此 setMarginStart(0) 之后必须 setMarginEnd 显式钉死右边距，两条解析路径才收敛。
@@ -457,7 +459,7 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
         h.ivCheckbox.setLayoutParams(cbp);
 
         // 无封面遮罩：宫格显示书名蒙版、列表不显示。
-        // ⚠️ 不能只在「当前已可见」时切换——列表绑定时蒙版是 GONE，
+        // 不能只在「当前已可见」时切换——列表绑定时蒙版是 GONE，
         //    旧写法导致 列表⇄宫格 切换后蒙版永远点不亮（刷新重绑才恢复）。
         if (h.tvCoverTitle != null && position >= 0 && position < bookList.size()) {
             Book b = bookList.get(position);
@@ -549,7 +551,7 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
             tvCoverTitle = itemView.findViewById(R.id.tv_cover_title);
             cardBg = itemView.findViewById(R.id.card_bg);
             coverBox = itemView.findViewById(R.id.cover_box);
-            // ⚠️ 书城/分类/搜索/本地书城走的 item_book.xml 没有 cover_box 节点（那类封面走圆角
+            // 书城/分类/搜索/本地书城走的 item_book.xml 没有 cover_box 节点（那类封面走圆角
             // transform，不依赖 matrix 裁切），coverBox 会返回 null —— 必须判空，否则
             // addOnLayoutChangeListener 直接 NPE，整页 RecyclerView 渲染崩溃（点击书城即闪退）。
             if (coverBox != null) {

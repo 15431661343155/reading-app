@@ -110,7 +110,6 @@ public class PopupBookmarkFragment extends Fragment {
             });
             rvBookmarks.setAdapter(adapter);
 
-            // 获取 userId
             SharedPreferences sp = getActivity().getSharedPreferences("user_info", Context.MODE_PRIVATE);
             String uid = sp.getString("userId", "");
             try {
@@ -121,7 +120,7 @@ public class PopupBookmarkFragment extends Fragment {
 
             loadBookmarks();
 
-            // ✅ 书签 Fragment 根视图跟随日/夜间；列表项由 BookmarkAdapter 在 bind 时着色
+            // 书签 Fragment 根视图跟随日/夜间；列表项由 BookmarkAdapter 在 bind 时着色
             ReadActivity.themeViewTree(view);
             return view;
         } catch (Throwable t) {
@@ -203,7 +202,8 @@ public class PopupBookmarkFragment extends Fragment {
         RetrofitClient.getApiService().getBookmarks(userId, bookId)
                 .enqueue(new Callback<ApiResponse<List<Bookmark>>>() {
                     @Override
-                    public void onResponse(Call<ApiResponse<List<Bookmark>>> call, Response<ApiResponse<List<Bookmark>>> response) {
+                    public void onResponse(Call<ApiResponse<List<Bookmark>>> call,
+                            Response<ApiResponse<List<Bookmark>>> response) {
                         if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                             List<Bookmark> list = response.body().getData();
                             bookmarkList.clear();

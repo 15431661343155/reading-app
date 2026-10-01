@@ -33,7 +33,6 @@ public class CropAvatarActivity extends BaseActivity {
 
         cropView = findViewById(R.id.crop_view);
 
-        // 加载传入的图片
         Uri imageUri = getIntent().getParcelableExtra(EXTRA_IMAGE_URI);
         if (imageUri == null) {
             setResult(RESULT_CANCELED);
@@ -83,7 +82,6 @@ public class CropAvatarActivity extends BaseActivity {
                 return;
             }
 
-            // 保存到本地
             try {
                 File avatarDir = new File(getFilesDir(), "avatars");
                 if (!avatarDir.exists()) avatarDir.mkdirs();

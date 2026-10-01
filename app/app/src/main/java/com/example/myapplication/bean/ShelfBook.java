@@ -58,7 +58,6 @@ public class ShelfBook {
     public long getLastReadTime() { return lastReadTime; }
     public void setLastReadTime(long lastReadTime) { this.lastReadTime = lastReadTime; }
 
-    // 转换为Book对象
     @Ignore
     public Book toBook() {
         Book book = new Book(bookName, author, intro);

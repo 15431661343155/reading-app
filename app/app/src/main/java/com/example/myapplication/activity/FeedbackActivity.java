@@ -98,7 +98,6 @@ public class FeedbackActivity extends BaseActivity {
             return;
         }
 
-        // 读取用户 ID
         SharedPreferences sp = getSharedPreferences("user_info", MODE_PRIVATE);
         String userIdStr = sp.getString("userId", "");
         long userId = userIdStr.isEmpty() ? 0 : Long.parseLong(userIdStr);

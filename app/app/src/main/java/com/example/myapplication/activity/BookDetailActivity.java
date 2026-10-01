@@ -133,11 +133,9 @@ public class BookDetailActivity extends BaseActivity{
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_book_detail);
 
-        // 获取Toolbar并延伸到状态栏区域
         Toolbar toolbar = findViewById(R.id.toolbar_back);
         // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
-        // 获取传递的Book对象
         currentBook = (Book) getIntent().getSerializableExtra("book");
         if (currentBook == null) {
             Hint.show(this, "书籍信息获取失败");
@@ -145,7 +143,7 @@ public class BookDetailActivity extends BaseActivity{
             return;
         }
 
-        // ✅ 外站书归一化：从书架进入的外站书带有合成负数 id（BookShelfFragment.loadExternalBooks
+        // 外站书归一化：从书架进入的外站书带有合成负数 id（BookShelfFragment.loadExternalBooks
         //    生成，供书架进度匹配用，status=-2）。下方 isExternalBook() 以「id==null」为外站判据，
         //    不归一化会被误判成本站书 → 走 id 键的本站接口（假 id 必然查不到）→ 简介/目录/最新章节全部无数据。
         //    这里把「携带书源信息且 id 为负」的书统一置空 id，与「书城→详情页」的外站书形态完全一致，
@@ -321,7 +319,6 @@ public class BookDetailActivity extends BaseActivity{
             }
         }
 
-        // 加载封面图片
         String coverUrl = currentBook.getCover();
         if (coverUrl != null && !coverUrl.isEmpty()) {
             // 将相对路径转换为完整URL
@@ -347,7 +344,6 @@ public class BookDetailActivity extends BaseActivity{
             tvIntro.post(this::refreshIntroToggle);
         }
 
-        // 显示书籍状态（详细分类·状态·字数）
         updateStatusDisplay();
 
         // 直接用接口返回的 isInShelf 字段初始化书架按钮状态
@@ -676,7 +672,8 @@ public class BookDetailActivity extends BaseActivity{
         // 使用轻量接口 /api/books/{id}/latest-chapter，只返回最后一章，避免加载全量章节
         RetrofitClient.getApiService().getLatestChapter(bookId).enqueue(new Callback<ApiResponse<ChapterDto>>() {
             @Override
-            public void onResponse(@NonNull Call<ApiResponse<ChapterDto>> call, @NonNull Response<ApiResponse<ChapterDto>> response) {
+            public void onResponse(@NonNull Call<ApiResponse<ChapterDto>> call,
+                    @NonNull Response<ApiResponse<ChapterDto>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     ChapterDto latest = response.body().getData();
                     if (latest != null) {
@@ -697,7 +694,8 @@ public class BookDetailActivity extends BaseActivity{
         try { if (!userIdStr.isEmpty()) userId = Long.valueOf(userIdStr); } catch (NumberFormatException ignored) {}
         RetrofitClient.getApiService().getBookDetail(bookId, userId).enqueue(new Callback<ApiResponse<Book>>() {
             @Override
-            public void onResponse(@NonNull Call<ApiResponse<Book>> call, @NonNull Response<ApiResponse<Book>> response) {
+            public void onResponse(@NonNull Call<ApiResponse<Book>> call,
+                    @NonNull Response<ApiResponse<Book>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     Book updated = response.body().getData();
                     if (updated != null) {
@@ -713,7 +711,6 @@ public class BookDetailActivity extends BaseActivity{
                         }
                         currentBook.setStatus(updated.getStatus());
 
-                        // 更新书架按钮状态
                         if (updated.getIsInShelf() != null) {
                             isInShelf = updated.getIsInShelf();
                         }
@@ -721,7 +718,6 @@ public class BookDetailActivity extends BaseActivity{
                             setShelfLabel(isInShelf);
                             updateShelfVisual(isInShelf);
                             btnAddShelf.setEnabled(true);
-                            // 刷新状态栏显示（字数、分类等）
                             updateStatusDisplay();
                         });
                     }
@@ -744,7 +740,7 @@ public class BookDetailActivity extends BaseActivity{
                 if (hasRead) {
                     intent.putExtra("chapterIndex", savedChapterIndex);
                 }
-                // ✅ 栈内复用：返回栈中已有同书阅读器时（阅读器→书籍详情→再进阅读器），
+                // 栈内复用：返回栈中已有同书阅读器时（阅读器→书籍详情→再进阅读器），
                 //    复用栈内实例并清掉其上的详情页，不再叠出第二个 ReadActivity。
                 //    否则新实例会把复用池里唯一的共享 WebView 从旧实例上抢走，
                 //    旧阅读器返回后正文空白、无法唤出导航栏、停在旧章节。
@@ -797,7 +793,8 @@ public class BookDetailActivity extends BaseActivity{
                 RetrofitClient.getApiService().removeFromBookshelf(userId, currentBook.getId())
                         .enqueue(new Callback<ApiResponse<Void>>() {
                             @Override
-                            public void onResponse(@NonNull Call<ApiResponse<Void>> call, @NonNull Response<ApiResponse<Void>> response) {
+                            public void onResponse(@NonNull Call<ApiResponse<Void>> call,
+                                    @NonNull Response<ApiResponse<Void>> response) {
                                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                                     isInShelf = false;
                                 runOnUiThread(() -> {
@@ -830,7 +827,8 @@ public class BookDetailActivity extends BaseActivity{
                 RetrofitClient.getApiService().addToBookshelf(userId, currentBook.getId())
                         .enqueue(new Callback<ApiResponse<Bookshelf>>() {
                             @Override
-                            public void onResponse(@NonNull Call<ApiResponse<Bookshelf>> call, @NonNull Response<ApiResponse<Bookshelf>> response) {
+                            public void onResponse(@NonNull Call<ApiResponse<Bookshelf>> call,
+                                    @NonNull Response<ApiResponse<Bookshelf>> response) {
                                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                                     isInShelf = true;
                                 runOnUiThread(() -> {
@@ -925,7 +923,6 @@ public class BookDetailActivity extends BaseActivity{
         SharedPreferences sp = getSharedPreferences(ExternalPrefs.shelfName(this), MODE_PRIVATE);
         String key = sourceType + "|" + sourceBookId;
 
-        // 检查是否已在本地书架
         if (sp.contains(key)) {
             Hint.show(this, "已在书架");
             return;
@@ -1014,7 +1011,7 @@ public class BookDetailActivity extends BaseActivity{
     }
 
     /** 读取外站章节列表：先静态内存，后磁盘持久化缓存。命中返回非空 List，未命中返回 null。
-     *  ⚠️ 磁盘兜底分支可能同步读数 MB 的 SP 文件，勿在主线程调用（主线程请用
+     *  磁盘兜底分支可能同步读数 MB 的 SP 文件，勿在主线程调用（主线程请用
      *  {@link #getExternalChaptersMemoryOnly}，或放到后台线程再调本方法）。 */
     public static List<String[]> getExternalChapters(android.content.Context ctx, Book book) {
         if (book == null) return null;
@@ -1093,7 +1090,8 @@ public class BookDetailActivity extends BaseActivity{
      * 始终会先调用 putExternalChapters() 写入共享缓存（失败兜底）。
      * @return true=经 Intent 传递；false=仅经共享缓存传递
      */
-    public static boolean putChaptersExtra(android.content.Context ctx, Intent intent, Book book, List<String[]> chapters) {
+    public static boolean putChaptersExtra(android.content.Context ctx, Intent intent, Book book,
+            List<String[]> chapters) {
         putExternalChapters(ctx, book, chapters); // 始终写缓存（失败兜底）
         if (estimateBytes(chapters) <= INTENT_CHAPTERS_MAX_BYTES) {
             intent.putExtra("chapters", chapters.toArray(new String[0][]));
@@ -1576,7 +1574,7 @@ public class BookDetailActivity extends BaseActivity{
         Intent intent = new Intent(this, ReadActivity.class);
         intent.putExtra("book", currentBook);
         intent.putExtra("chapterExplicit", true);
-        // ✅ 栈内复用，见 openSheetChapter 注释
+        // 栈内复用，见 openSheetChapter 注释
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         if (isExternalBook()) {
             intent.putExtra("isExternal", true);
@@ -1813,7 +1811,7 @@ public class BookDetailActivity extends BaseActivity{
             Intent intent = new Intent(BookDetailActivity.this, ReadActivity.class);
             intent.putExtra("book", currentBook);
             intent.putExtra("isExternal", true);
-            // ✅ 栈内复用：返回栈中已有同书阅读器时复用栈内实例（避免共享 WebView 被新实例抢走）
+            // 栈内复用：返回栈中已有同书阅读器时复用栈内实例（避免共享 WebView 被新实例抢走）
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             putChaptersExtra(BookDetailActivity.this, intent, currentBook, cached); // 小书走Intent，大书走缓存
             if (hasRead) intent.putExtra("chapterIndex", savedChapterIndex);
@@ -1856,7 +1854,7 @@ public class BookDetailActivity extends BaseActivity{
                     Intent intent = new Intent(BookDetailActivity.this, ReadActivity.class);
                     intent.putExtra("book", currentBook);
                     intent.putExtra("isExternal", true);
-                    // ✅ 栈内复用：返回栈中已有同书阅读器时复用栈内实例（避免共享 WebView 被新实例抢走）
+                    // 栈内复用：返回栈中已有同书阅读器时复用栈内实例（避免共享 WebView 被新实例抢走）
                     intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     putChaptersExtra(BookDetailActivity.this, intent, currentBook, chapters);
                     if (hasRead) intent.putExtra("chapterIndex", savedChapterIndex);
@@ -1929,7 +1927,6 @@ public class BookDetailActivity extends BaseActivity{
                                 }
                                 // 重新渲染详情页UI（简介、封面、状态等）
                                 displayBookInfo();
-                                // 更新最新章节显示
                                 String lastCh = detail.getLastChapter();
                                 if (lastCh != null && !lastCh.isEmpty()) {
                                     tvLatestChapter.setText(lastCh);
@@ -2024,19 +2021,23 @@ public class BookDetailActivity extends BaseActivity{
                     public void onResponse(@NonNull Call<ApiResponse<List<String[]>>> call,
                                            @NonNull Response<ApiResponse<List<String[]>>> response) {
                         if (ctx instanceof android.app.Activity) {
-                            ((android.app.Activity) ctx).runOnUiThread(() -> onChaptersResult(ctx, response, book, callback));
+                            ((android.app.Activity) ctx).runOnUiThread(() -> onChaptersResult(ctx,
+                                    response, book, callback));
                         } else {
-                            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> onChaptersResult(ctx, response, book, callback));
+                            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> onChaptersResult(ctx,
+                                    response, book, callback));
                         }
                     }
                     @Override
                     public void onFailure(@NonNull Call<ApiResponse<List<String[]>>> call, @NonNull Throwable t) {
-                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> callback.onFail("网络错误: " + t.getMessage(), true));
+                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> callback.onFail("网络错误: "
+                                + t.getMessage(), true));
                     }
                 });
     }
 
-    private static void onChaptersResult(android.content.Context ctx, @NonNull Response<ApiResponse<List<String[]>>> response, Book book, ChaptersCallback callback) {
+    private static void onChaptersResult(android.content.Context ctx,
+            @NonNull Response<ApiResponse<List<String[]>>> response, Book book, ChaptersCallback callback) {
         if (response.isSuccessful() && response.body() != null
                 && response.body().isSuccess()
                 && response.body().getData() != null
@@ -2056,7 +2057,8 @@ public class BookDetailActivity extends BaseActivity{
 
     private static List<String[]> readChapterCacheFromDisk(android.content.Context ctx, Book book) {
         try {
-            SharedPreferences sp = ctx.getSharedPreferences("external_chapter_cache", android.content.Context.MODE_PRIVATE);
+            SharedPreferences sp = ctx.getSharedPreferences("external_chapter_cache",
+                    android.content.Context.MODE_PRIVATE);
             String json = sp.getString(externalCacheKeyFor(book), "");
             if (json == null || json.isEmpty()) return null;
             org.json.JSONArray arr = new org.json.JSONArray(json);
@@ -2085,7 +2087,8 @@ public class BookDetailActivity extends BaseActivity{
                 }
                 arr.put(item);
             }
-            SharedPreferences sp = ctx.getSharedPreferences("external_chapter_cache", android.content.Context.MODE_PRIVATE);
+            SharedPreferences sp = ctx.getSharedPreferences("external_chapter_cache",
+                    android.content.Context.MODE_PRIVATE);
             sp.edit().putString(externalCacheKeyFor(book), arr.toString()).apply();
         } catch (Exception ignored) {
         }

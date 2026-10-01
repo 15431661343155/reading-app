@@ -114,7 +114,6 @@ public class ShelfBookAdapter extends RecyclerView.Adapter<ShelfBookAdapter.Shel
         holder.tvName.setText(book.getTitle());
         holder.tvAuthor.setText("作者：" + book.getAuthor());
 
-        // 加载封面图片
         String coverUrl = book.getCover();
         if (coverUrl != null && !coverUrl.isEmpty()) {
             // 将相对路径转换为完整URL

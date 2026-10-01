@@ -188,19 +188,15 @@ public interface ApiService {
     Call<ApiResponse<Void>> cancelAccount();
 
     // ========== 账号绑定 ==========
-    // 发送邮箱验证码
     @POST("/api/user/bind/send-email-code")
     Call<ApiResponse<Void>> sendEmailCode(@Body SendCodeRequest request);
 
-    // 验证邮箱验证码
     @POST("/api/user/bind/verify-email-code")
     Call<ApiResponse<Void>> verifyEmailCode(@Body BindRequest request);
 
-    // 绑定邮箱
     @POST("/api/user/bind/email")
     Call<ApiResponse<Void>> bindEmail(@Body BindRequest request);
 
-    // 解绑邮箱
     @POST("/api/user/bind/unbind-email")
     Call<ApiResponse<Void>> unbindEmail(@Body BindRequest request);
 
@@ -271,7 +267,8 @@ public interface ApiService {
     // ========== 外站书籍阅读进度 ==========
     @POST("/api/external-reading/save")
     @Headers("Content-Type: application/json")
-    Call<ApiResponse<Void>> saveExternalProgress(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+    Call<ApiResponse<Void>> saveExternalProgress(@Header("Authorization") String authorization,
+            @Body okhttp3.RequestBody body);
 
     @GET("/api/external-reading/get")
     Call<ApiResponse<java.util.Map<String, Object>>> getExternalProgress(
@@ -283,11 +280,13 @@ public interface ApiService {
     // ========== 外站书架同步 ==========
     @POST("/api/external-bookshelf/add")
     @Headers("Content-Type: application/json")
-    Call<ApiResponse<Void>> addExternalBookshelf(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+    Call<ApiResponse<Void>> addExternalBookshelf(@Header("Authorization") String authorization,
+            @Body okhttp3.RequestBody body);
 
     @POST("/api/external-bookshelf/remove")
     @Headers("Content-Type: application/json")
-    Call<ApiResponse<Void>> removeExternalBookshelf(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+    Call<ApiResponse<Void>> removeExternalBookshelf(@Header("Authorization") String authorization,
+            @Body okhttp3.RequestBody body);
 
     @GET("/api/external-bookshelf/list")
     Call<ApiResponse<java.util.List<java.util.Map<String, Object>>>> getExternalBookshelfList(
@@ -296,11 +295,13 @@ public interface ApiService {
     // ========== 外站书签同步 ==========
     @POST("/api/external-bookmarks/add")
     @Headers("Content-Type: application/json")
-    Call<ApiResponse<Void>> addExternalBookmark(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+    Call<ApiResponse<Void>> addExternalBookmark(@Header("Authorization") String authorization,
+            @Body okhttp3.RequestBody body);
 
     @POST("/api/external-bookmarks/delete")
     @Headers("Content-Type: application/json")
-    Call<ApiResponse<Void>> deleteExternalBookmark(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+    Call<ApiResponse<Void>> deleteExternalBookmark(@Header("Authorization") String authorization,
+            @Body okhttp3.RequestBody body);
 
     @GET("/api/external-bookmarks/list")
     Call<ApiResponse<java.util.List<java.util.Map<String, Object>>>> getExternalBookmarkList(
@@ -314,6 +315,7 @@ public interface ApiService {
     // ========== 外站阅读记录删除（阅读记录页删除时同步服务器，避免再次登录被拉回） ==========
     @POST("/api/external-reading/delete")
     @Headers("Content-Type: application/json")
-    Call<ApiResponse<Void>> deleteExternalReading(@Header("Authorization") String authorization, @Body okhttp3.RequestBody body);
+    Call<ApiResponse<Void>> deleteExternalReading(@Header("Authorization") String authorization,
+            @Body okhttp3.RequestBody body);
 }
 

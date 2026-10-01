@@ -78,7 +78,8 @@ public class BookSourceActivity extends BaseActivity {
             }
 
             @Override
-            public void onFailure(Call<ApiResponse<List<com.example.myapplication.bean.SourceInfo>>> call, Throwable t) {
+            public void onFailure(Call<ApiResponse<List<com.example.myapplication.bean.SourceInfo>>> call,
+                    Throwable t) {
                 showEmpty();
             }
         });

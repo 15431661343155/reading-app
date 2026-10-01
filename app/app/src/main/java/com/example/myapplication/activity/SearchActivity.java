@@ -148,7 +148,6 @@ public class SearchActivity extends AppCompatActivity {
         // 搜索按钮
         tvSearchBtn.setOnClickListener(v -> doSearch(etSearch.getText().toString().trim()));
 
-        // 清空输入
         ivClearInput.setOnClickListener(v -> {
             etSearch.setText("");
             ivClearInput.setVisibility(View.GONE);

@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.util.Base64;
-import android.util.Log;  // ✅ 新增：用于调试日志
+import android.util.Log;  // 新增：用于调试日志
 
 import java.io.InputStream;
 import java.io.BufferedReader;
@@ -30,7 +30,7 @@ import java.util.zip.ZipInputStream;
  */
 public class LocalBookParser {
     
-    // ✅ 性能优化：预编译正则表达式，减少重复编译开销
+    // 性能优化：预编译正则表达式，减少重复编译开销
     private static final Pattern CHAPTER_MARKER_PATTERN = Pattern.compile(
         "(?i)^第[\\d零一二三四五六七八九十百千万]+章"
     );
@@ -518,7 +518,6 @@ public class LocalBookParser {
         return info;
     }
 
-    // 添加 Levenshtein 距离辅助方法
     private static int levenshteinDistance(String s, String t) {
         if (s == null || t == null) return 0;
         int m = s.length();
@@ -911,7 +910,7 @@ public class LocalBookParser {
                 return info;
             }
             
-            // ✅ 读取所有 zip 条目。
+            // 读取所有 zip 条目。
             // 普通 EPUB 走 ZipFile（对 STORE 模式的 mimetype 最稳）；
             // 多看等混淆 EPUB 常把 mimetype 在中央目录写两遍，Android 的 java.util.zip.ZipFile
             // 遇重复条目名会抛 "Duplicate entry name: mimetype" 导致整本解析失败。
@@ -923,18 +922,20 @@ public class LocalBookParser {
                 epubFile.delete();
             }
             
-            android.util.Log.d("LocalBookParser", "Successfully loaded " + zipEntries.size() + " ZIP entries using ZipFile");
+            android.util.Log.d("LocalBookParser", "Successfully loaded " + zipEntries.size()
+                    + " ZIP entries using ZipFile");
 
             // 解析 container.xml 找到根文件
             String rootfilePath = null;
             byte[] containerData = zipEntries.get("META-INF/container.xml");
             
-            // ✅ 调试：列出所有ZIP条目，方便排查
+            // 调试：列出所有ZIP条目，方便排查
             Log.d("LocalBookParser", "EPUB ZIP entries count: " + zipEntries.size());
             
-            // ✅ 新增：检查ZIP条目数量，如果太少说明文件损坏
+            // 新增：检查ZIP条目数量，如果太少说明文件损坏
             if (zipEntries.size() < 3) {
-                Log.e("LocalBookParser", "EPUB file is too small or corrupted! Only " + zipEntries.size() + " entries found.");
+                Log.e("LocalBookParser", "EPUB file is too small or corrupted! Only "
+                        + zipEntries.size() + " entries found.");
                 info.chapters.add(new Chapter(0, "第一章", 
                     "EPUB文件损坏或不完整（仅找到" + zipEntries.size() + "个文件）。\n" +
                     "请重新下载或选择其他EPUB文件。"));
@@ -955,14 +956,14 @@ public class LocalBookParser {
                 String containerXml = new String(containerData, "UTF-8");
                 Log.d("LocalBookParser", "Container XML content:\n" + containerXml);
                 
-                // ✅ 方法1: 标准 full-path 属性匹配
+                // 方法1: 标准 full-path 属性匹配
                 Matcher m = Pattern.compile("full-path=\"([^\"]+)\"").matcher(containerXml);
                 if (m.find()) {
                     rootfilePath = m.group(1);
                     Log.d("LocalBookParser", "Method 1 found rootfile: " + rootfilePath);
                 }
                 
-                // ✅ 方法2: 尝试带命名空间的匹配（如 xmlns:opf="..."）
+                // 方法2: 尝试带命名空间的匹配（如 xmlns:opf="..."）
                 if (rootfilePath == null) {
                     Matcher nsM = Pattern.compile("(?:opf:)?full-path=\"([^\"]+)\"").matcher(containerXml);
                     if (nsM.find()) {
@@ -971,7 +972,7 @@ public class LocalBookParser {
                     }
                 }
                 
-                // ✅ 方法3: 尝试单引号
+                // 方法3: 尝试单引号
                 if (rootfilePath == null) {
                     Matcher singleQuoteM = Pattern.compile("full-path='([^']+)\'").matcher(containerXml);
                     if (singleQuoteM.find()) {
@@ -980,7 +981,7 @@ public class LocalBookParser {
                     }
                 }
                 
-                // ✅ 方法4: 查找常见的OPF文件名模式
+                // 方法4: 查找常见的OPF文件名模式
                 if (rootfilePath == null) {
                     String[] commonOpfNames = {"content.opf", "package.opf", "book.opf", "index.opf"};
                     for (String opfName : commonOpfNames) {
@@ -1001,7 +1002,7 @@ public class LocalBookParser {
                     }
                 }
                 
-                // ✅ 方法5: 查找任何 .opf 文件
+                // 方法5: 查找任何 .opf 文件
                 if (rootfilePath == null) {
                     for (Map.Entry<String, byte[]> zipEntry : zipEntries.entrySet()) {
                         if (zipEntry.getKey().toLowerCase().endsWith(".opf")) {
@@ -1041,27 +1042,31 @@ public class LocalBookParser {
             }
 
             // 提取书名、作者 - 更全面的匹配策略
-            Matcher titleM = Pattern.compile("<dc:title[^>]*>([^<]+)</dc:title>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+            Matcher titleM = Pattern.compile("<dc:title[^>]*>([^<]+)</dc:title>",
+                    Pattern.CASE_INSENSITIVE).matcher(opfXml);
             if (titleM.find()) {
                 info.title = cleanHtmlText(titleM.group(1)).trim();
             }
             
             // 尝试其他可能的书名标签
             if (info.title.equals("未命名")) {
-                Matcher altTitleM = Pattern.compile("<title[^>]*>([^<]+)</title>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+                Matcher altTitleM = Pattern.compile("<title[^>]*>([^<]+)</title>",
+                        Pattern.CASE_INSENSITIVE).matcher(opfXml);
                 if (altTitleM.find()) {
                     info.title = cleanHtmlText(altTitleM.group(1)).trim();
                 }
             }
             
-            Matcher authorM = Pattern.compile("<dc:creator[^>]*>([^<]+)</dc:creator>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+            Matcher authorM = Pattern.compile("<dc:creator[^>]*>([^<]+)</dc:creator>",
+                    Pattern.CASE_INSENSITIVE).matcher(opfXml);
             if (authorM.find()) {
                 info.author = cleanHtmlText(authorM.group(1)).trim();
             }
             
             // 尝试其他可能的作者标签
             if (info.author.equals("未知作者")) {
-                Matcher altAuthorM = Pattern.compile("<meta[^>]*name=['\"](?:author|creator)['\"][^>]*content=['\"]([^'\"]+)['\"]", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+                Matcher altAuthorM = Pattern.compile("<meta[^>]*name=['\"](?:author|creator)['\"][^>]*content=['\"]([^'\"]+)['\"]",
+                        Pattern.CASE_INSENSITIVE).matcher(opfXml);
                 if (altAuthorM.find()) {
                     info.author = cleanHtmlText(altAuthorM.group(1)).trim();
                 }
@@ -1071,12 +1076,14 @@ public class LocalBookParser {
             // EPUB2 标准是 <dc:description>；部分生成器改用 <meta name="description" content="…">。
             // 这里只作为「首选来源」，很多网文 epub（如 EasyPub 生成的）根本没有该字段，
             // 此时留空，稍后在章节循环里从「内容简介」章截获（见来源2）。
-            Matcher descM = Pattern.compile("<dc:description[^>]*>([\\s\\S]*?)</dc:description>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+            Matcher descM = Pattern.compile("<dc:description[^>]*>([\\s\\S]*?)</dc:description>",
+                    Pattern.CASE_INSENSITIVE).matcher(opfXml);
             if (descM.find()) {
                 info.intro = cleanChapterContent(descM.group(1)).trim();
             }
             if (info.intro.length() < INTRO_MIN_TEXT_LEN) {
-                Matcher altDescM = Pattern.compile("<meta[^>]*name=['\"]description['\"][^>]*content=['\"]([^'\"]*)['\"]", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+                Matcher altDescM = Pattern.compile("<meta[^>]*name=['\"]description['\"][^>]*content=['\"]([^'\"]*)['\"]",
+                        Pattern.CASE_INSENSITIVE).matcher(opfXml);
                 if (altDescM.find()) {
                     info.intro = cleanChapterContent(altDescM.group(1)).trim();
                 }
@@ -1090,7 +1097,8 @@ public class LocalBookParser {
             String coverMediaType = null;
             
             // 方法1: EPUB3标准 - 查找 properties="cover-image" 的 item
-            Matcher coverItemMatcher = Pattern.compile("<item[^>]+id=\"([^\"]+)\"[^>]+href=\"([^\"]+)\"[^>]*properties=\"cover-image\"[^>]*>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+            Matcher coverItemMatcher = Pattern.compile("<item[^>]+id=\"([^\"]+)\"[^>]+href=\"([^\"]+)\"[^>]*properties=\"cover-image\"[^>]*>",
+                    Pattern.CASE_INSENSITIVE).matcher(opfXml);
             if (coverItemMatcher.find()) {
                 coverHref = coverItemMatcher.group(2);
                 String itemTag = coverItemMatcher.group(0);
@@ -1099,14 +1107,16 @@ public class LocalBookParser {
             }
             
             // 方法2: 查找 id="cover" / "cover-image" 的 item
-            // ⚠️ 同样只在指向**图片**时采纳：有的书里 id="cover" 挂的是封面页 xhtml，
+            // 同样只在指向**图片**时采纳：有的书里 id="cover" 挂的是封面页 xhtml，
             //    直接采用会重演「封面被 xhtml 抢占 → 真正的 jpeg 查不到」的问题。
             if (coverHref == null) {
-                Matcher coverIdMatcher = Pattern.compile("<item[^>]+id=\"(cover|cover-image|Cover)\"[^>]+href=\"([^\"]+)\"[^>]*>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+                Matcher coverIdMatcher = Pattern.compile("<item[^>]+id=\"(cover|cover-image|Cover)\"[^>]+href=\"([^\"]+)\"[^>]*>",
+                        Pattern.CASE_INSENSITIVE).matcher(opfXml);
                 while (coverIdMatcher.find()) {
                     String href = coverIdMatcher.group(2);
                     String itemTag = coverIdMatcher.group(0);
-                    Matcher mediaMatcher = Pattern.compile("media-type=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE).matcher(itemTag);
+                    Matcher mediaMatcher = Pattern.compile("media-type=\"([^\"]+)\"",
+                            Pattern.CASE_INSENSITIVE).matcher(itemTag);
                     String mt = mediaMatcher.find() ? mediaMatcher.group(1) : null;
                     boolean isImg = isImageHref(href) || (mt != null && mt.toLowerCase().startsWith("image/"));
                     if (!isImg) continue;
@@ -1117,18 +1127,20 @@ public class LocalBookParser {
             }
             
             // 方法3: 从 guide 中查找 type="cover" 或 type="other.ms-coverimage"
-            // ⚠️ guide 里的 cover 引用常常指向一个「封面页 xhtml」（如 cover.xhtml），而不是图片本身。
+            // guide 里的 cover 引用常常指向一个「封面页 xhtml」（如 cover.xhtml），而不是图片本身。
             //    若直接采用，会导致真正的图片（meta name="cover" 指向的 jpeg）永远查不到，
             //    且把 xhtml 页面的字节当成图片保存 → 封面空白/破图。
             //    因此这里只在引用确实是图片扩展名时才采纳。
             if (coverHref == null) {
                 String guideHref = null;
-                Matcher guideMatcher = Pattern.compile("<reference[^>]+type=\"(?:cover|other\\.ms-coverimage)\"[^>]+href=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+                Matcher guideMatcher = Pattern.compile("<reference[^>]+type=\"(?:cover|other\\.ms-coverimage)\"[^>]+href=\"([^\"]+)\"",
+                        Pattern.CASE_INSENSITIVE).matcher(opfXml);
                 if (guideMatcher.find()) {
                     guideHref = guideMatcher.group(1);
                 } else {
                     // 尝试另一种顺序
-                    Matcher guideMatcher2 = Pattern.compile("<reference[^>]+href=\"([^\"]+)\"[^>]+type=\"(?:cover|other\\.ms-coverimage)\"", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+                    Matcher guideMatcher2 = Pattern.compile("<reference[^>]+href=\"([^\"]+)\"[^>]+type=\"(?:cover|other\\.ms-coverimage)\"",
+                            Pattern.CASE_INSENSITIVE).matcher(opfXml);
                     if (guideMatcher2.find()) {
                         guideHref = guideMatcher2.group(1);
                     }
@@ -1140,11 +1152,13 @@ public class LocalBookParser {
             
             // 方法4: 从 meta 标签查找封面ID
             if (coverHref == null) {
-                Matcher metaCoverMatcher = Pattern.compile("<meta[^>]+name=\"cover\"[^>]+content=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+                Matcher metaCoverMatcher = Pattern.compile("<meta[^>]+name=\"cover\"[^>]+content=\"([^\"]+)\"",
+                        Pattern.CASE_INSENSITIVE).matcher(opfXml);
                 if (metaCoverMatcher.find()) {
                     String coverId = metaCoverMatcher.group(1);
                     // 根据ID查找对应的href
-                    Matcher itemByIdMatcher = Pattern.compile("<item[^>]+id=\"" + Pattern.quote(coverId) + "\"[^>]+href=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+                    Matcher itemByIdMatcher = Pattern.compile("<item[^>]+id=\"" + Pattern.quote(coverId)
+                            + "\"[^>]+href=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE).matcher(opfXml);
                     if (itemByIdMatcher.find()) {
                         coverHref = itemByIdMatcher.group(1);
                         // 尝试获取media-type
@@ -1193,7 +1207,8 @@ public class LocalBookParser {
                     String lower = (id + " " + href).toLowerCase();
                     if (lower.contains("cover")) {
                         best = href;
-                        Matcher mediaM = Pattern.compile("media-type=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE).matcher(tag);
+                        Matcher mediaM = Pattern.compile("media-type=\"([^\"]+)\"",
+                                Pattern.CASE_INSENSITIVE).matcher(tag);
                         if (mediaM.find()) coverMediaType = mediaM.group(1);
                         break;
                     }
@@ -1216,7 +1231,6 @@ public class LocalBookParser {
                     while (fullCoverPath.contains("../")) {
                         fullCoverPath = fullCoverPath.replaceFirst("[^/]+/\\.\\./", "");
                     }
-                    // 移除开头的斜杠
                     if (fullCoverPath.startsWith("/")) {
                         fullCoverPath = fullCoverPath.substring(1);
                     }
@@ -1251,10 +1265,8 @@ public class LocalBookParser {
                         String coverFileName = "cover_" + bookId + ext;
                         File coverFile = new File(context.getFilesDir(), coverFileName);
                         
-                        // 删除旧封面（如果存在）
                         deleteOldCover(context, bookId);
                         
-                        // 保存新封面
                         FileOutputStream fos = new FileOutputStream(coverFile);
                         fos.write(coverData);
                         fos.close();
@@ -1268,7 +1280,7 @@ public class LocalBookParser {
             }
             // ========== 封面提取结束 ==========
 
-            // 解析 spine 顺序 - 更健壮的解析方式
+            // 解析 spine 顺序
             List<String> idrefList = new ArrayList<>();
             
             // 首先尝试从NCX文件获取目录结构（EPUB2）
@@ -1287,11 +1299,14 @@ public class LocalBookParser {
                 try {
                     String ncxXml = new String(ncxData, "UTF-8");
                     // 提取navPoint中的标题和源引用
-                    Matcher navPointM = Pattern.compile("<navPoint[^>]*>(.*?)</navPoint>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(ncxXml);
+                    Matcher navPointM = Pattern.compile("<navPoint[^>]*>(.*?)</navPoint>",
+                            Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(ncxXml);
                     while (navPointM.find()) {
                         String navPoint = navPointM.group(1);
-                        Matcher textM = Pattern.compile("<text[^>]*>([^<]+)</text>", Pattern.CASE_INSENSITIVE).matcher(navPoint);
-                        Matcher srcM = Pattern.compile("<content[^>]*src=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE).matcher(navPoint);
+                        Matcher textM = Pattern.compile("<text[^>]*>([^<]+)</text>",
+                                Pattern.CASE_INSENSITIVE).matcher(navPoint);
+                        Matcher srcM = Pattern.compile("<content[^>]*src=\"([^\"]+)\"",
+                                Pattern.CASE_INSENSITIVE).matcher(navPoint);
                         if (textM.find() && srcM.find()) {
                             String title = cleanHtmlText(textM.group(1)).trim();
                             String src = srcM.group(1);
@@ -1319,7 +1334,8 @@ public class LocalBookParser {
                         String navHtml = new String(navData, "UTF-8");
                         if (navHtml.contains("epub:type=\"toc\"") || navHtml.contains("class=\"toc\"")) {
                             // 简单的TOC解析
-                            Matcher navM = Pattern.compile("<a[^>]+href=\"([^\"]+)\"[^>]*>([^<]+)</a>", Pattern.CASE_INSENSITIVE).matcher(navHtml);
+                            Matcher navM = Pattern.compile("<a[^>]+href=\"([^\"]+)\"[^>]*>([^<]+)</a>",
+                                    Pattern.CASE_INSENSITIVE).matcher(navHtml);
                             while (navM.find()) {
                                 String href = navM.group(1);
                                 String title = cleanHtmlText(navM.group(2)).trim();
@@ -1336,14 +1352,16 @@ public class LocalBookParser {
             }
             
             // 方法1: 标准spine解析
-            Matcher spineM = Pattern.compile("<itemref[^>]*idref=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+            Matcher spineM = Pattern.compile("<itemref[^>]*idref=\"([^\"]+)\"",
+                    Pattern.CASE_INSENSITIVE).matcher(opfXml);
             while (spineM.find()) {
                 idrefList.add(spineM.group(1));
             }
             
             // 如果spine为空，尝试从manifest中获取所有项目作为备选
             if (idrefList.isEmpty()) {
-                Matcher manifestM = Pattern.compile("<item[^>]+id=\"([^\"]+)\"[^>]+href=\"([^\"]+)\"[^>]*>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+                Matcher manifestM = Pattern.compile("<item[^>]+id=\"([^\"]+)\"[^>]+href=\"([^\"]+)\"[^>]*>",
+                        Pattern.CASE_INSENSITIVE).matcher(opfXml);
                 while (manifestM.find()) {
                     String id = manifestM.group(1);
                     String href = manifestM.group(2);
@@ -1355,7 +1373,8 @@ public class LocalBookParser {
             }
 
             Map<String, String> idToHref = new HashMap<>();
-            Matcher itemM = Pattern.compile("<item[^>]+id=\"([^\"]+)\"[^>]+href=\"([^\"]+)\"[^>]*>", Pattern.CASE_INSENSITIVE).matcher(opfXml);
+            Matcher itemM = Pattern.compile("<item[^>]+id=\"([^\"]+)\"[^>]+href=\"([^\"]+)\"[^>]*>",
+                    Pattern.CASE_INSENSITIVE).matcher(opfXml);
             while (itemM.find()) {
                 String id = itemM.group(1);
                 String href = itemM.group(2);
@@ -1375,7 +1394,7 @@ public class LocalBookParser {
             }
 
             int chapterIndex = 0;
-            // ✅ 全书共享的样式表 / 图片缓存：同一份资源只读取、作用域化、编码一次。
+            // 全书共享的样式表 / 图片缓存：同一份资源只读取、作用域化、编码一次。
             //    否则一本书 800 章会把同一份 15KB 公共 CSS 重复内联 800 次，
             //    同一张 200KB 插图重复 base64 编码 800 次（产物膨胀到数百 MB，导入长时间卡死）
             Map<String, String> cssCache = new HashMap<>();
@@ -1390,7 +1409,6 @@ public class LocalBookParser {
                 while (fullPath.contains("../")) {
                     fullPath = fullPath.replaceFirst("[^/]+/\\.\\./", "");
                 }
-                // 移除开头的斜杠
                 if (fullPath.startsWith("/")) {
                     fullPath = fullPath.substring(1);
                 }
@@ -1425,7 +1443,7 @@ public class LocalBookParser {
                 String fileName = epubBaseName(href);
                 
                 // ============================================
-                // ✅ 新增第0步：先过滤前置文件（封面/版权/说明等）
+                // 新增第0步：先过滤前置文件（封面/版权/说明等）
                 // 从文件名就能排除的非正文章节，跳过标题提取节省时间
                 // ============================================
                 if (shouldSkipByFileName(fileName)) {
@@ -1453,7 +1471,7 @@ public class LocalBookParser {
                 }
                 
                 // ============================================
-                // ✅ 选择最佳标题：优先选"包含章节号且非通用词"的那个
+                // 选择最佳标题：优先选"包含章节号且非通用词"的那个
                 // ============================================
                 
                 // 判断标题是否"高质量"（包含章节号前缀 或 非通用词且足够长）
@@ -1498,8 +1516,8 @@ public class LocalBookParser {
                     " ncx=\"" + ncxTitle + "\" heading=\"" + headingTitle + "\" titleTag=\"" + titleTagTitle + "\"" +
                     " => FINAL=\"" + chapterTitle + "\"");
                 
-                // ✅ 简介提取（来源2：EPUB 里的「内容简介」章）
-                // ⚠️ 必须放在 shouldSkipChapter 之前：这类章节紧接着就会被当作非正文剔除，
+                // 简介提取（来源2：EPUB 里的「内容简介」章）
+                // 必须放在 shouldSkipChapter 之前：这类章节紧接着就会被当作非正文剔除，
                 //    等跳过之后再来取就拿不到了（EasyPub 生成的书即 chapter0.html，NCX 标题"内容简介"）。
                 if (info.intro.length() < INTRO_MIN_TEXT_LEN && isIntroChapterTitle(chapterTitle)) {
                     String introText = cleanChapterContent(bodyOf(html));
@@ -1509,7 +1527,7 @@ public class LocalBookParser {
                     }
                 }
 
-                // ✅ 过滤非正文章节（封面、目录、简介、版权信息等）——标题兜底过滤
+                // 过滤非正文章节（封面、目录、简介、版权信息等）——标题兜底过滤
                 if (shouldSkipChapter(chapterTitle, html)) {
                     Log.d("LocalBookParser", "Skipping non-content chapter: " + chapterTitle);
                     continue;
@@ -1520,7 +1538,7 @@ public class LocalBookParser {
                 //   避免每章 31 次 Pattern.compile —— 真机上这是每章数毫秒的开销）
                 String content = cleanChapterContent(html);
                                 
-                // ✅ 移除内容开头的重复标题行/标题前缀
+                // 移除内容开头的重复标题行/标题前缀
                 // 策略：只在前 5 行检查。独立标题行 → 整行删除；标题+正文混在一起的行 → 只去掉开头的标题部分
                 if (chapterTitle != null && !chapterTitle.isEmpty()) {
                     // 归一化标题（去掉空白，便于匹配）
@@ -1610,7 +1628,8 @@ public class LocalBookParser {
                                 Log.d("LocalBookParser", "Removing title-only line: " + trimmedLine);
                                 continue;
                             } else {
-                                Log.d("LocalBookParser", "Stripping title prefix from line, kept: " + rest.substring(0, Math.min(rest.length(), 20)) + "...");
+                                Log.d("LocalBookParser", "Stripping title prefix from line, kept: "
+                                        + rest.substring(0, Math.min(rest.length(), 20)) + "...");
                                 filteredLines.add(rest);
                                 foundFirstContent = true;  // 遇到正文，停止检查
                                 continue;
@@ -1745,7 +1764,7 @@ public class LocalBookParser {
         StringBuilder css = new StringBuilder();
 
         // 1. <style> 标签内联 CSS
-        //    ✅ 按「样式内容」缓存**作用域化之后**的结果：同一段内联样式在多章重复出现时只处理一次
+        //    按「样式内容」缓存**作用域化之后**的结果：同一段内联样式在多章重复出现时只处理一次
         Matcher styleM = RE_STYLE_BLOCK.matcher(xhtml);
         while (styleM.find()) {
             String block = styleM.group(1);
@@ -1759,7 +1778,7 @@ public class LocalBookParser {
         }
 
         // 2. <link rel="stylesheet" href="..."> 内嵌 CSS
-        //    ✅ 以「解析后的 zip 路径」为键，缓存**作用域化之后**的结果。
+        //    以「解析后的 zip 路径」为键，缓存**作用域化之后**的结果。
         //    原来这里只缓存了「解码后的原文」，导致 scopeEpubCss() 仍然每章都要在整份
         //    样式表（本书 83KB、254 个选择器）上重跑一遍——真机实测单次 1.5~2.6 秒，
         //    1800 章 ≈ 98 分钟，正是「导入一个小时还在导入」的根因。现在每份样式表全书只算一次。
@@ -1800,7 +1819,7 @@ public class LocalBookParser {
         // 5. CSS 作用域隔离：reader.html 是「单文档」，书里的 body / html / div / * / a
         //    等选择器会命中阅读器自身的 DOM（#htmlContent、#htmlColumns、#flipbookContainer…），
         //    必须把选择器限定到包裹正文的 .epub-chapter 之内。
-        //    ⚠️ 注意这里是「逐块」做的作用域化（上面的片段已经在缓存里作用域化过了），
+        //    注意这里是「逐块」做的作用域化（上面的片段已经在缓存里作用域化过了），
         //    不能再对拼接结果整体再跑一次——那会让每章都重新解析整份 CSS。
         String scopedCss = css.toString();
 
@@ -1903,7 +1922,7 @@ public class LocalBookParser {
     private static String scopeOneSelector(String sel) {
         String s = sel.trim();
         if (s.isEmpty()) return s;
-        // ⚠️ 这里原来用 String.replaceFirst(...)，每次调用都会把 "前缀 + mod" 这条长正则**重新编译一遍**。
+        // 这里原来用 String.replaceFirst(...)，每次调用都会把 "前缀 + mod" 这条长正则**重新编译一遍**。
         //    真机实测该正则编译一次 ~5.7ms，一本书 1800 章 × 每章数百个选择器 → 导入卡近一小时。
         //    改为预编译 Pattern + Matcher.replaceFirst（编译一次，全书复用）。
         Matcher m1 = RE_SCOPE_ROOT.matcher(s);
@@ -1974,7 +1993,8 @@ public class LocalBookParser {
      * 解析阶段就会长时间卡在导入中。
      * 返回空串表示不内联该图（缺失，或超过 512KB 上限）。
      */
-    private static String cachedImageUri(String resolved, Map<String, String> imgCache, Map<String, byte[]> zipEntries) {
+    private static String cachedImageUri(String resolved, Map<String, String> imgCache,
+            Map<String, byte[]> zipEntries) {
         if (resolved == null) return "";
         if (imgCache.containsKey(resolved)) return imgCache.get(resolved);
         String uri = "";
@@ -2366,7 +2386,6 @@ public class LocalBookParser {
             int dotIndex = href.lastIndexOf('.');
             if (dotIndex > 0 && dotIndex < href.length() - 1) {
                 String fileExt = href.substring(dotIndex).toLowerCase();
-                // 验证是否为合法的图片扩展名
                 if (RE_IMAGE_EXT.matcher(fileExt).matches()) {
                     return fileExt;
                 }
@@ -2474,7 +2493,7 @@ public class LocalBookParser {
     }
     
     /**
-     * ✅ 新增：判断是否应该跳过该章节（封面、目录、简介等非正文章节）
+     * 判断是否应该跳过该章节（封面、目录、简介等非正文章节）
      */
     private static boolean shouldSkipChapter(String title, String html) {
         if (title == null || title.isEmpty()) {
@@ -2567,7 +2586,7 @@ public class LocalBookParser {
     }
     
     /**
-     * ✅ 新增：按文件名过滤前置/后置非正文章节
+     * 按文件名过滤前置/后置非正文章节
      * cover, toc, copyright, instruction, pretxt, tiaoshu 等
      */
     private static boolean shouldSkipByFileName(String fileName) {

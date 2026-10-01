@@ -155,7 +155,7 @@ public class PopupChapterFragment extends Fragment {
                     } catch (Throwable ignored) {}
                 });
             }
-            // ✅ 目录 Fragment 根视图（背景/章节数栏）跟随日/夜间；列表项由 ChapterAdapter 在 bind 时着色
+            // 目录 Fragment 根视图（背景/章节数栏）跟随日/夜间；列表项由 ChapterAdapter 在 bind 时着色
             ReadActivity.themeViewTree(view);
             return view;
         } catch (Throwable t) {

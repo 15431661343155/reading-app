@@ -15,7 +15,6 @@ public class ReadingSettingsManager {
     private static final String TAG = "ReadingSettingsManager";
     private static final String PREFS_NAME = "reading_settings";
     
-    // 设置键名
     private static final String KEY_FONT_SIZE = "font_size";
     private static final String KEY_HEADER_FOOTER_FONT_SIZE = "header_footer_font_size";
     private static final String KEY_SHOW_HEADER_FOOTER = "show_header_footer";
@@ -90,18 +89,15 @@ public class ReadingSettingsManager {
         
         StringBuilder js = new StringBuilder();
         
-        // 应用字体大小
         js.append("if (typeof applyFontSize === 'function') {");
         js.append("applyFontSize(").append(fontSize).append(");");
         js.append("}");
         
-        // 应用页眉页脚设置
         js.append("if (typeof applyHeaderFooterSettings === 'function') {");
         js.append("applyHeaderFooterSettings(").append(showHeaderFooter ? "true" : "false");
         js.append(", ").append(headerFooterFontSize).append(");");
         js.append("}");
         
-        // 应用背景颜色
         String bgColorHex = getBgColorHex();
         js.append("if (typeof applyBgColor === 'function') {");
         js.append("applyBgColor('").append(bgColorHex).append("');");

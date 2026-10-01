@@ -159,7 +159,6 @@ public class TypesetEngine {
     private String fetchLine(String text, int startPos, float maxWidth, Paint paint) {
         if (startPos >= text.length()) return "";
 
-        // 检查是否以换行符开头
         char firstChar = text.charAt(startPos);
         if (firstChar == '\n') {
             return "";

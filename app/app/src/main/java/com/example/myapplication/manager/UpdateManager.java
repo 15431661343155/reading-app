@@ -240,7 +240,6 @@ public class UpdateManager {
         tvDownloadPercent.setText("0%");
         progressBar.setProgress(0);
 
-        // 检查是否已有下载文件
         File cacheDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
         if (cacheDir == null) {
             tvDownloadStatus.setText("存储不可用");
@@ -261,7 +260,7 @@ public class UpdateManager {
         }
 
         // 开始下载。
-        // ⚠️ 不信任后端下发的 filePath：历史记录里存过 /www/app/apk/...（服务器本地路径）
+        // 不信任后端下发的 filePath：历史记录里存过 /www/app/apk/...（服务器本地路径）
         // 或 /api/admin/apk/download/...（需管理员登录，匿名 401），DownloadManager 都会失败。
         // 统一改用公开下载接口 /api/app/apk/download/{urlencoded 文件名}（SecurityConfig permitAll）。
         String downloadUrl = buildApkDownloadUrl(currentApkPush);
@@ -270,7 +269,8 @@ public class UpdateManager {
         request.setTitle("书阁阅读更新");
         request.setDescription("正在下载新版本...");
         request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE);
-        request.setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, currentApkPush.getFileName());
+        request.setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS,
+                currentApkPush.getFileName());
 
         android.app.DownloadManager downloadManager = (android.app.DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
         if (downloadManager == null) {
@@ -325,7 +325,8 @@ public class UpdateManager {
                     if (tvDownloadPercent != null) tvDownloadPercent.setText(progress + "%");
                     if (tvDownloadStatus != null) {
                         if (status == android.app.DownloadManager.STATUS_RUNNING) {
-                            tvDownloadStatus.setText("下载中 " + formatFileSize((long) bytesDownloaded) + " / " + formatFileSize((long) totalSize));
+                            tvDownloadStatus.setText("下载中 " + formatFileSize((long) bytesDownloaded)
+                                    + " / " + formatFileSize((long) totalSize));
                         } else if (status == android.app.DownloadManager.STATUS_PAUSED) {
                             tvDownloadStatus.setText("下载已暂停");
                         } else if (status == android.app.DownloadManager.STATUS_PENDING) {
@@ -373,7 +374,6 @@ public class UpdateManager {
                         isDownloading = false;
                         stopProgress();
 
-                        // 显示安装按钮
                         layoutButtons.setVisibility(View.VISIBLE);
                         btnUpdate.setText("立即安装");
                         btnCancel.setText("取消");

@@ -168,7 +168,6 @@ public class BookShelfFragment extends Fragment {
             } catch (Throwable ignored) {}
         }, "html-cache-sweep").start();
 
-        // 设置下拉刷新颜色
         swipeRefresh.setColorSchemeResources(R.color.ios_blue, R.color.ios_blue);
 
         // 编辑态返回键拦截：进入编辑态时启用，按返回退出编辑而不是退出页面
@@ -227,7 +226,7 @@ public class BookShelfFragment extends Fragment {
                 // 本地 / 服务器书籍：原有逻辑 + Long/Integer 自动拆箱 NPE 兜底
                 Long idObj = book.getId();
                 long bookId = idObj == null ? 0L : idObj;
-                // ✅ 进书前后台预热章节缓存 SP：SharedPreferences 首次访问会在「当前线程」
+                // 进书前后台预热章节缓存 SP：SharedPreferences 首次访问会在「当前线程」
                 //    同步整文件读 + XML 解析，章节多的书正文缓存（chapter_content_<bookId>）
                 //    可达数 MB，冷启动后首次点书曾在主线程卡住数秒，表现为
                 //    「点击书籍无反应，过一会才进阅读器」。SP 是进程级单例，
@@ -273,7 +272,8 @@ public class BookShelfFragment extends Fragment {
             try {
                 appCtx.getSharedPreferences("chapter_list_" + bid, Context.MODE_PRIVATE).getInt("count", 0);
                 appCtx.getSharedPreferences("chapter_meta_" + bid, Context.MODE_PRIVATE).getInt("count", 0);
-                appCtx.getSharedPreferences("chapter_content_" + bid, Context.MODE_PRIVATE).getString("content_0", null);
+                appCtx.getSharedPreferences("chapter_content_" + bid,
+                        Context.MODE_PRIVATE).getString("content_0", null);
             } catch (Throwable ignored) {}
         }, "reader-sp-prewarm").start();
     }
@@ -322,7 +322,7 @@ public class BookShelfFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // ✅ 预热阅读器 WebView（复用池）：在书架页就把 reader.html 异步加载好，
+        // 预热阅读器 WebView（复用池）：在书架页就把 reader.html 异步加载好，
         //    这样进书时通常已命中缓存，跳过「重建 WebView + 重载 reader.html」的冷启动。
         if (getContext() != null) {
             ReaderWebViewPool.preload(getContext().getApplicationContext());
@@ -448,7 +448,8 @@ public class BookShelfFragment extends Fragment {
         bottomDialog.setOnCancelListener(d -> hideEditMode());
         if (bottomDialog.getWindow() != null) {
             bottomDialog.getWindow().setGravity(Gravity.BOTTOM);
-            bottomDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            bottomDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
             bottomDialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL);
             bottomDialog.getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
@@ -495,8 +496,10 @@ public class BookShelfFragment extends Fragment {
             } else if (userId > 0 && book.getStatus() != -1) {
                 RetrofitClient.getApiService().removeFromBookshelf(userId, book.getId())
                         .enqueue(new Callback<ApiResponse<Void>>() {
-                            @Override public void onResponse(@NonNull Call<ApiResponse<Void>> call, @NonNull Response<ApiResponse<Void>> response) {}
-                            @Override public void onFailure(@NonNull Call<ApiResponse<Void>> call, @NonNull Throwable t) {}
+                            @Override public void onResponse(@NonNull Call<ApiResponse<Void>> call,
+                                    @NonNull Response<ApiResponse<Void>> response) {}
+                            @Override public void onFailure(@NonNull Call<ApiResponse<Void>> call,
+                                    @NonNull Throwable t) {}
                         });
             }
             if (book.getStatus() == -1) {
@@ -676,7 +679,7 @@ public class BookShelfFragment extends Fragment {
                 it.csx0 = c1.width() > 0 ? c0.width() / c1.width() : 1f;
                 it.csy0 = c1.height() > 0 ? c0.height() / c1.height() : 1f;
                 // 封面位移补偿 = 「新布局偏移 → 旧偏移」的纯平移差（各自相对卡片矩形）。
-                // ⚠️ 旧写法 cl0 - cs*cl1 混入了封面缩放系数：缩放只改尺寸、不动左上角锚点，
+                // 旧写法 cl0 - cs*cl1 混入了封面缩放系数：缩放只改尺寸、不动左上角锚点，
                 // 位移补偿与缩放无关。旧宫格封面有大白边遮住误差；海报卡封面贴边后
                 // 宫→列飞行中封面顶出卡面上缘、左移出卡外（2026-09-30 过程帧取证）。
                 float cl0x = c0.left - r0.left, cl0y = c0.top - r0.top;
@@ -756,7 +759,7 @@ public class BookShelfFragment extends Fragment {
     private void applyMorphState(MorphItem it, float e, float inShiftY) {
         BookAdapter.BookHolder h = it.h;
         View child = it.child;
-        // 根：贝塞尔弧线位移（顶角沿二次贝塞尔）。⚠️ 贝塞尔对位目标是「卡片矩形」，须再扣掉
+        // 根：贝塞尔弧线位移（顶角沿二次贝塞尔）。贝塞尔对位目标是「卡片矩形」，须再扣掉
         // 新模式卡片自身 margin，否则 list→宫格 收尾时整卡停在 margin 偏移上、结束瞬间回跳
         // （宫格左右 margin 10dp = 30px 跳变、上 margin 4dp = 12px，2026-09-30 海报卡后暴露）。
         float u = 1 - e;
@@ -882,7 +885,8 @@ public class BookShelfFragment extends Fragment {
         RetrofitClient.getApiService().getTotalReadTime(userId)
                 .enqueue(new Callback<ApiResponse<Long>>() {
                     @Override
-                    public void onResponse(@NonNull Call<ApiResponse<Long>> call, @NonNull Response<ApiResponse<Long>> response) {
+                    public void onResponse(@NonNull Call<ApiResponse<Long>> call,
+                            @NonNull Response<ApiResponse<Long>> response) {
                         long seconds = 0;
                         if (response.isSuccessful() && response.body() != null && response.body().isSuccess()
                                 && response.body().getData() != null) {
@@ -1011,7 +1015,8 @@ public class BookShelfFragment extends Fragment {
     private void applySortAndNotify() {
         if (getActivity() == null) return;
         SharedPreferences sp = getActivity().getSharedPreferences("reading_records", Context.MODE_PRIVATE);
-        SharedPreferences spExt = getActivity().getSharedPreferences(ExternalPrefs.recordsName(getActivity()), Context.MODE_PRIVATE);
+        SharedPreferences spExt = getActivity().getSharedPreferences(ExternalPrefs.recordsName(getActivity()),
+                Context.MODE_PRIVATE);
         shelfBookList.sort((a, b) -> {
             long timeA = getLastReadTimeFor(sp, spExt, a);
             long timeB = getLastReadTimeFor(sp, spExt, b);
@@ -1078,7 +1083,7 @@ public class BookShelfFragment extends Fragment {
         }
 
         // 只有「首屏且本地一无所有」（此刻列表注定是空的）才用整页加载动画。
-        // ⚠️ 本方法被三个入口共用：onResume（每次从阅读页返回）、下拉刷新、外站同步完成回调 ——
+        // 本方法被三个入口共用：onResume（每次从阅读页返回）、下拉刷新、外站同步完成回调 ——
         //    那几种情况列表里已经有书、也各有自己的反馈（下拉转圈），再无条件盖一层整页动画
         //    会把已有列表整块刷掉（踩过）。
         if (!firstLoadDone && baseline.isEmpty()) setShelfLoading(true);
@@ -1094,7 +1099,8 @@ public class BookShelfFragment extends Fragment {
 
         RetrofitClient.getApiService().getBookshelf(userId).enqueue(new Callback<ApiResponse<List<Bookshelf>>>() {
             @Override
-            public void onResponse(@NonNull Call<ApiResponse<List<Bookshelf>>> call, @NonNull Response<ApiResponse<List<Bookshelf>>> response) {
+            public void onResponse(@NonNull Call<ApiResponse<List<Bookshelf>>> call,
+                    @NonNull Response<ApiResponse<List<Bookshelf>>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
                     applyServerBooks(response.body().getData(), localBooks, externalBooks);
                     firstLoadDone = true;
@@ -1168,7 +1174,8 @@ public class BookShelfFragment extends Fragment {
     private List<Book> loadExternalBooks() {
         List<Book> external = new ArrayList<>();
         if (getActivity() == null) return external;
-        SharedPreferences sp = getActivity().getSharedPreferences(ExternalPrefs.shelfName(getActivity()), Context.MODE_PRIVATE);
+        SharedPreferences sp = getActivity().getSharedPreferences(ExternalPrefs.shelfName(getActivity()),
+                Context.MODE_PRIVATE);
         java.util.Map<String, ?> all = sp.getAll();
         for (java.util.Map.Entry<String, ?> entry : all.entrySet()) {
             String key = entry.getKey();
@@ -1191,7 +1198,7 @@ public class BookShelfFragment extends Fragment {
                 book.setSourceType(key.substring(0, sep));
                 book.setSourceUrl(key.substring(sep + 1));
             }
-            // ✅ 生成稳定的合成ID（负数，避免与真实bookId冲突），供 progressMap 查找阅读进度
+            // 生成稳定的合成ID（负数，避免与真实bookId冲突），供 progressMap 查找阅读进度
             String compositeKey = book.getSourceType() + "|" + book.getSourceUrl();
             book.setId(-(long) Math.abs(compositeKey.hashCode()));
             book.setStatus(-2); // 标记为外站书籍
@@ -1206,7 +1213,8 @@ public class BookShelfFragment extends Fragment {
     private void removeExternalBook(Book book) {
         if (book.getSourceType() == null || book.getSourceUrl() == null) return;
         String key = book.getSourceType() + "|" + book.getSourceUrl();
-        SharedPreferences sp = getActivity().getSharedPreferences(ExternalPrefs.shelfName(getActivity()), Context.MODE_PRIVATE);
+        SharedPreferences sp = getActivity().getSharedPreferences(ExternalPrefs.shelfName(getActivity()),
+                Context.MODE_PRIVATE);
         sp.edit().remove(key).apply();
         // 同步移除阅读记录
         String recordKey = "ext_" + book.getSourceType() + "|" + book.getSourceUrl();
@@ -1219,9 +1227,9 @@ public class BookShelfFragment extends Fragment {
 
         // 同步删除服务器侧外站书架 + 阅读记录（离散主动操作，立即同步；否则下次 pullAll 会把记录拉回）
         ExternalSyncManager.getInstance(getActivity()).removeShelfRemote(book.getSourceType(), book.getSourceUrl());
-        ExternalSyncManager.getInstance(getActivity()).deleteReadingRecordRemote(book.getSourceType(), book.getSourceUrl());
+        ExternalSyncManager.getInstance(getActivity()).deleteReadingRecordRemote(book.getSourceType(),
+                book.getSourceUrl());
 
-        // 移除分组归属
         getActivity().getSharedPreferences(PREF_GROUP_ASSIGN, Context.MODE_PRIVATE)
                 .edit().remove(getBookGroupKey(book)).apply();
     }
@@ -1322,7 +1330,7 @@ public class BookShelfFragment extends Fragment {
         }
         editor.apply();
 
-        // ✅ 同步清理本地书关联数据：阅读记录、书签、分页缓存、分组归属
+        // 同步清理本地书关联数据：阅读记录、书签、分页缓存、分组归属
         // 避免删除书籍后残留垃圾数据导致阅读记录页/书签页显示已删除书籍
 
         // 1) 阅读记录 reading_records：按 bookId 定位，与最后一条交换后删除全部字段
@@ -1338,7 +1346,8 @@ public class BookShelfFragment extends Fragment {
                             .putString("record_author_" + i, recSp.getString("record_author_" + lastIndex, ""))
                             .putString("record_cover_" + i, recSp.getString("record_cover_" + lastIndex, ""))
                             .putInt("record_chapterIndex_" + i, recSp.getInt("record_chapterIndex_" + lastIndex, 0))
-                            .putString("record_chapterTitle_" + i, recSp.getString("record_chapterTitle_" + lastIndex, ""))
+                            .putString("record_chapterTitle_" + i, recSp.getString("record_chapterTitle_"
+                                    + lastIndex, ""))
                             .putInt("record_totalChapters_" + i, recSp.getInt("record_totalChapters_" + lastIndex, 0))
                             .putInt("record_page_" + i, recSp.getInt("record_page_" + lastIndex, 1))
                             .putInt("record_totalPages_" + i, recSp.getInt("record_totalPages_" + lastIndex, 0))
@@ -1399,8 +1408,9 @@ public class BookShelfFragment extends Fragment {
             }
         }
 
-        // ✅ 外站书籍：从 external_reading_records 读取阅读进度
-        SharedPreferences extSp = getActivity().getSharedPreferences(ExternalPrefs.recordsName(getActivity()), Context.MODE_PRIVATE);
+        // 外站书籍：从 external_reading_records 读取阅读进度
+        SharedPreferences extSp = getActivity().getSharedPreferences(ExternalPrefs.recordsName(getActivity()),
+                Context.MODE_PRIVATE);
         for (Book book : allBooks) {
             Integer stObj = book.getStatus();
             int st = stObj == null ? 0 : stObj;
@@ -1569,7 +1579,6 @@ public class BookShelfFragment extends Fragment {
                     if (c instanceof TextView) startColors.put((TextView) c, ((TextView) c).getCurrentTextColor());
                 }
                 pendingChipStartColors = startColors;
-                // 刷新所有 chip 样式
                 for (int i = 0; i < layoutGroupTabs.getChildCount(); i++) {
                     View c = layoutGroupTabs.getChildAt(i);
                     if (c instanceof TextView) {
@@ -1774,7 +1783,8 @@ public class BookShelfFragment extends Fragment {
 
     private void setBookGroup(Book book, String groupName) {
         if (getActivity() == null) return;
-        SharedPreferences.Editor ed = getActivity().getSharedPreferences(PREF_GROUP_ASSIGN, Context.MODE_PRIVATE).edit();
+        SharedPreferences.Editor ed = getActivity().getSharedPreferences(PREF_GROUP_ASSIGN,
+                Context.MODE_PRIVATE).edit();
         if (groupName == null || groupName.isEmpty() || groupName.equals(GROUP_UNGROUPED)) {
             ed.remove(getBookGroupKey(book));
         } else {
@@ -1812,7 +1822,8 @@ public class BookShelfFragment extends Fragment {
                         customGroups.remove(name);
                         saveCustomGroups();
                         // 清除该分组的归属
-                        SharedPreferences sp = getActivity().getSharedPreferences(PREF_GROUP_ASSIGN, Context.MODE_PRIVATE);
+                        SharedPreferences sp = getActivity().getSharedPreferences(PREF_GROUP_ASSIGN,
+                                Context.MODE_PRIVATE);
                         SharedPreferences.Editor ed = sp.edit();
                         for (String k : sp.getAll().keySet()) {
                             if (name.equals(sp.getString(k, ""))) ed.remove(k);

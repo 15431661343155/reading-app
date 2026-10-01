@@ -102,7 +102,6 @@ public class MessageListFragment extends Fragment {
         tvEmptyText = view.findViewById(R.id.tv_empty_text);
         loadingView = view.findViewById(R.id.loading_view);
 
-        // 设置空状态图标和文案
         setupEmptyState();
 
         // 下拉刷新颜色
