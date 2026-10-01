@@ -438,15 +438,20 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
 
         // 多选框：列表=卡片右侧垂直居中（距卡右缘 14dp），封面原位不再让位；
         // 宫格=海报卡右下角内缩——相对 item_root 为右 20/下 60，即距海报卡右下角 8/6dp，
-        // 圆框完整落在卡面内（修复圆框骑出卡片外的溢出）。
-        // ⚠️ XML 的 layout_marginStart 会覆盖 setMargins 写入的 leftMargin（同封面盒注释的坑），显式清零。
+        // 圆框完整落在封面内（修复圆框骑出封面/卡外的溢出）。
+        // ⚠️ 方向解析坑（真机实测）：XML 定义了 layout_marginStart 后，只要 start/end 任一被定义，
+        // resolveLayoutDirection 会用 start/end 重写 left/right——marginEnd 未定义时 rightMargin
+        // 被清零（END gravity 下圆框直接顶到 item 右缘、半张骑出封面，且 bottomMargin 不受影响）。
+        // 因此 setMarginStart(0) 之后必须 setMarginEnd 显式钉死右边距，两条解析路径才收敛。
         FrameLayout.LayoutParams cbp = (FrameLayout.LayoutParams) h.ivCheckbox.getLayoutParams();
         if (grid) {
             cbp.gravity = android.view.Gravity.END | android.view.Gravity.BOTTOM;
             cbp.setMargins(0, 0, dp20, dp60);
+            cbp.setMarginEnd(dp20);
         } else {
             cbp.gravity = android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL;
             cbp.setMargins(0, 0, dp16, 0);
+            cbp.setMarginEnd(dp16);
         }
         cbp.setMarginStart(0);
         h.ivCheckbox.setLayoutParams(cbp);

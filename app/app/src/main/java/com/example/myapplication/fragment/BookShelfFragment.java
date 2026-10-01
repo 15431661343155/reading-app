@@ -22,6 +22,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -78,6 +79,8 @@ public class BookShelfFragment extends Fragment {
 
     private android.app.Dialog topDialog;
     private android.app.Dialog bottomDialog;
+    /** 编辑态系统返回键拦截：编辑中按返回=退出编辑（不离开书架页），非编辑态不启用 */
+    private OnBackPressedCallback editBackCallback;
     // 编辑态顶栏控件引用：计数随勾选实时刷新、全选文案随选中数切换
     private android.widget.TextView tvSelectedCount;
     private android.widget.TextView tvSelectAllRef;
@@ -167,6 +170,14 @@ public class BookShelfFragment extends Fragment {
 
         // 设置下拉刷新颜色
         swipeRefresh.setColorSchemeResources(R.color.ios_blue, R.color.ios_blue);
+
+        // 编辑态返回键拦截：进入编辑态时启用，按返回退出编辑而不是退出页面
+        editBackCallback = new OnBackPressedCallback(false) {
+            @Override public void handleOnBackPressed() {
+                hideEditMode();
+            }
+        };
+        requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), editBackCallback);
 
         // 下拉刷新监听
         swipeRefresh.setOnRefreshListener(() -> {
@@ -342,6 +353,7 @@ public class BookShelfFragment extends Fragment {
 
     private void showEditMode() {
         adapter.setEditMode(true);
+        if (editBackCallback != null) editBackCallback.setEnabled(true); // 返回键=退出编辑
         // 选中数变化统一走监听器：刷新「已选择 N 本」计数 + 「全选/取消全选」文案
         adapter.setOnEditStateListener(n -> {
             updateSelectedCountText(n);
@@ -382,8 +394,12 @@ public class BookShelfFragment extends Fragment {
 
         topDialog = new android.app.Dialog(requireActivity(), R.style.TopDialogStyle);
         topDialog.setContentView(topView);
-        topDialog.setCancelable(false);
+        // cancelable=true：编辑栏是独立窗口，系统返回键进的是 Dialog 窗口（到不了 Activity 的
+        // 返回分发器），只能靠 Dialog 自身的取消机制响应返回。取消（返回键）统一走 hideEditMode；
+        // dismiss() 不触发 onCancel，退出编辑时不会递归。触摸外部仍不可关。
+        topDialog.setCancelable(true);
         topDialog.setCanceledOnTouchOutside(false);
+        topDialog.setOnCancelListener(d -> hideEditMode());
         if (topDialog.getWindow() != null) {
             topDialog.getWindow().setGravity(Gravity.TOP);
             topDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -427,8 +443,9 @@ public class BookShelfFragment extends Fragment {
 
         bottomDialog = new android.app.Dialog(requireActivity(), R.style.BottomDialogStyle);
         bottomDialog.setContentView(bottomView);
-        bottomDialog.setCancelable(false);
+        bottomDialog.setCancelable(true); // 返回键可关（见 topDialog 处注释）
         bottomDialog.setCanceledOnTouchOutside(false);
+        bottomDialog.setOnCancelListener(d -> hideEditMode());
         if (bottomDialog.getWindow() != null) {
             bottomDialog.getWindow().setGravity(Gravity.BOTTOM);
             bottomDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -460,6 +477,7 @@ public class BookShelfFragment extends Fragment {
 
     private void hideEditMode() {
         adapter.setEditMode(false);
+        if (editBackCallback != null) editBackCallback.setEnabled(false); // 恢复默认返回行为
         if (topDialog != null && topDialog.isShowing()) topDialog.dismiss();
         if (bottomDialog != null && bottomDialog.isShowing()) bottomDialog.dismiss();
         tvSelectedCount = null;
