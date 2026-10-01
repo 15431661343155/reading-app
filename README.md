@@ -2,7 +2,7 @@
 
 一个面向中文阅读场景的电子书阅读应用，支持**本地导入**（TXT / EPUB）与**在线书源**两大内容来源，配套 Spring Boot 后端提供账号、书架同步、书源分发与应用内更新能力，并配有 **Web 书城、管理后台与官网**三端页面。
 
-- Android 客户端版本：`v2.0.16`（versionCode 2）
+- Android 客户端版本：`v2.0.24`
 - 包名：`com.example.myapplication`
 - 后端：`reading-app-backend` 0.0.1-SNAPSHOT
 - Web 端：`web/`（书城前台 Vue SPA + 管理后台静态页 + 官网，nginx 四子域部署）
