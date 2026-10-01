@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.dto.ReadTimeRequest;
 import com.example.readingapp.dto.ReadingCheckInRequest;
@@ -39,7 +40,7 @@ public class UserDataController {
      */
     private Long convertUserId(String userIdStr) {
         if (userIdStr == null || userIdStr.isEmpty()) {
-            throw new RuntimeException("用户ID无效");
+            throw new BusinessException("用户ID无效");
         }
         // 尝试直接解析为 Long（如果前端传递的是数据库主键）
         try {
@@ -62,7 +63,7 @@ public class UserDataController {
      */
     private Long ensureValidUserId(Long userId) {
         if (userId == null || userId <= 0) {
-            throw new RuntimeException("用户ID无效");
+            throw new BusinessException("用户ID无效");
         }
         // 如果已是有效的数据库主键，直接返回
         if (userRepo.existsById(userId)) {
@@ -127,8 +128,10 @@ public class UserDataController {
             progress.setTextAnchor(null);
             progress.setUpdatedAt(LocalDateTime.now());
             return ApiResponse.success(progressRepo.save(progress));
-        } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "保存失败");
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
+            } catch (Exception e) {
+            return ApiResponse.error("保存失败");
         }
     }
 
@@ -143,8 +146,10 @@ public class UserDataController {
             return ApiResponse.success(
                     progressRepo.findByUserIdAndBookId(dbUserId, bookId).orElse(null)
             );
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -159,8 +164,10 @@ public class UserDataController {
             return ApiResponse.success(
                     progressRepo.findByUserIdOrderByUpdatedAtDesc(dbUserId, PageRequest.of(0, 10))
             );
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -185,8 +192,10 @@ public class UserDataController {
             bs.setBookId(bookId);
             bs.setAddedAt(LocalDateTime.now());
             return ApiResponse.success(bookshelfRepo.save(bs));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -202,8 +211,10 @@ public class UserDataController {
             return ApiResponse.success(
                     bookshelfRepo.findByUserIdOrderByLastReadAtDesc(dbUserId, PageRequest.of(0, 50)).getContent()
             );
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -217,8 +228,10 @@ public class UserDataController {
             }
             bookshelfRepo.deleteByUserIdAndBookId(dbUserId, bookId);
             return ApiResponse.success(null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -257,8 +270,10 @@ public class UserDataController {
             }
             Bookmark saved = bookmarkService.addBookmark(bookmark);
             return ApiResponse.success(saved);
-        } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "添加失败");
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
+            } catch (Exception e) {
+            return ApiResponse.error("添加失败");
         }
     }
 
@@ -273,8 +288,10 @@ public class UserDataController {
             }
             List<Bookmark> list = bookmarkRepo.findByUserIdAndBookIdOrderByCreatedAtDesc(dbUserId, bookId);
             return ApiResponse.success(list);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -309,8 +326,10 @@ public class UserDataController {
             }
             Long total = readingStatService.getStat(dbUserId).getTotalReadSeconds();
             return ApiResponse.success(total != null ? total : 0L);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -340,8 +359,10 @@ public class UserDataController {
                 readingStatService.addReadSeconds(dbUserId, request.getDuration());
             }
             return ApiResponse.success(null);
-        } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "保存失败");
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
+            } catch (Exception e) {
+            return ApiResponse.error("保存失败");
         }
     }
 
@@ -360,8 +381,10 @@ public class UserDataController {
             }
             UserReadingStat stat = readingStatService.getStat(dbUserId);
             return ApiResponse.success(toStatResponse(stat));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -385,8 +408,10 @@ public class UserDataController {
             int migrated = request.getMigratedStreak() == null ? 0 : request.getMigratedStreak();
             UserReadingStat stat = readingStatService.checkIn(dbUserId, migrated);
             return ApiResponse.success(toStatResponse(stat));
-        } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "打卡失败");
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
+            } catch (Exception e) {
+            return ApiResponse.error("打卡失败");
         }
     }
 

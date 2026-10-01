@@ -1,5 +1,6 @@
 package com.example.readingapp.service.impl;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.entity.Bookmark;
 import com.example.readingapp.repository.BookmarkRepository;
 import com.example.readingapp.service.BookmarkService;
@@ -25,7 +26,7 @@ public class BookmarkServiceImpl implements BookmarkService {
                 bookmark.getUserId(),
                 bookmark.getBookId(),
                 bookmark.getChapterIndex())) {
-            throw new RuntimeException("该位置已有书签");
+            throw new BusinessException("该位置已有书签");
         }
 
         return bookmarkRepository.save(bookmark);

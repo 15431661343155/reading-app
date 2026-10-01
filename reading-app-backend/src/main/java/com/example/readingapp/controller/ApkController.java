@@ -3,6 +3,7 @@ package com.example.readingapp.controller;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.ApkPush;
 import com.example.readingapp.service.OperationLogService;
+import com.example.readingapp.util.PathSafety;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -196,8 +197,15 @@ public class ApkController {
     public void downloadApk(@PathVariable String fileName, HttpServletResponse response) {
         try {
             String decodedFileName = java.net.URLDecoder.decode(fileName, StandardCharsets.UTF_8);
-            File file = new File(apkDir, decodedFileName);
-            
+            // 路径穿越防护（canonical path 校验，见 PathSafety）
+            File file;
+            try {
+                file = PathSafety.safeResolve(apkDir, decodedFileName);
+            } catch (IllegalArgumentException e) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND, "文件不存在");
+                return;
+            }
+
             if (!file.exists()) {
                 response.sendError(HttpServletResponse.SC_NOT_FOUND, "文件不存在");
                 return;
@@ -228,8 +236,14 @@ public class ApkController {
     public ApiResponse<Void> deleteApk(@PathVariable String fileName, HttpServletRequest request) {
         try {
             String decodedFileName = java.net.URLDecoder.decode(fileName, StandardCharsets.UTF_8);
-            File file = new File(apkDir, decodedFileName);
-            
+            // 路径穿越防护（canonical path 校验，见 PathSafety）
+            File file;
+            try {
+                file = PathSafety.safeResolve(apkDir, decodedFileName);
+            } catch (IllegalArgumentException e) {
+                return ApiResponse.error("文件不存在");
+            }
+
             if (!file.exists()) {
                 return ApiResponse.error("文件不存在");
             }

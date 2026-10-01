@@ -66,4 +66,41 @@ public interface UserService {
 
     // 删除用户，并级联清理其全部关联数据（书架/进度/书签/时长/外站数据/站内消息）
     void deleteUserCascade(Long id);
+
+    // ===== 管理后台：用户管理扩展（管理员/内部人员） =====
+
+    /** 后台「恢复默认密码」的固定默认密码 */
+    String DEFAULT_RESET_PASSWORD = "12345678";
+
+    /**
+     * 创建内部账号（role 仅允许 ADMIN / STAFF）。
+     * 用户名规则与邮箱注册一致，密码走统一强度策略；不建阅读统计（内部账号不用于阅读）。
+     *
+     * @param username   用户名（3~20，字母开头，仅字母/数字/下划线，全局唯一）
+     * @param rawPassword 密码（明文，8~64 位且同时包含字母和数字）
+     * @param nickname   昵称（空则回退为用户名）
+     * @param role       ADMIN 或 STAFF
+     * @return 创建后的用户
+     */
+    User createInternalUser(String username, String rawPassword, String nickname, String role);
+
+    /**
+     * 管理后台重置用户密码（无需旧密码）。新密码走统一强度策略（8~64 位且含字母和数字）。
+     */
+    void resetPasswordByAdmin(Long id, String newPassword);
+
+    /**
+     * 管理后台把用户密码恢复为默认密码（12345678）。
+     * 默认密码为纯数字，不走强度策略（策略仅约束用户自设密码）。
+     */
+    void resetPasswordToDefault(Long id);
+
+    /**
+     * 调整内部人员角色（ADMIN / STAFF 互转）。
+     *
+     * @param id         目标用户
+     * @param newRole    ADMIN 或 STAFF
+     * @param operatorId 当前操作的管理员主键（不允许修改自己的角色，防止误降级）
+     */
+    User updateRoleByAdmin(Long id, String newRole, Long operatorId);
 }

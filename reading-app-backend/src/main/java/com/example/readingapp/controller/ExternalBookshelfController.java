@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.ExternalBookshelf;
 import com.example.readingapp.repository.ExternalBookshelfRepository;
@@ -43,8 +44,10 @@ public class ExternalBookshelfController {
             shelf.setUpdateTime(System.currentTimeMillis());
             ExternalBookshelf saved = externalBookshelfRepository.save(shelf);
             return ApiResponse.success("已加入书架", saved);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+            } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -57,8 +60,10 @@ public class ExternalBookshelfController {
             externalBookshelfRepository.deleteByUserIdAndSourceTypeAndSourceBookId(
                     userId, req.sourceType, req.sourceBookId);
             return ApiResponse.success("已移出书架", null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+            } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -69,8 +74,10 @@ public class ExternalBookshelfController {
         if (userId == null) return ApiResponse.error(401, "未登录");
         try {
             return ApiResponse.success(externalBookshelfRepository.findAllByUserId(userId));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+            } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 

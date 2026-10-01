@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.Book;
 import com.example.readingapp.repository.BookRepository;
@@ -90,9 +91,11 @@ public class CoverController {
 
             return ApiResponse.success("封面上传成功", coverUrl);
         } catch (IOException e) {
-            return ApiResponse.error("上传失败: " + e.getMessage());
-        } catch (RuntimeException e) {
+            return ApiResponse.error("上传失败，请稍后重试");
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (RuntimeException e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -108,8 +111,10 @@ public class CoverController {
             book.setCover(null);
             bookRepository.save(book);
             return ApiResponse.success("封面已删除", null);
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (RuntimeException e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 

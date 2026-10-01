@@ -2,6 +2,7 @@ package com.example.readingapp.config;
 
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.exception.BookAlreadyInShelfException;
+import com.example.readingapp.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -116,6 +117,14 @@ public class GlobalExceptionHandler {
         log.warn("接口不存在: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(404, "接口不存在"));
+    }
+
+    /** 业务异常：可预期的业务错误，返回其携带的业务码与可读消息（防止退化成 500） */
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
+        log.warn("业务异常: {}", ex.getMessage());
+        int code = ex.getCode() >= 400 && ex.getCode() < 600 ? ex.getCode() : HttpStatus.BAD_REQUEST.value();
+        return ResponseEntity.status(code).body(ApiResponse.error(ex.getCode(), ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

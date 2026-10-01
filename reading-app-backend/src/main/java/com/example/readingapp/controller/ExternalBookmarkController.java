@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.ExternalBookmark;
 import com.example.readingapp.repository.ExternalBookmarkRepository;
@@ -44,8 +45,10 @@ public class ExternalBookmarkController {
             if (bm.getCreatedAt() == null) bm.setCreatedAt(now);
             bm.setUpdateTime(now);
             return ApiResponse.success("书签已添加", externalBookmarkRepository.save(bm));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -58,8 +61,10 @@ public class ExternalBookmarkController {
             externalBookmarkRepository.deleteByUserIdAndSourceTypeAndSourceBookIdAndChapterIndex(
                     userId, req.sourceType, req.sourceBookId, req.chapterIndex);
             return ApiResponse.success("书签已删除", null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -70,8 +75,10 @@ public class ExternalBookmarkController {
         if (userId == null) return ApiResponse.error(401, "未登录");
         try {
             return ApiResponse.success(externalBookmarkRepository.findAllByUserId(userId));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -86,8 +93,10 @@ public class ExternalBookmarkController {
             return ApiResponse.success(
                     externalBookmarkRepository.findByUserIdAndSourceTypeAndSourceBookId(
                             userId, sourceType, sourceBookId));
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 

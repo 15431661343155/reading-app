@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.Bookshelf;
 import com.example.readingapp.service.BookshelfService;
@@ -32,8 +33,10 @@ public class BookshelfController {
         try {
             Bookshelf bookshelf = bookshelfService.addToBookshelf(userId, bookId);
             return ApiResponse.success("已加入书架", bookshelf);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -45,8 +48,10 @@ public class BookshelfController {
         try {
             bookshelfService.removeFromBookshelf(userId, bookId);
             return ApiResponse.success("已移出书架", null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 

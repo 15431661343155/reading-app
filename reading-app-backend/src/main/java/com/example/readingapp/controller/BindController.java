@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.dto.BindRequest;
 import com.example.readingapp.dto.CodeRequest;
@@ -73,8 +74,10 @@ public class BindController {
             verificationCodeService.sendSmsCode(request.getPhone(), type);
 
             return ApiResponse.success("验证码发送成功", null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -114,8 +117,10 @@ public class BindController {
             verificationCodeService.sendEmailCode(request.getEmail(), type);
 
             return ApiResponse.success("验证码发送成功", null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -135,8 +140,10 @@ public class BindController {
             } else {
                 return ApiResponse.error("验证码无效或已过期");
             }
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -156,8 +163,10 @@ public class BindController {
             } else {
                 return ApiResponse.error("验证码无效或已过期");
             }
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -181,8 +190,10 @@ public class BindController {
 
             User user = bindService.bindPhone(userId, request.getPhone(), request.getCode(), type);
             return ApiResponse.success("手机绑定成功", user);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -206,8 +217,10 @@ public class BindController {
 
             User user = bindService.bindEmail(userId, request.getEmail(), request.getCode(), type);
             return ApiResponse.success("邮箱绑定成功", user);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -225,8 +238,10 @@ public class BindController {
 
             User user = bindService.unbindPhone(userId, request.getCode());
             return ApiResponse.success("手机解绑成功", user);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -244,8 +259,10 @@ public class BindController {
 
             User user = bindService.unbindEmail(userId, request.getCode());
             return ApiResponse.success("邮箱解绑成功", user);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -285,8 +302,10 @@ public class BindController {
             }
 
             return ApiResponse.success("密码修改成功", null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 }

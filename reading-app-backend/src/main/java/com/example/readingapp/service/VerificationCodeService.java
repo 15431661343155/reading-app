@@ -1,5 +1,6 @@
 package com.example.readingapp.service;
 
+import com.example.readingapp.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,8 @@ public class VerificationCodeService {
         String code;
         long expireTime;
         int sendCount;
+        /** 校验失败次数：达到 {@link #CODE_MAX_FAILS} 次立即作废，防 6 位码穷举爆破 */
+        int failCount;
 
         CodeCache(String code) {
             this.code = code;
@@ -34,6 +37,9 @@ public class VerificationCodeService {
             this.sendCount = 1;
         }
     }
+
+    /** 单个验证码允许的最大校验失败次数（超过即作废，需重新发送） */
+    private static final int CODE_MAX_FAILS = 5;
 
     public String generateCode() {
         StringBuilder sb = new StringBuilder();
@@ -49,12 +55,12 @@ public class VerificationCodeService {
 
         if (cache != null && cache.sendCount >= 5) {
             log.warn("手机号 {} 验证码发送次数已达上限", phone);
-            throw new RuntimeException("验证码发送次数已达上限，请稍后再试");
+            throw new BusinessException("验证码发送次数已达上限，请稍后再试");
         }
 
         if (cache != null && System.currentTimeMillis() < cache.expireTime + 60000) {
             log.warn("手机号 {} 验证码发送过于频繁", phone);
-            throw new RuntimeException("发送过于频繁，请稍后再试");
+            throw new BusinessException("发送过于频繁，请稍后再试");
         }
 
         String code = generateCode();
@@ -77,12 +83,12 @@ public class VerificationCodeService {
 
         if (cache != null && cache.sendCount >= 5) {
             log.warn("邮箱 {} 验证码发送次数已达上限", email);
-            throw new RuntimeException("验证码发送次数已达上限，请稍后再试");
+            throw new BusinessException("验证码发送次数已达上限，请稍后再试");
         }
 
         if (cache != null && System.currentTimeMillis() < cache.expireTime + 60000) {
             log.warn("邮箱 {} 验证码发送过于频繁", email);
-            throw new RuntimeException("发送过于频繁，请稍后再试");
+            throw new BusinessException("发送过于频繁，请稍后再试");
         }
 
         String code = generateCode();
@@ -119,7 +125,14 @@ public class VerificationCodeService {
             codeCache.remove(key);
             log.info("手机号 {} 验证码验证成功", phone);
         } else {
-            log.warn("手机号 {} 验证码验证失败", phone);
+            cache.failCount++;
+            if (cache.failCount >= CODE_MAX_FAILS) {
+                // 失败次数达上限：作废验证码，防穷举爆破（需重新发送）
+                codeCache.remove(key);
+                log.warn("手机号 {} 验证码失败 {} 次，已作废", phone, cache.failCount);
+            } else {
+                log.warn("手机号 {} 验证码验证失败（{}/{})", phone, cache.failCount, CODE_MAX_FAILS);
+            }
         }
 
         return valid;
@@ -145,7 +158,14 @@ public class VerificationCodeService {
             codeCache.remove(key);
             log.info("邮箱 {} 验证码验证成功", email);
         } else {
-            log.warn("邮箱 {} 验证码验证失败", email);
+            cache.failCount++;
+            if (cache.failCount >= CODE_MAX_FAILS) {
+                // 失败次数达上限：作废验证码，防穷举爆破（需重新发送）
+                codeCache.remove(key);
+                log.warn("邮箱 {} 验证码失败 {} 次，已作废", email, cache.failCount);
+            } else {
+                log.warn("邮箱 {} 验证码验证失败（{}/{})", email, cache.failCount, CODE_MAX_FAILS);
+            }
         }
 
         return valid;

@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.dto.ProfileUpdateRequest;
 import com.example.readingapp.entity.User;
@@ -73,8 +74,10 @@ public class UserProfileController {
         try {
             User updated = userService.updateProfile(userId, request);
             return ApiResponse.success("保存成功", toProfileMap(updated));
-        } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "保存失败");
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
+            } catch (Exception e) {
+            return ApiResponse.error("保存失败");
         }
     }
 
@@ -87,8 +90,10 @@ public class UserProfileController {
         }
         try {
             return ApiResponse.success(toProfileMap(userService.findById(userId)));
-        } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "读取失败");
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
+            } catch (Exception e) {
+            return ApiResponse.error("读取失败");
         }
     }
 
@@ -111,7 +116,7 @@ public class UserProfileController {
             return ApiResponse.success("注销成功", null);
         } catch (Exception e) {
             log.error("注销账号失败 userId={}: {}", userId, e.getMessage(), e);
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "注销失败");
+            return ApiResponse.error("注销失败，请稍后重试");
         }
     }
 
@@ -159,7 +164,7 @@ public class UserProfileController {
             return ApiResponse.success("上传成功", data);
         } catch (Exception e) {
             log.error("上传头像失败 userId={}: {}", userId, e.getMessage(), e);
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "上传失败");
+            return ApiResponse.error("上传失败，请稍后重试");
         }
     }
 

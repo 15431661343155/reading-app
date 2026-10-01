@@ -92,6 +92,9 @@ public class HttpFetcher {
 
     public String fetch(RequestConfig config) {
         try {
+            // SSRF 防护：拒绝内网/保留地址与非 http(s) 协议（匿名书源接口可被触发，见 SafeUrlGuard）
+            SafeUrlGuard.check(config.url);
+
             SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
             factory.setConnectTimeout(config.timeoutMs != null ? config.timeoutMs : timeout);
             factory.setReadTimeout(config.timeoutMs != null ? config.timeoutMs : timeout);

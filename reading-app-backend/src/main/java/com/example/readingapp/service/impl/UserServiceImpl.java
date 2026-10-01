@@ -1,5 +1,6 @@
 package com.example.readingapp.service.impl;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.LoginRequest;
 import com.example.readingapp.dto.LoginResponse;
 import com.example.readingapp.dto.ProfileUpdateRequest;
@@ -61,7 +62,7 @@ public class UserServiceImpl implements UserService {
             userId = String.valueOf(num);
             attempt++;
             if (attempt > 100) {
-                throw new RuntimeException("生成 userId 失败，请稍后重试");
+                throw new BusinessException("生成 userId 失败，请稍后重试");
             }
         } while (userRepository.existsByUserId(userId));
         return userId;
@@ -89,28 +90,28 @@ public class UserServiceImpl implements UserService {
         String password = request.getPassword() == null ? "" : request.getPassword();
 
         if (username.isEmpty()) {
-            throw new RuntimeException("用户名不能为空");
+            throw new BusinessException("用户名不能为空");
         }
         if (password.isEmpty()) {
-            throw new RuntimeException("密码不能为空");
+            throw new BusinessException("密码不能为空");
         }
         if (username.length() < USERNAME_MIN || username.length() > USERNAME_MAX) {
-            throw new RuntimeException("用户名长度需为 " + USERNAME_MIN + "~" + USERNAME_MAX + " 个字符");
+            throw new BusinessException("用户名长度需为 " + USERNAME_MIN + "~" + USERNAME_MAX + " 个字符");
         }
         String passwordError = PasswordPolicy.validate(password);
         if (passwordError != null) {
-            throw new RuntimeException(passwordError);
+            throw new BusinessException(passwordError);
         }
 
         // 检查用户名是否已存在
         if (userRepository.existsByUsername(username)) {
-            throw new RuntimeException("用户名已存在");
+            throw new BusinessException("用户名已存在");
         }
 
         // 检查邮箱是否已存在
         if (request.getEmail() != null && !request.getEmail().isBlank()
                 && userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("邮箱已被注册");
+            throw new BusinessException("邮箱已被注册");
         }
 
         // 生成 6 位随机 userId
@@ -142,7 +143,7 @@ public class UserServiceImpl implements UserService {
             account = request.getUsername();
         }
         if (account == null || account.trim().isEmpty()) {
-            throw new RuntimeException("请输入账号");
+            throw new BusinessException("请输入账号");
         }
         account = account.trim();
 
@@ -153,12 +154,12 @@ public class UserServiceImpl implements UserService {
 
         // 验证密码
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("账号或密码错误");
+            throw new BusinessException("账号或密码错误");
         }
 
         // 检查用户状态
         if (user.getStatus() != null && user.getStatus() == 0) {
-            throw new RuntimeException("账号已被禁用");
+            throw new BusinessException("账号已被禁用");
         }
 
         return buildLoginResponse(user);
@@ -169,18 +170,18 @@ public class UserServiceImpl implements UserService {
     public LoginResponse loginByEmailCode(String email, String code) {
         String normalizedEmail = email == null ? "" : email.trim();
         if (normalizedEmail.isEmpty()) {
-            throw new RuntimeException("请输入邮箱");
+            throw new BusinessException("请输入邮箱");
         }
         if (!EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
-            throw new RuntimeException("邮箱格式不正确");
+            throw new BusinessException("邮箱格式不正确");
         }
         if (code == null || code.trim().isEmpty()) {
-            throw new RuntimeException("请输入验证码");
+            throw new BusinessException("请输入验证码");
         }
 
         // 验证码一次性校验（成功后即消费）
         if (!verificationCodeService.verifyEmailCode(normalizedEmail, code.trim(), AUTH_EMAIL_CODE_TYPE)) {
-            throw new RuntimeException("验证码无效或已过期");
+            throw new BusinessException("验证码无效或已过期");
         }
 
         User user = userRepository.findByEmail(normalizedEmail).orElse(null);
@@ -205,35 +206,35 @@ public class UserServiceImpl implements UserService {
 
         // 1. 先做参数与唯一性校验（顺序很重要：避免用户名冲突白白消耗一次验证码）
         if (normalizedEmail.isEmpty()) {
-            throw new RuntimeException("请输入邮箱");
+            throw new BusinessException("请输入邮箱");
         }
         if (!EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
-            throw new RuntimeException("邮箱格式不正确");
+            throw new BusinessException("邮箱格式不正确");
         }
         if (trimmedUsername.isEmpty()) {
-            throw new RuntimeException("请输入用户名");
+            throw new BusinessException("请输入用户名");
         }
         if (!REGISTER_USERNAME_PATTERN.matcher(trimmedUsername).matches()) {
-            throw new RuntimeException("用户名需为 " + USERNAME_MIN + "~" + REGISTER_USERNAME_MAX
+            throw new BusinessException("用户名需为 " + USERNAME_MIN + "~" + REGISTER_USERNAME_MAX
                     + " 个字符，仅含字母/数字/下划线，且以字母开头");
         }
         String passwordError = PasswordPolicy.validate(rawPassword);
         if (passwordError != null) {
-            throw new RuntimeException(passwordError);
+            throw new BusinessException(passwordError);
         }
         if (userRepository.existsByEmail(normalizedEmail)) {
-            throw new RuntimeException("邮箱已被注册");
+            throw new BusinessException("邮箱已被注册");
         }
         if (userRepository.existsByUsername(trimmedUsername)) {
-            throw new RuntimeException("用户名已存在");
+            throw new BusinessException("用户名已存在");
         }
 
         // 2. 参数全部通过后再校验并消费验证码
         if (code == null || code.trim().isEmpty()) {
-            throw new RuntimeException("请输入验证码");
+            throw new BusinessException("请输入验证码");
         }
         if (!verificationCodeService.verifyEmailCode(normalizedEmail, code.trim(), AUTH_EMAIL_CODE_TYPE)) {
-            throw new RuntimeException("验证码无效或已过期");
+            throw new BusinessException("验证码无效或已过期");
         }
 
         // 3. 创建账号
@@ -282,10 +283,10 @@ public class UserServiceImpl implements UserService {
             String email = user.getEmail().trim();
             if (!email.equals(existingUser.getEmail())) {
                 if (email.isEmpty()) {
-                    throw new RuntimeException("邮箱不能为空");
+                    throw new BusinessException("邮箱不能为空");
                 }
                 if (userRepository.existsByEmail(email)) {
-                    throw new RuntimeException("邮箱已被其他用户使用");
+                    throw new BusinessException("邮箱已被其他用户使用");
                 }
             }
             existingUser.setEmail(email);
@@ -298,7 +299,7 @@ public class UserServiceImpl implements UserService {
                 // 手机号与邮箱一样有唯一约束：仅在确实变更时才校验是否被他人占用，
                 // 避免把自己原有的手机号当成冲突。
                 if (!phone.equals(existingUser.getPhone()) && userRepository.existsByPhone(phone)) {
-                    throw new RuntimeException("手机号已被其他用户使用");
+                    throw new BusinessException("手机号已被其他用户使用");
                 }
                 existingUser.setPhone(phone);
             }
@@ -317,13 +318,13 @@ public class UserServiceImpl implements UserService {
     public User updateProfile(Long userId, ProfileUpdateRequest request) {
         User user = findById(userId);
         if (request == null) {
-            throw new RuntimeException("请求内容为空");
+            throw new BusinessException("请求内容为空");
         }
 
         if (request.getNickname() != null) {
             String nickname = request.getNickname().trim();
             if (nickname.length() > NICKNAME_MAX) {
-                throw new RuntimeException("昵称最长 " + NICKNAME_MAX + " 个字符");
+                throw new BusinessException("昵称最长 " + NICKNAME_MAX + " 个字符");
             }
             // 允许留空：展示时前端会回退到 username
             user.setNickname(nickname);
@@ -332,7 +333,7 @@ public class UserServiceImpl implements UserService {
         if (request.getGender() != null) {
             int gender = request.getGender();
             if (gender < 0 || gender > 2) {
-                throw new RuntimeException("性别取值不合法");
+                throw new BusinessException("性别取值不合法");
             }
             user.setGender(gender);
         }
@@ -347,7 +348,7 @@ public class UserServiceImpl implements UserService {
             } else {
                 // 关键防线：App 端头像选择后拿到的是手机本地路径（/data/user/0/... 或 file://...），
                 // 直接落库等于存了一条谁也打不开的地址，必须由上传接口先转成 /avatars/** 再提交。
-                throw new RuntimeException("头像地址不合法，请先上传头像");
+                throw new BusinessException("头像地址不合法，请先上传头像");
             }
         }
 
@@ -365,12 +366,12 @@ public class UserServiceImpl implements UserService {
     public void changePassword(Long userId, String oldPassword, String newPassword) {
         User user = findById(userId);
         if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
-            throw new RuntimeException("原密码错误");
+            throw new BusinessException("原密码错误");
         }
         // 新密码强度校验（与注册/邮箱改密共用同一策略）
         String passwordError = PasswordPolicy.validate(newPassword);
         if (passwordError != null) {
-            throw new RuntimeException(passwordError);
+            throw new BusinessException(passwordError);
         }
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
@@ -398,7 +399,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void deleteUserCascade(Long id) {
         if (!userRepository.existsById(id)) {
-            throw new RuntimeException("用户不存在");
+            throw new BusinessException("用户不存在");
         }
         bookshelfRepository.deleteByUserId(id);
         bookmarkRepository.deleteByUserId(id);
@@ -411,6 +412,89 @@ public class UserServiceImpl implements UserService {
         feedbackRepository.deleteByUserId(id);
         userReadingStatService.deleteByUserId(id);
         userRepository.deleteById(id);
+    }
+
+    // ==================== 管理后台：用户管理扩展（管理员/内部人员） ====================
+
+    /** 内部账号角色取值：仅允许这两种（普通用户 USER 不通过后台创建） */
+    private static final String ROLE_ADMIN = "ADMIN";
+    private static final String ROLE_STAFF = "STAFF";
+
+    @Override
+    public User createInternalUser(String username, String rawPassword, String nickname, String role) {
+        String trimmedUsername = username == null ? "" : username.trim();
+        String normalizedRole = role == null ? "" : role.trim().toUpperCase();
+
+        if (trimmedUsername.isEmpty()) {
+            throw new BusinessException("用户名不能为空");
+        }
+        if (!REGISTER_USERNAME_PATTERN.matcher(trimmedUsername).matches()) {
+            throw new BusinessException("用户名需为 " + USERNAME_MIN + "~" + REGISTER_USERNAME_MAX
+                    + " 个字符，仅含字母/数字/下划线，且以字母开头");
+        }
+        if (!ROLE_ADMIN.equals(normalizedRole) && !ROLE_STAFF.equals(normalizedRole)) {
+            throw new BusinessException("角色仅支持 ADMIN（管理员）或 STAFF（内部人员）");
+        }
+        String passwordError = PasswordPolicy.validate(rawPassword);
+        if (passwordError != null) {
+            throw new BusinessException(passwordError);
+        }
+        if (userRepository.existsByUsername(trimmedUsername)) {
+            throw new BusinessException("用户名已存在");
+        }
+
+        User user = new User();
+        user.setUserId(generateUserId());
+        user.setUsername(trimmedUsername);
+        user.setPassword(passwordEncoder.encode(rawPassword));
+        user.setNickname(nickname != null && !nickname.isBlank() ? nickname.trim() : trimmedUsername);
+        user.setGender(0);
+        user.setStatus(1);
+        user.setRole(normalizedRole);
+        // 内部账号不调用 userReadingStatService.initialize：阅读统计只面向真实阅读用户
+        return userRepository.save(user);
+    }
+
+    @Override
+    public void resetPasswordByAdmin(Long id, String newPassword) {
+        User user = findById(id);
+        String passwordError = PasswordPolicy.validate(newPassword);
+        if (passwordError != null) {
+            throw new BusinessException(passwordError);
+        }
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+
+    @Override
+    public void resetPasswordToDefault(Long id) {
+        User user = findById(id);
+        // 默认密码为纯数字（不满足「含字母和数字」策略），刻意不走 PasswordPolicy：
+        // 策略只约束用户自设密码，后台兜底重置属于管理员强制动作。
+        user.setPassword(passwordEncoder.encode(DEFAULT_RESET_PASSWORD));
+        userRepository.save(user);
+    }
+
+    @Override
+    public User updateRoleByAdmin(Long id, String newRole, Long operatorId) {
+        String normalizedRole = newRole == null ? "" : newRole.trim().toUpperCase();
+        if (!ROLE_ADMIN.equals(normalizedRole) && !ROLE_STAFF.equals(normalizedRole)) {
+            throw new BusinessException("角色仅支持 ADMIN（管理员）或 STAFF（内部人员）");
+        }
+        User user = findById(id);
+        String currentRole = user.getRole() == null ? "" : user.getRole().trim().toUpperCase();
+        boolean currentIsAdmin = ROLE_ADMIN.equals(currentRole);
+        boolean nextIsAdmin = ROLE_ADMIN.equals(normalizedRole);
+
+        if (operatorId != null && operatorId.equals(id)) {
+            throw new BusinessException("不能修改自己的角色");
+        }
+        // 最后一个管理员保护：把仅存的 ADMIN 降级会让后台失去全部管理员
+        if (currentIsAdmin && !nextIsAdmin && userRepository.countByRoleIgnoreCase(ROLE_ADMIN) <= 1) {
+            throw new BusinessException("系统至少需要保留一个管理员账号");
+        }
+        user.setRole(normalizedRole);
+        return userRepository.save(user);
     }
 
     // ==================== 内部辅助方法 ====================
@@ -505,7 +589,7 @@ public class UserServiceImpl implements UserService {
         while (userRepository.existsByUsername(candidate)) {
             attempt++;
             if (attempt > 100) {
-                throw new RuntimeException("生成用户名失败，请稍后重试");
+                throw new BusinessException("生成用户名失败，请稍后重试");
             }
             String prefix = base.length() > 15 ? base.substring(0, 15) : base;
             int suffix = 1000 + secureRandom.nextInt(9000);

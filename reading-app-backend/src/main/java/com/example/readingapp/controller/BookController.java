@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.Book;
 import com.example.readingapp.entity.BookCategory;
@@ -59,8 +60,10 @@ public class BookController {
                 book.setIsInShelf(inShelf);
             }
             return ApiResponse.success(book);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
     @GetMapping("/{id}/wordCount")
@@ -355,8 +358,10 @@ public class BookController {
         try {
             List<String> categories = bookRepository.findDistinctFictionCategories();
             return ApiResponse.success(categories);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -380,8 +385,10 @@ public class BookController {
         try {
             bookService.incrementViewCount(id);
             return ApiResponse.success(null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 

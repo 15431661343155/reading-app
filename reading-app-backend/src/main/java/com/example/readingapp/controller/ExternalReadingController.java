@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.ExternalReadingRecord;
 import com.example.readingapp.repository.ExternalReadingRecordRepository;
@@ -48,8 +49,10 @@ public class ExternalReadingController {
 
             ExternalReadingRecord saved = externalReadingRecordRepository.save(record);
             return ApiResponse.success(saved);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -76,8 +79,10 @@ public class ExternalReadingController {
             externalReadingRecordRepository.deleteByUserIdAndSourceTypeAndSourceBookId(
                     userId, req.sourceType, req.sourceBookId);
             return ApiResponse.success("记录已删除", null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -93,8 +98,10 @@ public class ExternalReadingController {
                     .map(this::toMap)
                     .collect(Collectors.toList());
             return ApiResponse.success(result);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 

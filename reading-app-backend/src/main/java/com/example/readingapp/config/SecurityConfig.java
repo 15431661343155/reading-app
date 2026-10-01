@@ -1,5 +1,6 @@
 package com.example.readingapp.config;
 
+import com.example.readingapp.service.RateLimitService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,6 +35,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitService rateLimitService;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -80,10 +82,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/books/*/view").permitAll()
                         // ===== 书籍 / 章节：仅 GET 匿名只读 =====
                         // App 端只读（书架、详情、搜索、目录、正文），因此只放行 GET；
-                        // 新增/修改/删除/批量删书等写操作由下方 /api/books/** 的 ADMIN 规则保护，
+                        // 新增/修改/删除/批量删书等写操作由下方规则保护（ADMIN/STAFF），
                         // 避免匿名用户直接删除全站书籍。
                         .requestMatchers(HttpMethod.GET, "/api/books/**", "/api/chapters/**").permitAll()
-                        .requestMatchers("/api/books/**", "/api/chapters/**").hasRole("ADMIN")
+                        .requestMatchers("/api/books/**", "/api/chapters/**").hasAnyRole("ADMIN", "STAFF")
                         // ===== App 端与后台共用的管理接口：维持原有的完全开放 =====
                         // 这几个接口被安卓端「书城/在线书源」直接调用，且安卓端没有 401 兜底逻辑
                         // （token 过期后不会跳登录页），一旦收紧为 authenticated / hasRole 会导致
@@ -114,24 +116,38 @@ public class SecurityConfig {
                                 "/api/user/avatar"
                         ).authenticated()
                         // ===== 反馈：仅匿名提交开放，列表/详情/回复/关闭/删除走管理后台 =====
-                        // App 端只用 POST /api/feedback/submit；其余动作原先随 /api/feedback/** 一起
-                        // 匿名放行，导致任何人都能读取全部用户反馈（含联系方式）并删除。
-                        .requestMatchers("/api/feedback/**").hasRole("ADMIN")
-                        // ===== 用户管理接口：仅管理员（原为匿名开放，可越权删除/禁用任意用户） =====
+                        // App 端只用 POST /api/feedback/submit；其余动作为后台内容管理，
+                        // 管理员与内部人员（STAFF）均可用。
+                        .requestMatchers("/api/feedback/**").hasAnyRole("ADMIN", "STAFF")
+                        // ===== 首页看板统计（内部人员只读） =====
+                        // 必须排在 /api/users/** 的 ADMIN 规则之前：仅放开这一个只读计数。
+                        .requestMatchers(HttpMethod.GET, "/api/users/count").hasAnyRole("ADMIN", "STAFF")
+                        // ===== 用户管理接口（含内部人员管理）：仅管理员 =====
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
-                        // ===== 封面写操作（管理后台使用）：仅管理员 =====
-                        .requestMatchers("/api/cover/**").hasRole("ADMIN")
-                        // ===== 其余管理接口：仅管理员 =====
+                        // ===== 封面上传/更新：属于书籍内容管理，内部人员可用 =====
+                        .requestMatchers("/api/cover/**").hasAnyRole("ADMIN", "STAFF")
+                        // ===== 首页看板最近操作日志（内部人员只读） =====
+                        // 必须排在下方 /api/admin/** 的 ADMIN 规则之前。
+                        .requestMatchers(HttpMethod.GET, "/api/admin/logs/recent").hasAnyRole("ADMIN", "STAFF")
+                        // ===== 内容管理接口：管理员与内部人员（STAFF）均可用 =====
+                        .requestMatchers(
+                                "/api/admin/book-source/**",
+                                "/api/admin/categories/**",
+                                "/api/admin/import/**"
+                        ).hasAnyRole("ADMIN", "STAFF")
+                        // ===== 其余管理接口（资源管理/用户阅读数据/内部人员密码校验等）：仅管理员 =====
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        // ===== 管理后台页面：仅管理员（未登录时由入口点跳转登录页） =====
-                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        // ===== 管理后台页面：管理员与内部人员均可进入（未登录时由入口点跳转登录页） =====
+                        .requestMatchers("/admin/**").hasAnyRole("ADMIN", "STAFF")
                         .requestMatchers("/api/user/bind/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint())
                         .accessDeniedHandler(accessDeniedHandler()))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // 安全加固：匿名书源接口限流 + 后台 Cookie 请求强制 X-Requested-With 头（见过滤器类注释）
+                .addFilterBefore(new SecurityHardeningFilter(rateLimitService), JwtAuthenticationFilter.class);
         return http.build();
     }
 
@@ -146,7 +162,22 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*"));
+        // 域名白名单（2026-10-01 收紧：原先 * 全放开）：
+        //  - 本站 4 个子域（含 http 兼容过渡期；部署 HTTP→HTTPS 强跳后 http 将 301 到 https）
+        //  - 中文域名在 Origin 头中是 Punycode（xn--）形式
+        //  - localhost 调试端口任意
+        // App 端为原生客户端，不发 Origin、不受 CORS 影响；恶意站点伪造不出白名单外的
+        // Origin，其跨域调用会被浏览器拦截（同源反代场景下甚至不会触发 CORS）。
+        config.setAllowedOriginPatterns(List.of(
+                "https://xn--1jq441m6jgqa.xyz",
+                "https://www.xn--1jq441m6jgqa.xyz",
+                "https://*.xn--1jq441m6jgqa.xyz",
+                "http://xn--1jq441m6jgqa.xyz",
+                "http://www.xn--1jq441m6jgqa.xyz",
+                "http://*.xn--1jq441m6jgqa.xyz",
+                "http://localhost:[*]",
+                "http://127.0.0.1:[*]"
+        ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Content-Disposition"));

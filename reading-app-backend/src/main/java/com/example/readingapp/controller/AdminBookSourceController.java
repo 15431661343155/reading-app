@@ -8,6 +8,7 @@ import com.example.readingapp.legado.model.LegadoBookSource;
 import com.example.readingapp.repository.BookSourceRepository;
 import com.example.readingapp.service.BookSourceFactory;
 import com.example.readingapp.service.OnlineBookSourceService;
+import com.example.readingapp.util.SafeUrlGuard;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -198,6 +199,12 @@ public class AdminBookSourceController {
     public ApiResponse<ImportResult> importFromUrl(@RequestBody Map<String, String> body) {
         String url = body.get("url");
         if (url == null || url.trim().isEmpty()) return ApiResponse.error("URL 不能为空");
+        // SSRF 防护：URL 由外部直接传入（匿名可调），入口处校验并回显明确错误
+        try {
+            SafeUrlGuard.check(url.trim());
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error(e.getMessage());
+        }
         try {
             String json = fetchUrl(url.trim());
             if (json == null || json.trim().isEmpty()) return ApiResponse.error("下载内容为空");
@@ -377,6 +384,8 @@ public class AdminBookSourceController {
 
     private String fetchUrl(String urlString) {
         try {
+            // 双保险：入口已校验，此处再拦一次（防其他调用方绕过）；异常吞掉返回 null 由外层兜底
+            SafeUrlGuard.check(urlString);
             URL url = new URL(urlString);
             URLConnection conn = url.openConnection();
             conn.setConnectTimeout(15000);

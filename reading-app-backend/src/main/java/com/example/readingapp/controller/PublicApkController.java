@@ -1,6 +1,7 @@
 package com.example.readingapp.controller;
 
 import com.example.readingapp.dto.ApiResponse;
+import com.example.readingapp.util.PathSafety;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.*;
 
@@ -91,7 +92,7 @@ public class PublicApkController {
             ApkInfo info = new ApkInfo(appName, version, "v" + version, date, fileSize, bytes, fileName, downloadUrl);
             return ApiResponse.success("获取成功", info);
         } catch (Exception e) {
-            return ApiResponse.error("获取安装包信息失败：" + e.getMessage());
+            return ApiResponse.error("获取安装包信息失败，请稍后重试");
         }
     }
 
@@ -100,7 +101,14 @@ public class PublicApkController {
     public void download(@PathVariable String fileName, HttpServletResponse response) {
         try {
             String decoded = URLDecoder.decode(fileName, StandardCharsets.UTF_8);
-            File file = new File(apkDir, decoded);
+            // 路径穿越防护：canonical path 必须仍在 apkDir 内（防 ../%2E%2E/ 等变体任意文件下载）
+            File file;
+            try {
+                file = PathSafety.safeResolve(apkDir, decoded);
+            } catch (IllegalArgumentException e) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND, "文件不存在");
+                return;
+            }
             if (!file.exists() || !file.isFile()) {
                 response.sendError(HttpServletResponse.SC_NOT_FOUND, "文件不存在");
                 return;

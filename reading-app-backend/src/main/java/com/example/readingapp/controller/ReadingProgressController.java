@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.ReadingProgress;
 import com.example.readingapp.service.ReadingProgressService;
@@ -32,8 +33,10 @@ public class ReadingProgressController {
             progress.setUserId(userId);
             ReadingProgress saved = progressService.saveProgress(progress);
             return ApiResponse.success("进度已保存", saved);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -65,8 +68,10 @@ public class ReadingProgressController {
         try {
             progressService.deleteProgress(userId, bookId);
             return ApiResponse.success("进度已删除", null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 }

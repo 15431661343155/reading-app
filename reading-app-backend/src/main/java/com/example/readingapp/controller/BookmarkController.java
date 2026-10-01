@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.entity.Bookmark;
 import com.example.readingapp.repository.BookmarkRepository;
@@ -37,8 +38,10 @@ public class BookmarkController {
             bookmark.setUserId(userId);
             Bookmark saved = bookmarkService.addBookmark(bookmark);
             return ApiResponse.success("书签已添加", saved);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 
@@ -54,8 +57,10 @@ public class BookmarkController {
             if (!owned) return ApiResponse.error(403, "无权操作该书签");
             bookmarkService.deleteBookmark(id);
             return ApiResponse.success("书签已删除", null);
-        } catch (Exception e) {
+        } catch (BusinessException e) {
             return ApiResponse.error(e.getMessage());
+        } catch (Exception e) {
+            return ApiResponse.error("操作失败，请稍后重试");
         }
     }
 

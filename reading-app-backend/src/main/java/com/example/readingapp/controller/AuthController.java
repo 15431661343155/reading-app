@@ -1,5 +1,6 @@
 package com.example.readingapp.controller;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.dto.ApiResponse;
 import com.example.readingapp.dto.CodeRequest;
 import com.example.readingapp.dto.CodeVerifyRequest;
@@ -8,10 +9,13 @@ import com.example.readingapp.dto.LoginRequest;
 import com.example.readingapp.dto.LoginResponse;
 import com.example.readingapp.dto.RegisterRequest;
 import com.example.readingapp.entity.User;
+import com.example.readingapp.service.RateLimitService;
 import com.example.readingapp.service.UserService;
 import com.example.readingapp.service.VerificationCodeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -21,6 +25,7 @@ public class AuthController {
 
     private final UserService userService;
     private final VerificationCodeService verificationCodeService;
+    private final RateLimitService rateLimitService;
 
     // 用户注册
     @PostMapping("/register")
@@ -28,20 +33,43 @@ public class AuthController {
         try {
             User user = userService.register(request);
             return ApiResponse.success("注册成功", user);
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
         } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "注册失败");
+            return ApiResponse.error("注册失败，请稍后重试");
         }
     }
 
-    // 用户登录
+    // 用户登录（密码）。防爆破：同「IP|账号」15 分钟内失败 5 次锁定 15 分钟。
+    // 仅凭证错误（消息为「账号或密码错误」）计数，避免把服务端异常误记为爆破。
     @PostMapping("/login")
-    public ApiResponse<LoginResponse> login(@RequestBody LoginRequest request) {
+    public ApiResponse<LoginResponse> login(@RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        String account = request != null && request.getAccount() != null && !request.getAccount().trim().isEmpty()
+                ? request.getAccount().trim() : (request != null ? request.getUsername() : null);
+        String guardKey = clientIp(httpRequest) + "|" + (account == null ? "" : account);
+        if (account != null && rateLimitService.isLoginBlocked(guardKey)) {
+            return ApiResponse.error("失败次数过多，账号已临时锁定，请 15 分钟后再试");
+        }
         try {
             LoginResponse response = userService.login(request);
+            rateLimitService.recordLoginSuccess(guardKey);
             return ApiResponse.success("登录成功", response);
+        } catch (BusinessException e) {
+            String msg = e.getMessage();
+            if ("账号或密码错误".equals(msg)) {
+                rateLimitService.recordLoginFailure(guardKey);
+            }
+            return ApiResponse.error(msg);
         } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "登录失败");
+            return ApiResponse.error("登录失败，请稍后重试");
         }
+    }
+
+    /** 客户端 IP：优先取 nginx 反代写入的 X-Real-IP（每次覆写，不可被客户端伪造），回退 remoteAddr */
+    private String clientIp(HttpServletRequest request) {
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.trim().isEmpty()) return realIp.trim();
+        return request.getRemoteAddr();
     }
 
     /**
@@ -57,8 +85,10 @@ public class AuthController {
             }
             verificationCodeService.sendEmailCode(email.trim(), "auth_email");
             return ApiResponse.success("验证码发送成功", null);
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
         } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "验证码发送失败");
+            return ApiResponse.error("验证码发送失败，请稍后重试");
         }
     }
 
@@ -68,8 +98,10 @@ public class AuthController {
         try {
             LoginResponse response = userService.loginByEmailCode(request.getEmail(), request.getCode());
             return ApiResponse.success("登录成功", response);
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
         } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "登录失败");
+            return ApiResponse.error("登录失败，请稍后重试");
         }
     }
 
@@ -80,8 +112,10 @@ public class AuthController {
             LoginResponse response = userService.registerByEmail(
                     request.getEmail(), request.getCode(), request.getUsername(), request.getPassword());
             return ApiResponse.success("注册成功", response);
+        } catch (BusinessException e) {
+            return ApiResponse.error(e.getMessage());
         } catch (Exception e) {
-            return ApiResponse.error(e.getMessage() != null ? e.getMessage() : "注册失败");
+            return ApiResponse.error("注册失败，请稍后重试");
         }
     }
 }

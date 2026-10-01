@@ -1,5 +1,6 @@
 package com.example.readingapp.service.impl;
 
+import com.example.readingapp.exception.BusinessException;
 import com.example.readingapp.entity.Book;
 import com.example.readingapp.entity.Chapter;
 import com.example.readingapp.repository.BookRepository;
@@ -273,7 +274,7 @@ public class GuoxuedashiBookSourceServiceImpl implements OnlineBookSourceService
 
         Book existing = bookRepository.findBySourceUrl(url);
         if (existing != null) {
-            throw new RuntimeException("该书已导入过");
+            throw new BusinessException("该书已导入过");
         }
 
         Book onlineBook = getBookDetail(bookId, sourceType);
@@ -312,7 +313,7 @@ public class GuoxuedashiBookSourceServiceImpl implements OnlineBookSourceService
         Book resultBook = bookRepository.findById(savedBook.getId()).orElse(savedBook);
         if (resultBook.getChapterCount() == null || resultBook.getChapterCount() == 0) {
             bookRepository.deleteById(savedBook.getId());
-            throw new RuntimeException("导入失败：未获取到任何章节内容");
+            throw new BusinessException("导入失败：未获取到任何章节内容");
         }
 
         return resultBook;
