@@ -39,7 +39,7 @@ android:src="@drawable/default_book_cover" />
             android:layout_height="wrap_content"
             android:text="书籍名称"
             android:textSize="16sp"
-            android:textColor="#1D1D1F"
+            android:textColor="@color/ios_text_primary"
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
@@ -50,7 +50,7 @@ android:src="@drawable/default_book_cover" />
             android:layout_height="wrap_content"
             android:text="第一章"
             android:textSize="13sp"
-            android:textColor="#666666"
+            android:textColor="@color/ios_text_secondary"
             android:layout_marginTop="6dp"
             android:maxLines="1"
             android:ellipsize="end" />
@@ -68,7 +68,7 @@ android:src="@drawable/default_book_cover" />
                 android:layout_height="wrap_content"
                 android:text="已读：30%"
                 android:textSize="11sp"
-                android:textColor="#BBBBBB" />
+                android:textColor="@color/ios_text_tertiary" />
 
             <View
                 android:layout_width="0dp"
@@ -81,7 +81,7 @@ android:src="@drawable/default_book_cover" />
                 android:layout_height="wrap_content"
                 android:text="刚刚"
                 android:textSize="11sp"
-                android:textColor="#BBBBBB" />
+                android:textColor="@color/ios_text_tertiary" />
         </LinearLayout>
     </LinearLayout>
 

@@ -60,10 +60,10 @@ public class ChapterAdapter extends RecyclerView.Adapter<ChapterAdapter.ChapterH
         // 高亮当前阅读章节（按章节索引匹配，而非列表位置）
         if (chapter.getIndex() == currentChapterIndex) {
             holder.tvChapterTitle.setTextColor(followReaderTheme ? ReadActivity.getAccentColor()
-                    : Color.parseColor("#007AFF"));
+                    : holder.itemView.getContext().getColor(R.color.ios_blue));
         } else {
             holder.tvChapterTitle.setTextColor(followReaderTheme ? ReadActivity.getTextPrimaryColor()
-                    : Color.parseColor("#1D1D1F"));
+                    : holder.itemView.getContext().getColor(R.color.ios_text_primary));
         }
 
         // 列表项（文字/分割线/背景）跟随阅读器背景派生配色；

@@ -60,7 +60,7 @@ public class ReadingRecordActivity extends BaseActivity {
 
         // 状态栏颜色与页面顶部统一
         getWindow().setStatusBarColor(getResources().getColor(R.color.ios_bg_grouped, null));
-        setLightStatusBar(true);
+        applyStatusBarIcons();
 
         recyclerView = findViewById(R.id.recycler_view);
         tvEmpty = findViewById(R.id.tv_empty);

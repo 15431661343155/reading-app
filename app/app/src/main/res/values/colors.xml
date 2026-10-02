@@ -14,16 +14,8 @@
     <color name="text_primary_dark">#FFFFFF</color>
     <color name="text_secondary_dark">#BDBDBD</color>
 
-    <!-- 海滨主题色 -->
-    <color name="cyan_200">#B2EBF2</color>
-    <color name="cyan_300">#80DEEA</color>
+    <!-- 海滨主题色（海滨主题已废弃，仅保留进度条在用的 cyan_400） -->
     <color name="cyan_400">#4DD0E1</color>
-    <color name="cyan_600">#00ACC1</color>
-    <color name="cyan_700">#0097A7</color>
-    <color name="seaside_bg">#F0F9FA</color>
-    <color name="seaside_card_bg">#FFFFFF</color>
-    <color name="seaside_text_primary">#212121</color>
-    <color name="seaside_text_secondary">#757575</color>
     <color name="gray">#757575</color>
     <color name="bg_light">#F7F9FC</color>
 
@@ -47,6 +39,15 @@
     <color name="ios_tab_bar">#F0F9F9F9</color>          <!-- 毛玻璃底栏（94%白） -->
     <color name="ios_card_bg">#FFFFFFFF</color>           <!-- 卡片白底 -->
     <color name="ios_nav_bg">#FFF7F7F7</color>           <!-- 导航栏背景 -->
+    <color name="chip_bg">#FFF7F7FA</color>             <!-- 卡内子选项芯片底（夜间见 values-night） -->
+
+    <!-- ===== 分段控件（书架分组 Tab / 阅读器分段）===== -->
+    <color name="seg_track_bg">#FFE9E9EB</color>          <!-- 轨道底 -->
+    <color name="seg_thumb_bg">#FFFFFFFF</color>          <!-- 滑动指示器面 -->
+    <color name="seg_thumb_shadow">#1E000000</color>      <!-- 指示器投影 -->
+    <color name="seg_text_selected">#FF007AFF</color>     <!-- 选中段文字：日间 iOS 蓝，夜间指示器为深灰故改白色 -->
+    <color name="tile_warm_tint">#14FF9500</color>       <!-- 图标底衬：8% 橙，透明度叠加故日夜通用 -->
+    <color name="tile_cool_tint">#14007AFF</color>       <!-- 图标底衬：8% 蓝，同上 -->
 
     <!-- ===== 底部导航 · 胶囊选中态配色 ===== -->
     <color name="nav_item_normal">#FF000000</color>        <!-- 未选中：纯黑（图标 + 文字） -->
@@ -70,7 +71,16 @@
     <color name="ios_card_float_dark">#FF2C2C2E</color>   <!-- 夜间卡片悬浮面（比 grouped 底 #1C1C1E 略亮） -->
 
     <!-- 国风开屏配色（仅保留在用项：系统启动屏/主页窗口背景底色） -->
-    <color name="splash_bg">#F6EEDF</color>           <!-- 插画宣纸底色（取自新开屏图） -->
+    <color name="splash_bg">#F6EEDF</color>           <!-- 插画宣纸底色（取自新开屏图）；夜间见 values-night -->
+
+    <!-- ===== 修改密码 / 邮箱绑定页（登录同族淡紫配色）· 夜间值见 values-night/colors.xml ===== -->
+    <color name="cp_page_bg">#FFF3F1F8</color>            <!-- 页面底 -->
+    <color name="cp_surface">#FFFBFAFE</color>            <!-- 标题栏/卡片面 -->
+    <color name="cp_divider">#FFE4E0EE</color>            <!-- 进度条槽/细分隔 -->
+    <color name="cp_field_bg">#FFFFFFFF</color>           <!-- 输入框卡片底 -->
+    <color name="cp_field_stroke">#FFECE9F3</color>       <!-- 输入框卡片描边 -->
+    <color name="cp_chip_bg">#FFEFEAFD</color>            <!-- 验证码胶囊底 -->
+    <color name="cp_chip_stroke">#FFC9BCF7</color>        <!-- 验证码胶囊描边 -->
 
     <!-- ===== 登录页 · 毛玻璃紫主题 ===== -->
     <color name="login_accent">#FF6C5CE7</color>            <!-- 主色：紫（按钮/链接/选中） -->

@@ -24,6 +24,7 @@ import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
 import com.example.myapplication.R;
+import com.example.myapplication.activity.BaseActivity;
 import com.example.myapplication.activity.BookDetailActivity;
 import com.example.myapplication.activity.SearchActivity;
 import com.example.myapplication.adapter.BookAdapter;
@@ -239,11 +240,11 @@ public class BookStoreFragment extends Fragment {
         GradientDrawable g = new GradientDrawable();
         g.setCornerRadius(999); // iOS 胶囊全圆
         if (selected) {
-            g.setColor(Color.parseColor("#007AFF")); // iOS 蓝
+            g.setColor(requireContext().getColor(R.color.ios_blue));
             tv.setTextColor(Color.WHITE);
         } else {
-            g.setColor(Color.parseColor("#F2F2F7")); // iOS 分组底
-            tv.setTextColor(Color.parseColor("#1D1D1F")); // iOS 主文字
+            g.setColor(requireContext().getColor(R.color.ios_bg_grouped_2));
+            tv.setTextColor(requireContext().getColor(R.color.ios_text_primary));
         }
         tv.setBackground(g);
     }
@@ -573,13 +574,13 @@ public class BookStoreFragment extends Fragment {
             boolean isSelected = category.equals(currentSubCategory);
 
             if (isSelected) {
-                tv.setTextColor(Color.parseColor("#007AFF")); // iOS 蓝
+                tv.setTextColor(requireContext().getColor(R.color.seg_text_selected));
                 GradientDrawable bg = new GradientDrawable();
                 bg.setCornerRadius(999);
-                bg.setColor(Color.parseColor("#E8E8ED")); // 选中：浅灰底
+                bg.setColor(requireContext().getColor(R.color.ios_separator));
                 tv.setBackground(bg);
             } else {
-                tv.setTextColor(Color.parseColor("#8E8E93")); // iOS 次文字
+                tv.setTextColor(requireContext().getColor(R.color.ios_text_secondary));
                 tv.setBackground(null); // 未选中：透明
             }
 
@@ -676,9 +677,8 @@ public class BookStoreFragment extends Fragment {
         // 状态栏背景与页面顶部颜色统一，消除割裂
         getActivity().getWindow().setStatusBarColor(
             getActivity().getResources().getColor(R.color.ios_bg_grouped, null));
-        int flags = getActivity().getWindow().getDecorView().getSystemUiVisibility();
-        flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        getActivity().getWindow().getDecorView().setSystemUiVisibility(flags);
+        // 图标明暗交由宿主按当前日夜配置复位（夜间深色底要用浅色图标）
+        ((BaseActivity) getActivity()).applyStatusBarIcons();
     }
 
     @Override

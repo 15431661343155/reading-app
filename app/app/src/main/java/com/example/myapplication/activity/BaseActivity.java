@@ -25,8 +25,8 @@ public class BaseActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        int theme = ThemeManager.getCurrentTheme(this);
-        setTheme(ThemeManager.getThemeRes(theme));
+        // 主题一律走清单里的 @style/Theme.MyApp：
+        // 日间/夜间由 values-night 资源限定符 + AppCompatDelegate 的夜间模式解析，不在这里分支
         if (getResources() == null) {
             return;
         }
@@ -85,11 +85,14 @@ public class BaseActivity extends AppCompatActivity {
         getWindow().setNavigationBarColor(
             getResources().getColor(R.color.ios_bg_grouped, null));
 
-        // 状态栏图标：浅色背景用深色
-        getWindow().getDecorView().setSystemUiVisibility(
-            getWindow().getDecorView().getSystemUiVisibility()
-                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        // 系统图标明暗由当前配置决定：浅色底配深色图标，深色底配浅色图标
+        int flags = getWindow().getDecorView().getSystemUiVisibility();
+        if (ThemeManager.isNight(this)) {
+            flags &= ~(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        } else {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
+        getWindow().getDecorView().setSystemUiVisibility(flags);
     }
 
     /**
@@ -125,6 +128,15 @@ public class BaseActivity extends AppCompatActivity {
             flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         }
         getWindow().getDecorView().setSystemUiVisibility(flags);
+    }
+
+    /**
+     * 按当前日夜配置复位状态栏图标：日间深色图标、夜间浅色图标。
+     * 供 Fragment（书架/书城/分类）在覆盖状态栏背景色之后调用；
+     * 页面顶部是彩色块（如「我的」蓝色英雄区）时不要用它，需自行指定。
+     */
+    public void applyStatusBarIcons() {
+        setLightStatusBar(!ThemeManager.isNight(this));
     }
 
     /**

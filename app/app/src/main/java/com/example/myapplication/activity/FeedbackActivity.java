@@ -32,14 +32,11 @@ public class FeedbackActivity extends BaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        int currentTheme = ThemeManager.getCurrentTheme(this);
-        setTheme(ThemeManager.getThemeRes(currentTheme));
-
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_feedback);
 
         initView();
-        setupToolbar(currentTheme);
+        setupToolbar();
 
         btnSubmit.setOnClickListener(v -> submitFeedback());
     }
@@ -54,21 +51,11 @@ public class FeedbackActivity extends BaseActivity {
     }
 
     /**
-     * 配置顶部导航栏（返回按钮 + 主题适配）
+     * 配置顶部导航栏（返回按钮）
      */
-    private void setupToolbar(int currentTheme) {
+    private void setupToolbar() {
         Toolbar toolbar = findViewById(R.id.toolbar_back);
         // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
-
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF000000);
-        } else {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF1D1D1F);
-        }
-        // 海滨主题工具栏为浅色，状态栏图标用深色
-        setLightStatusBar(currentTheme == ThemeManager.THEME_SEASIDE);
 
         toolbar.setNavigationOnClickListener(v -> finish());
     }

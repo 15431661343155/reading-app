@@ -235,7 +235,7 @@
                 android:layout_marginStart="9dp"
                 android:layout_weight="1"
                 android:lineSpacingExtra="4dp"
-                android:textColor="#6E6E73"
+                android:textColor="@color/ios_text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
 

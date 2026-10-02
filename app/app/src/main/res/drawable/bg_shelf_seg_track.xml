@@ -2,6 +2,6 @@
 <!-- 书架分组分段控件：可见浅灰轨道容器 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#E9E9EB" />
+    <solid android:color="@color/seg_track_bg" />
     <corners android:radius="12dp" />
 </shape>

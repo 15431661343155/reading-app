@@ -20,16 +20,6 @@ public class AboutActivity extends BaseActivity {
 
         Toolbar toolbar = findViewById(R.id.toolbar_back);
 
-        int currentTheme = ThemeManager.getCurrentTheme(this);
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF000000);
-        } else {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF1D1D1F);
-        }
-        setLightStatusBar(currentTheme == ThemeManager.THEME_SEASIDE);
-
         toolbar.setNavigationOnClickListener(v -> finish());
 
         // 版本号来自 build.gradle 的 versionName（@string/app_version），布局里已绑定，这里兜底防 resValue 缺失

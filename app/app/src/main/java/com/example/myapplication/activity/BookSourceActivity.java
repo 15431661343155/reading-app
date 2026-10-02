@@ -41,16 +41,6 @@ public class BookSourceActivity extends BaseActivity {
         Toolbar toolbar = findViewById(R.id.toolbar_back);
         // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
-        int currentTheme = ThemeManager.getCurrentTheme(this);
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF000000);
-        } else {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF1D1D1F);
-        }
-        setLightStatusBar(currentTheme == ThemeManager.THEME_SEASIDE);
-
         toolbar.setNavigationOnClickListener(v -> finish());
 
         sourceListLayout = findViewById(R.id.sourceListLayout);
@@ -112,7 +102,7 @@ public class BookSourceActivity extends BaseActivity {
         emptyTv.setText("暂无书源\n点击「网络导入」添加书源");
         emptyTv.setGravity(android.view.Gravity.CENTER);
         emptyTv.setPadding(0, 100, 0, 0);
-        emptyTv.setTextColor(0xFF8E8E93); // iOS 次文字
+        emptyTv.setTextColor(getColor(R.color.ios_text_secondary));
         sourceListLayout.addView(emptyTv);
     }
 

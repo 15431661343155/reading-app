@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 外观（主题设置）：iOS 分组列表，三档单选（跟随系统 / 日间 / 夜间）
+     行样式与 activity_settings 一致：55dp 行高 + ?attr/selectableItemBackground + 1dp 分隔线 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="?attr/android:windowBackground">
+    android:background="@color/ios_bg_grouped">
 
-    <!-- 返回标题栏 -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="@color/ios_bg_grouped"
         app:navigationIcon="@drawable/ic_back_black"
-        app:title="主题设置"
+        app:title="@string/theme_setting"
         app:titleCentered="true"
-        app:titleTextColor="@color/ios_text_primary"/>
+        app:titleTextColor="@color/ios_text_primary" />
 
-    <!-- 主题选项列表 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -25,41 +25,111 @@
         android:orientation="vertical"
         android:padding="15dp">
 
-    <!-- 默认主题选项 -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/card_default"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="15dp">
-        <LinearLayout
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="15dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="默认主题"
-                android:textSize="18sp"/>
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginBottom="10dp"
+            android:text="@string/appearance_footer"
+            android:textColor="@color/ios_text_secondary"
+            android:textSize="13sp" />
 
-    <!-- 海滨主题选项 -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/card_seaside"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="15dp">
         <LinearLayout
+            android:id="@+id/row_follow_system"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:padding="15dp">
+            android:layout_height="55dp"
+            style="@style/AppearanceRow">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="14dp"
+                android:src="@drawable/ic_appearance_auto"
+                android:contentDescription="@null" />
+
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="海滨主题"
-                android:textSize="18sp"
-                android:textColor="@color/black"/>
+                android:layout_weight="1"
+                android:text="@string/appearance_follow_system"
+                android:textColor="@color/ios_text_primary"
+                android:textSize="16sp" />
+
+            <ImageView
+                android:id="@+id/check_follow_system"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_appearance_check"
+                android:contentDescription="@null" />
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/ios_separator" />
+
+        <LinearLayout
+            android:id="@+id/row_light"
+            android:layout_width="match_parent"
+            android:layout_height="55dp"
+            style="@style/AppearanceRow">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="14dp"
+                android:src="@drawable/ic_appearance_light"
+                android:contentDescription="@null" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/appearance_light"
+                android:textColor="@color/ios_text_primary"
+                android:textSize="16sp" />
+
+            <ImageView
+                android:id="@+id/check_light"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_appearance_check"
+                android:contentDescription="@null" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/ios_separator" />
+
+        <LinearLayout
+            android:id="@+id/row_dark"
+            android:layout_width="match_parent"
+            android:layout_height="55dp"
+            style="@style/AppearanceRow">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="14dp"
+                android:src="@drawable/ic_appearance_dark"
+                android:contentDescription="@null" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/appearance_dark"
+                android:textColor="@color/ios_text_primary"
+                android:textSize="16sp" />
+
+            <ImageView
+                android:id="@+id/check_dark"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_appearance_check"
+                android:contentDescription="@null" />
+        </LinearLayout>
+
     </LinearLayout>
 </LinearLayout>

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 暖阳橙光主题预览背景 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <gradient
-        android:startColor="#FF9800"
-        android:endColor="#FFB74D"
-        android:angle="135"/>
-</shape>

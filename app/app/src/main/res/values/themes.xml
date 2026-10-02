@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- ===== 默认主题：iOS 浅色磨砂玻璃 ===== -->
-    <style name="Theme.MyApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <!-- ===== 主题骨架 =====
+         日间与夜间共用这一份定义：所有取值都走语义 token（@color/ios_*），
+         @color 引用会按当前日夜配置二次解析，夜间值见 values-night/colors.xml 的同名别名。
+         values-night/themes.xml 里的 Theme.MyApp 只负责翻转状态栏/导航栏图标明暗。 -->
+    <style name="Theme.MyApp.Base" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- 主色调：iOS 系统蓝 -->
         <item name="colorPrimary">@color/ios_blue</item>
         <item name="colorPrimaryVariant">@color/ios_blue</item>
@@ -9,9 +12,9 @@
         <item name="colorSecondary">@color/ios_blue</item>
         <item name="colorSecondaryVariant">@color/ios_blue</item>
         <item name="colorOnSecondary">@color/white</item>
-        <!-- Toolbar 白色背景 + 深色图标/文字 -->
-        <item name="actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar.Light</item>
-        <item name="android:actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar.Light</item>
+        <!-- Toolbar 与页面同底，图标/文字颜色走 ios_text_* token（夜间自动反相） -->
+        <item name="actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar</item>
+        <item name="android:actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar</item>
         <!-- 状态栏：Toolbar 白色背景 → 状态栏也白色统一 -->
         <item name="android:statusBarColor">@color/ios_bg</item>
         <item name="android:windowLightStatusBar">true</item>
@@ -35,37 +38,20 @@
         <item name="navTextUnselectedColor">@color/ios_text_tertiary</item>
     </style>
 
-    <!-- 海滨主题：收敛为 iOS 蓝变体（保留作为可选主题） -->
-    <style name="Theme.MyApp.Seaside" parent="Theme.MyApp">
-        <item name="colorPrimary">@color/ios_blue</item>
-        <item name="colorPrimaryVariant">@color/ios_blue</item>
-        <item name="android:statusBarColor">@color/ios_bg</item>
-        <item name="android:windowBackground">@color/ios_bg_grouped</item>
-        <item name="navBg">@color/ios_tab_bar</item>
-        <item name="navSelectedColor">@color/ios_blue</item>
-        <item name="navUnselectedColor">@color/ios_text_tertiary</item>
-        <item name="navRipple">@color/ios_separator</item>
-        <item name="navTextSelectedColor">@color/ios_blue</item>
-        <item name="navTextUnselectedColor">@color/ios_text_tertiary</item>
-    </style>
+    <!-- 对外主题名：日间直接等于 Base，夜间由 values-night/themes.xml 的同名样式覆盖系统栏图标明暗 -->
+    <style name="Theme.MyApp" parent="Theme.MyApp.Base" />
 
     <!-- 主页专用主题 = 启动入口主题（MainActivity 是 LAUNCHER）：
-         系统启动屏/窗口背景均为奶油色，主页首帧内的开屏浮层展示开屏图，
+         系统启动屏/窗口背景与开屏图同底，主页首帧内的开屏浮层展示开屏图，
          浮层在数据就绪后淡出直接揭示书架——单窗口、零转场、无系统伪影。
-         ⚠️ 仅 MainActivity 使用，其他 Activity 保持灰底。 -->
+         ⚠️ 仅 MainActivity 使用，其他 Activity 保持灰底。夜间值见 values-night/colors.xml 的 splash_bg。 -->
     <style name="Theme.MyApp.Main" parent="Theme.MyApp">
         <item name="android:windowBackground">@color/splash_bg</item>
         <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
     </style>
 
-    <!-- 海滨主题的主页变体：同 Theme.MyApp.Main（窗口背景/启动屏底色=奶油色） -->
-    <style name="Theme.MyApp.Seaside.Main" parent="Theme.MyApp.Seaside">
-        <item name="android:windowBackground">@color/splash_bg</item>
-        <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
-    </style>
-
-    <!-- ===== Toolbar 白色背景 + 深色图标/文字 ===== -->
-    <style name="ThemeOverlay.MyApp.ActionBar.Light" parent="ThemeOverlay.AppCompat.ActionBar">
+    <!-- ===== Toolbar 覆盖层：图标/文字随 ios_text_* token 日夜反相 ===== -->
+    <style name="ThemeOverlay.MyApp.ActionBar" parent="ThemeOverlay.AppCompat.ActionBar">
         <item name="android:windowBackground">@color/ios_bg</item>
         <item name="android:textColorPrimary">@color/ios_text_primary</item>
         <item name="android:textColorSecondary">@color/ios_text_secondary</item>
@@ -107,12 +93,4 @@
         <item name="cardElevation">1dp</item>
         <item name="strokeWidth">0dp</item>
     </style>
-
-    <!-- 海滨主题圆角样式（保留兼容旧引用） -->
-    <style name="ShapeAppearance.Seaside.Medium" parent="ShapeAppearance.iOS.Medium" />
-    <style name="ShapeAppearance.Seaside.Large" parent="ShapeAppearance.iOS.Large" />
-
-    <!-- 海滨主题按钮样式（保留兼容旧引用） -->
-    <style name="Widget.MyApp.Button.Seaside" parent="Widget.MyApp.Button.iOS" />
-    <style name="Widget.MyApp.CardView.Seaside" parent="Widget.MyApp.CardView.iOS" />
 </resources>

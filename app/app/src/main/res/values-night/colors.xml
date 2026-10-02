@@ -1,5 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- ===== iOS 设计 Token 的夜间取值 =====
+         与 values/colors.xml 同名，按 uiMode 自动覆盖：布局/样式/代码里引用 @color/ios_* 的地方
+         都会随之反相，不需要再维护一套 *_dark 命名。
+         取值尽量复用已有的深色基准，避免同一色值散落两处。 -->
+    <color name="ios_blue">@color/ios_blue_dark</color>                 <!-- #0A84FF：深色底上的系统蓝更亮 -->
+    <color name="ios_bg">@color/ios_bg_grouped_dark</color>             <!-- #1C1C1E：抬起的面（标题栏/弹窗） -->
+    <color name="ios_bg_grouped">@color/ios_bg_dark</color>              <!-- #000000：页面底色（iOS 分组背景） -->
+    <color name="ios_bg_grouped_2">@color/ios_bg_grouped_dark</color>
+    <color name="ios_card_bg">@color/ios_card_float_dark</color>         <!-- #2C2C2E：卡片浮在纯黑页底之上 -->
+    <color name="ios_nav_bg">@color/ios_bg_grouped_dark</color>
+    <color name="ios_tab_bar">@color/ios_tab_bar_dark</color>
+    <color name="ios_text_primary">@color/ios_text_primary_dark</color>
+    <color name="ios_text_secondary">@color/ios_text_secondary_dark</color>
+    <color name="ios_text_tertiary">#FF636368</color>                    <!-- 占位/禁用：黑底上仍可辨，约 3.4:1 -->
+    <color name="ios_separator">@color/ios_separator_dark</color>
+    <color name="ios_separator_opaque">#FF545458</color>
+
+    <!-- 开屏：宣纸插画为浅色，夜间窗口底改为深色，避免冷启动闪白 -->
+    <color name="splash_bg">#FF1C1C1E</color>
+
+    <color name="chip_bg">#FF3A3A3C</color>                <!-- 芯片浮在 #2C2C2E 卡片之上 -->
+    <color name="seg_track_bg">#FF2C2C2E</color>
+    <color name="seg_thumb_bg">#FF48484A</color>
+    <color name="seg_thumb_shadow">#66000000</color>
+    <color name="seg_text_selected">#FFFFFFFF</color>
+
+    <!-- ===== 修改密码 / 邮箱绑定页（登录同族淡紫配色）的夜间取值 ===== -->
+    <color name="cp_page_bg">#FF1C1C1E</color>
+    <color name="cp_surface">#FF2C2C2E</color>
+    <color name="cp_divider">#FF38383A</color>
+    <color name="cp_field_bg">#FF2C2C2E</color>
+    <color name="cp_field_stroke">#FF48484A</color>
+    <color name="cp_chip_bg">#FF3A3A3C</color>
+    <color name="cp_chip_stroke">#FF545458</color>
+
     <!-- 夜间模式 · 底栏为深色磨砂，未选中不能再用纯黑，改为浅灰白 -->
     <color name="nav_item_normal">#FFEBEBF5</color>
     <color name="nav_item_ripple">#26FFFFFF</color>

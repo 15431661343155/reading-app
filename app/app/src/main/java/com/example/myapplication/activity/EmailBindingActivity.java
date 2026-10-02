@@ -40,15 +40,7 @@ public class EmailBindingActivity extends BaseActivity {
         Toolbar toolbar = findViewById(R.id.toolbar_back);
         // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
-        int currentTheme = ThemeManager.getCurrentTheme(this);
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF000000);
-        } else {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF1D1D1F);
-        }
-        setLightStatusBar(currentTheme == ThemeManager.THEME_SEASIDE);
+        toolbar.setNavigationIcon(R.drawable.ic_back_black);
         toolbar.setNavigationOnClickListener(v -> finish());
 
         tvCurrentEmail = findViewById(R.id.tv_current_email);

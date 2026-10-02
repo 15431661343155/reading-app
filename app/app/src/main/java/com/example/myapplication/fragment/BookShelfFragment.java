@@ -31,6 +31,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.myapplication.R;
+import com.example.myapplication.activity.BaseActivity;
 import com.example.myapplication.activity.BookDetailActivity;
 import com.example.myapplication.activity.MainActivity;
 import com.example.myapplication.activity.ReadActivity;
@@ -117,8 +118,6 @@ public class BookShelfFragment extends Fragment {
     private android.widget.LinearLayout layoutGroupTabs;
 
     // 分组 Tab 滑动指示器
-    private static final int COL_SHELF_SEL = 0xFF007AFF;   // iOS 蓝
-    private static final int COL_SHELF_UNSEL = 0xFF8E8E93; // iOS 次文字
     private View segThumbShelf;
     private ValueAnimator thumbAnim, chipColorAnim;
     /** 切换分段前各 chip 的文字颜色（作为颜色渐变的真实起点，防止闪现蓝色） */
@@ -309,9 +308,8 @@ public class BookShelfFragment extends Fragment {
         // 状态栏背景与页面顶部颜色统一，消除割裂
         getActivity().getWindow().setStatusBarColor(
             getActivity().getResources().getColor(R.color.ios_bg_grouped, null));
-        int flags = getActivity().getWindow().getDecorView().getSystemUiVisibility();
-        flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        getActivity().getWindow().getDecorView().setSystemUiVisibility(flags);
+        // 图标明暗交由宿主按当前日夜配置复位（夜间深色底要用浅色图标）
+        ((BaseActivity) getActivity()).applyStatusBarIcons();
     }
 
     /** 外站数据拉取完成后刷新书架（登录后 pullAll 是异步的，此前的加载会读不到数据）。 */
@@ -1615,19 +1613,25 @@ public class BookShelfFragment extends Fragment {
         });
     }
 
+    /** 分段文字色走 token：夜间选中态落在深灰指示器上，不能沿用日间那层 iOS 蓝 */
+    private int shelfChipColor(boolean selected) {
+        return getResources().getColor(selected ? R.color.seg_text_selected
+                : R.color.ios_text_secondary, null);
+    }
+
     private void applyChipStyle(TextView chip, boolean selected) {
         if (selected) {
-            chip.setTextColor(COL_SHELF_SEL); // iOS 蓝
+            chip.setTextColor(shelfChipColor(true));
             if (segThumbShelf != null) {
                 chip.setBackground(null); // 白底由滑动指示器承担
             } else {
                 android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-                bg.setColor(0xFFFFFFFF); // 选中：白底
+                bg.setColor(getResources().getColor(R.color.seg_thumb_bg, null));
                 bg.setCornerRadius(getResources().getDisplayMetrics().density * 6);
                 chip.setBackground(bg);
             }
         } else {
-            chip.setTextColor(COL_SHELF_UNSEL); // iOS 次文字
+            chip.setTextColor(shelfChipColor(false));
             chip.setBackground(null); // 未选中：透明，让外层容器露出来
         }
     }
@@ -1704,7 +1708,7 @@ public class BookShelfFragment extends Fragment {
             for (TextView c : chips) {
                 boolean sel = c.getText().toString().equals(currentGroup);
                 int from = (starts != null && starts.containsKey(c)) ? starts.get(c) : c.getCurrentTextColor();
-                int to = sel ? COL_SHELF_SEL : COL_SHELF_UNSEL;
+                int to = shelfChipColor(sel);
                 c.setTextColor((int) ev.evaluate(t, from, to));
             }
         });
@@ -1808,7 +1812,7 @@ public class BookShelfFragment extends Fragment {
                 TextView tv = (TextView) super.getView(position, convertView, parent);
                 tv.setText(getItem(position) + "    (长按删除)");
                 tv.setTextSize(14);
-                tv.setTextColor(0xFF1D1D1F); // iOS 主文字
+                tv.setTextColor(getResources().getColor(R.color.ios_text_primary, null));
                 return tv;
             }
         };

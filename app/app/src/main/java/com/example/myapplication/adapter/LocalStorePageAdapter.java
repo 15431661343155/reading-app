@@ -234,13 +234,13 @@ public class LocalStorePageAdapter extends RecyclerView.Adapter<LocalStorePageAd
                 tv.setTextSize(13);
                 tv.setPadding(18, 8, 18, 8);
                 if (selected) {
-                    tv.setTextColor(Color.parseColor("#007AFF")); // iOS 蓝
+                    tv.setTextColor(itemView.getContext().getColor(R.color.seg_text_selected));
                     GradientDrawable bg = new GradientDrawable();
                     bg.setCornerRadius(999);
-                    bg.setColor(Color.parseColor("#E8E8ED")); // 选中：浅灰底
+                    bg.setColor(itemView.getContext().getColor(R.color.ios_separator));
                     tv.setBackground(bg);
                 } else {
-                    tv.setTextColor(Color.parseColor("#8E8E93")); // iOS 次文字
+                    tv.setTextColor(itemView.getContext().getColor(R.color.ios_text_secondary));
                     tv.setBackground(null);
                 }
 

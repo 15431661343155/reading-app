@@ -53,6 +53,7 @@ import android.view.animation.AccelerateDecelerateInterpolator;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.RoundedBitmapDrawable;
@@ -423,6 +424,11 @@ public class ReadActivity extends BaseActivity {
                 }
             });
         } catch (Throwable ignored) {}
+
+        // 阅读器自带一套纸张/夜间背景染色（由 ReadThemeController 逐色驱动），与系统日夜无关。
+        // 这里把本页锁定为日间解析：否则 drawable-night 与 ios_* token 的夜间值会混进阅读器，
+        // 使 mapBgColor 的白名单失效（未命中的色值原样透传），页面染色与分页都会错乱。
+        getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_NO);
 
         super.onCreate(savedInstanceState);
 

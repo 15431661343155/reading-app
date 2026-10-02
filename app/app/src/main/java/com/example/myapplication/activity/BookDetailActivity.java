@@ -127,9 +127,6 @@ public class BookDetailActivity extends BaseActivity{
     @Override
     @SuppressWarnings("deprecation")
     protected void onCreate(Bundle savedInstanceState) {
-        int currentTheme = ThemeManager.getCurrentTheme(this);
-        setTheme(ThemeManager.getThemeRes(currentTheme));
-
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_book_detail);
 
@@ -155,7 +152,7 @@ public class BookDetailActivity extends BaseActivity{
         }
 
         initView();
-        setupToolbar(currentTheme);
+        setupToolbar();
         displayBookInfo();
         setupClickListeners();
 
@@ -292,17 +289,8 @@ public class BookDetailActivity extends BaseActivity{
         tvLatestChapter = findViewById(R.id.tv_latest_chapter);
     }
 
-    private void setupToolbar(int currentTheme) {
+    private void setupToolbar() {
         Toolbar toolbar = findViewById(R.id.toolbar_back);
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF000000);
-        } else {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF1D1D1F);
-        }
-        // 海滨主题工具栏为浅色，状态栏图标用深色
-        setLightStatusBar(currentTheme == ThemeManager.THEME_SEASIDE);
         toolbar.setNavigationOnClickListener(v -> finish());
     }
 
@@ -536,7 +524,7 @@ public class BookDetailActivity extends BaseActivity{
         }
         sb.append(statusText).append(" · ").append(wordCountText);
         tvStatus.setText(sb.toString());
-        tvStatus.setTextColor(0xFF8E8E93); // iOS 次文字
+        tvStatus.setTextColor(getColor(R.color.ios_text_secondary));
     }
 
     /**
@@ -1752,7 +1740,7 @@ public class BookDetailActivity extends BaseActivity{
             Object row = sheetRows.get(position);
             if (row instanceof String) {
                 tv.setText((String) row);
-                tv.setTextColor(0xFF8E8E93);
+                tv.setTextColor(getColor(R.color.ios_text_secondary));
                 return;
             }
             int realIndex = ((int[]) row)[0];
@@ -1767,14 +1755,14 @@ public class BookDetailActivity extends BaseActivity{
             if (realIndex == sheetCurrentIndex) {
                 // 当前章：淡蓝底 + 左侧蓝色竖条 + 蓝字粗体 + 行尾小号"当前"标记
                 tv.setBackground(getCurrentChapterBg());
-                tv.setTextColor(0xFF007AFF);
+                tv.setTextColor(getColor(R.color.ios_blue));
                 tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                 tv.setText(buildCurrentChapterTitle(tv, title));
             } else {
                 // 非当前章：彻底重置（纯文本 setText 清除所有 span；背景/字色/字重恢复原样），
                 // 避免 RecyclerView 复用把"当前"标记或竖条串到别的行上
                 tv.setTypeface(android.graphics.Typeface.DEFAULT);
-                tv.setTextColor(0xFF1D1D1F);
+                tv.setTextColor(getColor(R.color.ios_text_primary));
                 tv.setBackgroundColor(0x00000000);
                 tv.setText(title);
             }

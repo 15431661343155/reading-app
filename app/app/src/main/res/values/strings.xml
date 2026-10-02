@@ -7,6 +7,11 @@
     <string name="history">阅读记录</string>
     <string name="feedback">意见反馈</string>
     <string name="theme_setting">主题设置</string>
+    <string name="appearance_follow_system">跟随系统</string>
+    <string name="appearance_light">日间</string>
+    <string name="appearance_dark">夜间</string>
+    <string name="appearance_footer">选择应用外观。跟随系统时，会随设备的深色设置自动切换。</string>
+    <string name="appearance_applied">外观已切换</string>
     <string name="settings">设置</string>
     <string name="profile">个人资料</string>
     <string name="account_security">账号管理</string>

@@ -36,7 +36,7 @@
                 android:layout_height="wrap_content"
                 android:textSize="16sp"
                 android:textStyle="bold"
-                android:textColor="#1D1D1F"/>
+                android:textColor="@color/ios_text_primary"/>
 
             <TextView
                 android:id="@+id/tv_source_desc"
@@ -44,7 +44,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:textSize="12sp"
-                android:textColor="#8E8E93"
+                android:textColor="@color/ios_text_secondary"
                 android:maxLines="2"
                 android:ellipsize="end"/>
         </LinearLayout>
@@ -54,10 +54,10 @@
             android:id="@+id/tv_source_type"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="#F0F0F0"
+            android:background="@color/ios_separator"
             android:paddingHorizontal="6dp"
             android:paddingVertical="2dp"
             android:textSize="11sp"
-            android:textColor="#8E8E93"/>
+            android:textColor="@color/ios_text_secondary"/>
     </LinearLayout>
 </LinearLayout>

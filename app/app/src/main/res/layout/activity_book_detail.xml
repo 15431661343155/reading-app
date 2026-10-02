@@ -86,7 +86,7 @@
                             android:layout_height="wrap_content"
                             android:text="状态"
                             android:textSize="12sp"
-                            android:textColor="#8E8E93"
+                            android:textColor="@color/ios_text_secondary"
                             android:layout_marginTop="36dp" />
 
                     </LinearLayout>
@@ -155,7 +155,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#E5E5EA"
+                android:background="@color/ios_separator"
                 android:layout_marginStart="20dp"
                 android:layout_marginEnd="20dp" />
 
@@ -188,7 +188,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:textSize="12sp"
-                    android:textColor="#8E8E93"
+                    android:textColor="@color/ios_text_secondary"
                     android:singleLine="true"
                     android:ellipsize="end" />
 
@@ -203,7 +203,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#E5E5EA"
+                android:background="@color/ios_separator"
                 android:layout_marginStart="20dp"
                 android:layout_marginEnd="20dp" />
 
@@ -274,7 +274,7 @@
         <View
             android:layout_width="1dp"
             android:layout_height="30dp"
-            android:background="#E5E5EA" />
+            android:background="@color/ios_separator" />
 
         <!-- 开始阅读按钮（右侧，椭圆形） -->
         <Button

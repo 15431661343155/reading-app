@@ -19,7 +19,7 @@
             app:navigationIcon="@drawable/ic_back_black"
             app:title="书源管理"
             app:titleCentered="true"
-            app:titleTextColor="@color/black" />
+            app:titleTextColor="@color/ios_text_primary" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -53,7 +53,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="#e0e0e0" />
+            android:background="@color/ios_separator" />
 
         <ScrollView
             android:layout_width="match_parent"

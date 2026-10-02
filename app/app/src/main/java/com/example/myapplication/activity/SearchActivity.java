@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.myapplication.R;
+import com.example.myapplication.utils.ThemeManager;
 import com.example.myapplication.adapter.BookAdapter;
 import com.example.myapplication.utils.ActivityTransition;
 import com.example.myapplication.api.RetrofitClient;
@@ -96,10 +97,15 @@ public class SearchActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_search);
 
-        // 状态栏颜色与搜索页白色背景统一
+        // 状态栏与搜索页顶部同色；图标明暗跟随日夜配置（本页不继承 BaseActivity，故就地处理）
         getWindow().setStatusBarColor(getResources().getColor(R.color.ios_bg, null));
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        int barFlags = getWindow().getDecorView().getSystemUiVisibility();
+        if (ThemeManager.isNight(this)) {
+            barFlags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        } else {
+            barFlags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        }
+        getWindow().getDecorView().setSystemUiVisibility(barFlags);
 
         bindViews();
         setupListeners();
@@ -232,7 +238,7 @@ public class SearchActivity extends AppCompatActivity {
             TextView tv = new TextView(this);
             tv.setText("暂无搜索历史");
             tv.setTextSize(13);
-            tv.setTextColor(Color.parseColor("#BBBBBB"));
+            tv.setTextColor(getColor(R.color.ios_text_tertiary));
             layoutHistoryTags.addView(tv);
             return;
         }
@@ -257,11 +263,11 @@ public class SearchActivity extends AppCompatActivity {
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(999); // iOS 胶囊全圆
         if (isHistory) {
-            bg.setColor(Color.parseColor("#F2F2F7")); // iOS 分组底
-            tv.setTextColor(Color.parseColor("#1D1D1F")); // iOS 主文字
+            bg.setColor(getColor(R.color.ios_bg_grouped_2)); // 二级底
+            tv.setTextColor(getColor(R.color.ios_text_primary));
         } else {
-            bg.setColor(Color.parseColor("#E5E5EA")); // iOS 分隔底
-            tv.setTextColor(Color.parseColor("#007AFF")); // iOS 蓝
+            bg.setColor(getColor(R.color.ios_separator));
+            tv.setTextColor(getColor(R.color.ios_blue));
         }
         tv.setBackground(bg);
 

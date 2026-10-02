@@ -40,9 +40,6 @@ public class UploadBookActivity extends BaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        int currentTheme = ThemeManager.getCurrentTheme(this);
-        setTheme(ThemeManager.getThemeRes(currentTheme));
-
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_upload_book);
 
@@ -50,18 +47,6 @@ public class UploadBookActivity extends BaseActivity {
 
         Toolbar toolbar = findViewById(R.id.toolbar_back);
         // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
-        // 海滨主题 → 黑色箭头
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF000000);
-        }
-        // 默认主题 → 白色箭头
-        else {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF1D1D1F);
-        }
-        // 海滨主题工具栏为浅色，状态栏图标用深色
-        setLightStatusBar(currentTheme == ThemeManager.THEME_SEASIDE);
 
         // 返回点击事件
         toolbar.setNavigationOnClickListener(v -> finish());

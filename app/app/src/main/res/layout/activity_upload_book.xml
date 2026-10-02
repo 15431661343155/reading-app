@@ -29,7 +29,7 @@
             android:layout_height="wrap_content"
             android:text="支持 TXT、EPUB 格式电子书"
             android:textSize="13sp"
-            android:textColor="#8E8E93"
+            android:textColor="@color/ios_text_secondary"
             android:layout_marginBottom="20dp" />
 
         <!-- 书名输入框 -->
@@ -58,7 +58,7 @@
             android:layout_height="wrap_content"
             android:text="@string/tv_no_file_selected"
             android:layout_marginTop="15dp"
-            android:textColor="@color/gray_666"
+            android:textColor="@color/ios_text_secondary"
             android:gravity="center"/>
         <!-- 选择文件按钮 -->
         <Button

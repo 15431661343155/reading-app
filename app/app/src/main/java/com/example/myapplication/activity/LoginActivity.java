@@ -32,6 +32,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.example.myapplication.widget.MorphSubmitButton;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -144,6 +145,10 @@ public class LoginActivity extends BaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // 登录页是品牌插画：整幅浅色背景图 login_bg + 紫色玻璃卡片，无夜间版本。
+        // 锁定日间解析，避免深色 token 落在浅色画面上（白字白卡都不可读）。
+        getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 

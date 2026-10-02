@@ -2,6 +2,6 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <!-- 底部操作面板卡片：白底、12dp 圆角 -->
-    <solid android:color="@color/white" />
+    <solid android:color="@color/ios_card_bg" />
     <corners android:radius="12dp" />
 </shape>

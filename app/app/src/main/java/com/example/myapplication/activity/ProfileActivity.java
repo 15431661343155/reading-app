@@ -93,15 +93,6 @@ public class ProfileActivity extends BaseActivity {
 
         Toolbar toolbar = findViewById(R.id.toolbar_back);
 
-        int currentTheme = ThemeManager.getCurrentTheme(this);
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF000000);
-        } else {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF1D1D1F);
-        }
-        setLightStatusBar(currentTheme == ThemeManager.THEME_SEASIDE);
         toolbar.setNavigationOnClickListener(v -> finish());
 
         // 导航栏右侧「完成」（蓝色，保存资料）
@@ -109,7 +100,7 @@ public class ProfileActivity extends BaseActivity {
         btnSave.setText(R.string.done);
         btnSave.setTextSize(17);
         btnSave.setTypeface(null, android.graphics.Typeface.BOLD);
-        btnSave.setTextColor(0xFF007AFF);
+        btnSave.setTextColor(getColor(R.color.ios_blue));
         btnSave.setPadding(16, 0, 16, 0);
         Toolbar.LayoutParams lp = new Toolbar.LayoutParams(
                 Toolbar.LayoutParams.WRAP_CONTENT, Toolbar.LayoutParams.WRAP_CONTENT, Gravity.END);
@@ -185,7 +176,7 @@ public class ProfileActivity extends BaseActivity {
     private void updateEmailDisplay() {
         String email = sp.getString("email", "");
         tvEmail.setText(email.isEmpty() ? getString(R.string.unbound_tip) : maskEmail(email));
-        tvEmail.setTextColor(email.isEmpty() ? 0xFF8E8E93 : 0xFF1D1D1F); // 次文字 / 主文字
+        tvEmail.setTextColor(getColor(email.isEmpty() ? R.color.ios_text_secondary : R.color.ios_text_primary));
     }
 
     private void updatePwdHint() {

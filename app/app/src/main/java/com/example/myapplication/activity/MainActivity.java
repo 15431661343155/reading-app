@@ -19,7 +19,6 @@ import com.example.myapplication.manager.UpdateManager;
 import com.example.myapplication.utils.ExternalPrefs;
 import com.example.myapplication.utils.ExternalSyncManager;
 import com.example.myapplication.utils.ShelfPrefetch;
-import com.example.myapplication.utils.ThemeManager;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.lang.reflect.Field;
@@ -72,12 +71,11 @@ public class MainActivity extends BaseActivity {
         instance = this;
 
         // 主题必须在 super.onCreate 之前设置。
-        // 运行时用「主页专用变体」（窗口背景=奶油色 + 系统启动屏同色）：
-        // 图标点击 → 系统启动屏（奶油底+图标）→ 主页内开屏浮层（开屏图）→ 书架，
+        // 运行时用「主页专用变体」（窗口背景=开屏底 + 系统启动屏同色）：
+        // 图标点击 → 系统启动屏（开屏底+图标）→ 主页内开屏浮层（开屏图）→ 书架，
         // 全程单窗口、零 Activity 转场，无系统 starting window 伪影。
-        int currentTheme = ThemeManager.getCurrentTheme(this);
-        setTheme(currentTheme == ThemeManager.THEME_SEASIDE
-                ? R.style.Theme_MyApp_Seaside_Main : R.style.Theme_MyApp_Main);
+        // 日间/夜间由 values-night 的同名样式与 splash_bg 色值解析，这里不做分支。
+        setTheme(R.style.Theme_MyApp_Main);
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);

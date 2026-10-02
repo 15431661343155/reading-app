@@ -29,7 +29,7 @@
             android:name=".activity.MainActivity"
             android:theme="@style/Theme.MyApp.Main"
             android:exported="true"
-            android:configChanges="orientation|screenSize|layoutDirection|uiMode">
+            android:configChanges="orientation|screenSize|layoutDirection">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

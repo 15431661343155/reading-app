@@ -85,7 +85,8 @@ public class SourceSelectAdapter extends RecyclerView.Adapter<SourceSelectAdapte
         h.ivRadio.setImageResource(isSelected
                 ? R.drawable.ic_checkbox_checked_orange
                 : R.drawable.ic_checkbox_unchecked);
-        h.tvName.setTextColor(isSelected ? 0xFF007AFF : 0xFF1D1D1F); // iOS 蓝 / 主文字
+        h.tvName.setTextColor(h.itemView.getContext().getColor(
+                isSelected ? R.color.ios_blue : R.color.ios_text_primary));
 
         h.itemView.setOnClickListener(v -> {
             if (listener != null) {

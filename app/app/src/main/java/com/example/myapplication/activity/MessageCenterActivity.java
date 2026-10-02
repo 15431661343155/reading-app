@@ -38,13 +38,9 @@ public class MessageCenterActivity extends BaseActivity {
     private TabLayout tabLayout;
     private ViewPager2 viewPager;
     private TextView tvMarkAllRead;
-    private int currentTheme;
 
     @Override
     protected void onCreate(android.os.Bundle savedInstanceState) {
-        currentTheme = ThemeManager.getCurrentTheme(this);
-        setTheme(ThemeManager.getThemeRes(currentTheme));
-
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_message_center);
 
@@ -61,22 +57,12 @@ public class MessageCenterActivity extends BaseActivity {
         // Toolbar 延伸到状态栏
         // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
-        // 主题适配：海滨主题使用深色文字和图标
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF000000);
-            tvMarkAllRead.setTextColor(0xFF000000);
-            tabLayout.setTabTextColors(0x99000000, 0xFF000000);
-            tabLayout.setSelectedTabIndicatorColor(0xFF000000);
-        } else {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF1D1D1F);
-            tvMarkAllRead.setTextColor(0xFF1D1D1F);
-            tabLayout.setTabTextColors(0xFF8E8E93, 0xFF1D1D1F);
-            tabLayout.setSelectedTabIndicatorColor(0xFF007AFF);
-        }
-        // 海滨主题工具栏为浅色，状态栏图标用深色
-        setLightStatusBar(currentTheme == ThemeManager.THEME_SEASIDE);
+        // 文字/指示条统一取语义色 token，日间夜间都随 values-night 自动解析
+        toolbar.setTitleTextColor(getColor(R.color.ios_text_primary));
+        tvMarkAllRead.setTextColor(getColor(R.color.ios_text_primary));
+        tabLayout.setTabTextColors(
+                getColor(R.color.ios_text_secondary), getColor(R.color.ios_text_primary));
+        tabLayout.setSelectedTabIndicatorColor(getColor(R.color.ios_blue));
 
         toolbar.setNavigationOnClickListener(v -> finish());
 
@@ -99,13 +85,9 @@ public class MessageCenterActivity extends BaseActivity {
                     TextView tvTitle = customView.findViewById(R.id.tv_tab_title);
                     tvTitle.setText(title);
 
-                    if (currentTheme == ThemeManager.THEME_SEASIDE) {
-                        tvTitle.setTextColor(position == viewPager.getCurrentItem()
-                                ? 0xFF000000 : 0x99000000);
-                    } else {
-                        tvTitle.setTextColor(position == viewPager.getCurrentItem()
-                                ? 0xFF1D1D1F : 0xFF8E8E93);
-                    }
+                    tvTitle.setTextColor(position == viewPager.getCurrentItem()
+                            ? getColor(R.color.ios_text_primary)
+                            : getColor(R.color.ios_text_secondary));
 
                     tab.setCustomView(customView);
                 }
@@ -137,11 +119,8 @@ public class MessageCenterActivity extends BaseActivity {
     private void updateTabTextColor(TabLayout.Tab tab, boolean selected) {
         if (tab.getCustomView() == null) return;
         TextView tvTitle = tab.getCustomView().findViewById(R.id.tv_tab_title);
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            tvTitle.setTextColor(selected ? 0xFF000000 : 0x99000000);
-        } else {
-            tvTitle.setTextColor(selected ? 0xFF1D1D1F : 0xFF8E8E93);
-        }
+        tvTitle.setTextColor(selected ? getColor(R.color.ios_text_primary)
+                : getColor(R.color.ios_text_secondary));
     }
 
     /**

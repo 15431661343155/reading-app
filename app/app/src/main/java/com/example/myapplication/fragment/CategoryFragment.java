@@ -17,6 +17,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.myapplication.R;
+import com.example.myapplication.activity.BaseActivity;
 import com.example.myapplication.activity.CategoryBooksActivity;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
@@ -352,9 +353,8 @@ public class CategoryFragment extends Fragment {
         // 状态栏背景与页面顶部颜色统一，消除割裂
         getActivity().getWindow().setStatusBarColor(
                 getActivity().getResources().getColor(R.color.ios_bg_grouped, null));
-        int flags = getActivity().getWindow().getDecorView().getSystemUiVisibility();
-        flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        getActivity().getWindow().getDecorView().setSystemUiVisibility(flags);
+        // 图标明暗交由宿主按当前日夜配置复位（夜间深色底要用浅色图标）
+        ((BaseActivity) getActivity()).applyStatusBarIcons();
     }
 
     @Override

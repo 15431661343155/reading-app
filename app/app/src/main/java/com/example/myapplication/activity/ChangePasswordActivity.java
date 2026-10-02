@@ -66,15 +66,7 @@ public class ChangePasswordActivity extends BaseActivity {
         Toolbar toolbar = findViewById(R.id.toolbar_back);
         // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
-        int currentTheme = ThemeManager.getCurrentTheme(this);
-        if (currentTheme == ThemeManager.THEME_SEASIDE) {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF000000);
-        } else {
-            toolbar.setNavigationIcon(R.drawable.ic_back_black);
-            toolbar.setTitleTextColor(0xFF1D1D1F);
-        }
-        setLightStatusBar(currentTheme == ThemeManager.THEME_SEASIDE);
+        toolbar.setNavigationIcon(R.drawable.ic_back_black);
         toolbar.setNavigationOnClickListener(v -> finish());
 
         sp = getSharedPreferences("user_info", MODE_PRIVATE);
@@ -166,7 +158,6 @@ public class ChangePasswordActivity extends BaseActivity {
     }
 
     private static final int COL_SEL = 0xFF6C5CE7;
-    private static final int COL_UNSEL = 0xFF8E8AA0;
 
     private void switchToPasswordMode() {
         animateSegment(false);
@@ -199,9 +190,10 @@ public class ChangePasswordActivity extends BaseActivity {
                     .start();
         }
 
-        // 标签颜色渐变
-        int selFrom = targetEmail ? COL_UNSEL : COL_SEL;
-        int unsFrom = targetEmail ? COL_SEL : COL_UNSEL;
+        // 标签颜色渐变（未选中色走 token，夜间为浅灰）
+        final int colUnsel = getColor(R.color.ios_text_secondary);
+        int selFrom = targetEmail ? colUnsel : COL_SEL;
+        int unsFrom = targetEmail ? COL_SEL : colUnsel;
         ArgbEvaluator ev = new ArgbEvaluator();
         labelAnim = ValueAnimator.ofFloat(0f, 1f);
         labelAnim.setDuration(250L);
@@ -210,7 +202,7 @@ public class ChangePasswordActivity extends BaseActivity {
             (targetEmail ? tvEmailVerify : tvPasswordVerify)
                     .setTextColor((int) ev.evaluate(t, selFrom, COL_SEL));
             (targetEmail ? tvPasswordVerify : tvEmailVerify)
-                    .setTextColor((int) ev.evaluate(t, unsFrom, COL_UNSEL));
+                    .setTextColor((int) ev.evaluate(t, unsFrom, colUnsel));
         });
         labelAnim.start();
 
@@ -423,7 +415,7 @@ public class ChangePasswordActivity extends BaseActivity {
         int color;
         String text;
         if (level == 0) {
-            color = 0xFFE4E0EE;
+            color = getColor(R.color.cp_divider);
             text = "强度：弱";
         } else if (level == 1) {
             color = 0xFFFF5A5A;
@@ -436,10 +428,10 @@ public class ChangePasswordActivity extends BaseActivity {
             text = "强度：强";
         }
         for (int i = 0; i < segs.length; i++) {
-            segs[i].setBackgroundColor(i < level ? color : 0xFFE4E0EE);
+            segs[i].setBackgroundColor(i < level ? color : getColor(R.color.cp_divider));
         }
         label.setText(text);
-        label.setTextColor(level == 0 ? 0xFFA29DB8 : 0xFF1D1D1F);
+        label.setTextColor(getColor(level == 0 ? R.color.ios_text_tertiary : R.color.ios_text_primary));
     }
 
     /** 监听新密码输入，实时刷新强度条。 */
