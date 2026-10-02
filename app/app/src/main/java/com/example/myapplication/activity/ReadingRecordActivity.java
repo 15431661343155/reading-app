@@ -383,8 +383,83 @@ public class ReadingRecordActivity extends BaseActivity {
     private void loadRecords() {
         // 旧版全局外站数据迁移到当前登录用户命名空间（幂等，未登录则跳过）
         ExternalPrefs.migrateIfNeeded(this);
-        // 阅读记录本地保存，游客模式也应展示（后端无独立历史接口，以本地为准）
+        // 本地 SP 优先：App 内读过的网络书/本地书 + 外站书
         loadLocalRecords();
+        // 补服务端进度：仅在 Web 端读过、本地 SP 无条目的网络书（后端 recent 接口带 book/chapter）
+        mergeServerRecords();
+    }
+
+    /**
+     * 从服务器拉取最近阅读进度，把本地 SP 里没有的网络书补进阅读记录。
+     *
+     * <p>解决跨端缺口：Web 阅读只写 reading_progress 表、不写安卓本地 reading_records SP，
+     * 导致书架（逐本 getProgress）能显示进度、阅读记录（只读 SP）却看不到这本书。
+     * 登录态才拉；游客无服务器记录，跳过。同一 bookId 本地已有条目时保留本地、不重复。
+     */
+    private void mergeServerRecords() {
+        String uidStr = getSharedPreferences("user_info", MODE_PRIVATE).getString("userId", "");
+        long userId = uidStr.isEmpty() ? 0 : Long.parseLong(uidStr);
+        if (userId == 0) return;
+
+        RetrofitClient.getApiService().getRecentReading(userId)
+                .enqueue(new Callback<ApiResponse<List<ReadingProgress>>>() {
+                    @Override
+                    public void onResponse(Call<ApiResponse<List<ReadingProgress>>> call,
+                            Response<ApiResponse<List<ReadingProgress>>> response) {
+                        if (isFinishing() || isDestroyed()) return;
+                        if (response.isSuccessful() && response.body() != null
+                                && response.body().isSuccess() && response.body().getData() != null) {
+                            if (appendServerRecords(response.body().getData())) {
+                                records.sort((a, b) -> Long.compare(b.getReadTime(), a.getReadTime()));
+                                adapter.notifyDataSetChanged();
+                                updateEmptyView();
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(Call<ApiResponse<List<ReadingProgress>>> call, Throwable t) {}
+                });
+    }
+
+    /** 把服务端进度里本地缺失的网络书追加到 records，返回是否有新增。 */
+    private boolean appendServerRecords(List<ReadingProgress> serverList) {
+        java.util.Set<Long> existing = new java.util.HashSet<>();
+        for (ReadingRecord r : records) {
+            if (!r.isExternal() && r.getBookId() > 0) existing.add(r.getBookId());
+        }
+        boolean changed = false;
+        for (ReadingProgress p : serverList) {
+            Long bidBox = p.getBookId();
+            if (bidBox == null || bidBox <= 0) continue;         // 外站书/无 id 跳过
+            long bid = bidBox;
+            if (existing.contains(bid)) continue;                 // 本地已有，保留本地
+            Book bk = p.getBook();
+            if (bk == null) continue;                             // 无书籍元信息无法展示
+
+            ReadingRecord record = new ReadingRecord();
+            record.setBookId(bid);
+            record.setBookName(bk.getBookName());
+            record.setAuthor(bk.getAuthor() != null ? bk.getAuthor() : "");
+            record.setCover(bk.getCover() != null ? bk.getCover() : "");
+            int chapterIndex = p.getChapterIndex();
+            int totalChapters = bk.getChapterCount();
+            record.setChapterIndex(chapterIndex);
+            record.setTotalChapters(totalChapters);
+            String title = p.getChapter() != null ? p.getChapter().getTitle() : p.getChapterTitle();
+            record.setChapterTitle(title != null ? title : "");
+            // 与本地一致：进度 = (已读章数)/总章数，clamp 到 0-100（防陈旧 chapterIndex 越界）
+            int progress = totalChapters > 0
+                    ? Math.max(0, Math.min(100, (int) ((chapterIndex + 1) * 100f / totalChapters)))
+                    : 0;
+            record.setProgress(progress);
+            Long epoch = p.getUpdatedAtEpoch();
+            record.setReadTime(epoch != null ? epoch : 0);
+            records.add(record);
+            existing.add(bid);
+            changed = true;
+        }
+        return changed;
     }
 
     /**

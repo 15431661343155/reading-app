@@ -130,6 +130,12 @@ public interface ApiService {
             @Path("bookId") long bookId
     );
 
+    // 最近阅读：按 updatedAt 倒序返回服务器进度记录，每条 EAGER 带 book/chapter，供阅读记录页还原
+    @GET("/api/user/progress/recent/{userId}")
+    Call<ApiResponse<List<ReadingProgress>>> getRecentReading(
+            @Path("userId") long userId
+    );
+
     // ========== 书签 ==========
     @POST("/api/user/bookmark/add")
     Call<ApiResponse<Bookmark>> addBookmark(@Body Bookmark bookmark);
