@@ -83,6 +83,11 @@ class ReadThemeController {
     private static final java.util.Set<Integer> sIssuedChrome2 = new java.util.HashSet<>();
     private static final java.util.Set<Integer> sIssuedLine    = new java.util.HashSet<>();
 
+    /** 文字在派生配色中的角色，见 {@link #applyTextColor}。 */
+    private static final int TEXT_ROLE_NONE = 0;
+    private static final int TEXT_ROLE_PRIMARY = 1;
+    private static final int TEXT_ROLE_SECONDARY = 2;
+
     /**
      * 当前前台活跃的 ReadActivity 实例（仅在 onResume/onPause 维护）。
      * <p>
@@ -257,7 +262,8 @@ class ReadThemeController {
      *   <li>WebView 阅读区：调用 JS {@code animateNightMode(...)}，由 Canvas 逐帧重绘背景与文字色；</li>
      *   <li>过渡时长见 {@link #NIGHT_TRANSITION_MS}（默认 1000ms）。</li>
      * </ul>
-     * 浮窗（目录/设置等）在过渡结束后再统一刷新，避免逐帧重染开销。
+     * 浮窗（目录/设置等）随动画逐帧重染，与导航栏、阅读区同步渐变，
+     * 避免「阅读区已渐变到位、面板还停在旧配色最后跳一下」。
      */
     void animateNightModeToggle() {
         animateNightModeTo(!activity.isNightMode);
@@ -310,15 +316,24 @@ class ReadThemeController {
         anim.setInterpolator(new AccelerateDecelerateInterpolator());
         anim.addUpdateListener(a -> {
             float t = (float) a.getAnimatedValue();
-            applyChromeColorsWith(
-                    (int) eval.evaluate(t, fromC1, toC1),
-                    (int) eval.evaluate(t, fromC2, toC2),
-                    (int) eval.evaluate(t, fromLine, toLine),
-                    (int) eval.evaluate(t, fromT1, toT1),
-                    (int) eval.evaluate(t, fromT2, toT2),
-                    (int) eval.evaluate(t, fromNav, toNav),
-                    (int) eval.evaluate(t, fromAcc, toAcc),
-                    toNight);
+            int c1 = (int) eval.evaluate(t, fromC1, toC1);
+            int c2 = (int) eval.evaluate(t, fromC2, toC2);
+            int ln = (int) eval.evaluate(t, fromLine, toLine);
+            int t1 = (int) eval.evaluate(t, fromT1, toT1);
+            int t2 = (int) eval.evaluate(t, fromT2, toT2);
+            int nv = (int) eval.evaluate(t, fromNav, toNav);
+            int ac = (int) eval.evaluate(t, fromAcc, toAcc);
+
+            // 浮窗逐帧跟随：静态色先置为本帧中间值，themeShowingPopups 才能补间染色。
+            // 中间值登记进「已派发色集合」——mapBgColor 靠集合识别「上一帧染出来的底色」，
+            // 不登记的话下一帧就认不出这是主底/二级底，浮窗会停在第一帧颜色不再前进。
+            // 集合不会无限增长：同一日/夜两端的补间端点固定，中间值与上次切换完全重复。
+            sChrome1 = c1; sChrome2 = c2; sLine = ln;
+            sText1 = t1;   sText2 = t2;   sNavText = nv; sAccent = ac;
+            sIssuedChrome1.add(c1); sIssuedChrome2.add(c2); sIssuedLine.add(ln);
+
+            applyChromeColorsWith(c1, c2, ln, t1, t2, nv, ac, toNight);
+            themeShowingPopups();
         });
         anim.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
@@ -457,10 +472,7 @@ class ReadThemeController {
 
         // 2) 文字颜色
         if (view instanceof TextView && !(view instanceof android.widget.Button)) {
-            TextView tv = (TextView) view;
-            int tc = tv.getCurrentTextColor();
-            int mapped = mapTextColor(tc);
-            if (mapped != tc) tv.setTextColor(mapped);
+            applyTextColor((TextView) view);
         }
 
         // 3) TabLayout：标签栏背景与文字（不递归进其内部 tab 子视图，避免与 setTabTextColors 冲突）
@@ -526,6 +538,30 @@ class ReadThemeController {
             return (hsv[2] >= 0.85f || hsv[2] <= 0.45f) ? sText1 : sText2;
         }
         return c;
+    }
+
+    /**
+     * 文字着色：优先按上次归类的「角色」取色。
+     * <p>夜间切换现在逐帧重染浮窗，主文字会从近黑补间到近白，途中必然经过中间灰；
+     * 而 {@link #mapTextColor} 的灰阶兜底把中间灰归为「次文字」，于是下一帧起该文字
+     * 再也不会回到主文字色（结尾落定成灰色，对比度不足）。归类结果记在 tag 上，
+     * 同一视图后续各帧与重刷都按角色取色，只有首次（或彩色等不归管的文字）才做归类。
+     */
+    private static void applyTextColor(TextView tv) {
+        int tc = tv.getCurrentTextColor();
+        Object role = tv.getTag(R.id.tag_theme_text_role);
+        int mapped;
+        if (Integer.valueOf(TEXT_ROLE_PRIMARY).equals(role)) {
+            mapped = sText1;
+        } else if (Integer.valueOf(TEXT_ROLE_SECONDARY).equals(role)) {
+            mapped = sText2;
+        } else {
+            mapped = mapTextColor(tc);
+        }
+        if (mapped != tc) tv.setTextColor(mapped);
+        int newRole = mapped == sText1 ? TEXT_ROLE_PRIMARY
+                    : mapped == sText2 ? TEXT_ROLE_SECONDARY : TEXT_ROLE_NONE;
+        if (!Integer.valueOf(newRole).equals(role)) tv.setTag(R.id.tag_theme_text_role, newRole);
     }
 
     /**

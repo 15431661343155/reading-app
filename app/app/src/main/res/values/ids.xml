@@ -3,4 +3,6 @@
     <item name="tag_bg_color" type="id" />
     <!-- 打了该 tag 的 View 及其子树不参与「跟随背景色」重着色（如背景色块本身必须显示真实颜色） -->
     <item name="tag_keep_own_color" type="id" />
+    <!-- 文字在派生配色中的角色（1=主文字 2=次文字 0=不归管）；逐帧渐变时按角色取色，避免中间灰阶被误判 -->
+    <item name="tag_theme_text_role" type="id" />
 </resources>
