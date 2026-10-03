@@ -8,6 +8,8 @@
     <color name="ios_accent_stroke">#570A84FF</color>                   <!-- 主色 34% 描边，夜间跟 #0A84FF 提亮 -->
     <color name="ios_ornament_faint">#FF3A3A3C</color>                  <!-- 云纹 / 水波纹：浮在 #2C2C2E 卡片上 -->
     <color name="ios_danger_btn">#FFD04436</color>                      <!-- 危险按钮底：夜间压深一档保住白字对比 -->
+    <color name="ios_danger_tint">#24D04436</color>                     <!-- 警示提示条薄底：黑底上比日间提一档才看得见 -->
+    <color name="ios_danger_stroke">#5AD04436</color>                   <!-- 同上描边 -->
     <color name="ios_field_stroke">#FF4E4E52</color>                    <!-- 输入框描边 -->
     <color name="ios_bg">@color/ios_bg_grouped_dark</color>             <!-- #1C1C1E：抬起的面（标题栏/弹窗） -->
     <color name="ios_bg_grouped">@color/ios_bg_dark</color>              <!-- #000000：页面底色（iOS 分组背景） -->

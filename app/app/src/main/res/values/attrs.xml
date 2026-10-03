@@ -47,6 +47,8 @@
     <attr name="appAccentBottom" format="color" />   <!-- 主按钮渐变·下 -->
     <attr name="appDangerTop" format="color" />      <!-- 危险按钮（注销）渐变·上：素白档为红，不随主色 -->
     <attr name="appDangerBottom" format="color" />
+    <attr name="appDangerTint" format="color" />     <!-- 警示提示条薄底（危险色 ~12%） -->
+    <attr name="appDangerStroke" format="color" />   <!-- 同上描边（危险色 ~34%） -->
     <attr name="appGhostBg" format="color" />        <!-- 实心次按钮底 -->
     <attr name="appFieldBg" format="color" />        <!-- 输入框 / 选项行底 -->
     <attr name="appFieldStroke" format="color" />    <!-- 输入框描边 -->

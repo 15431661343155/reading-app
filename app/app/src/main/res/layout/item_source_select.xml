@@ -1,19 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 书源选择弹窗·单行：选中行由 bg_source_row 铺主色薄底，行尾「当前」徽标标出正在使用的书源 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingHorizontal="14dp"
-    android:paddingVertical="12dp"
+    android:background="@drawable/bg_source_row"
+    android:foreground="?attr/selectableItemBackground"
     android:clickable="true"
-    android:focusable="true"
-    android:background="?attr/selectableItemBackground">
+    android:focusable="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="center_vertical"
+        android:paddingHorizontal="13dp"
+        android:paddingVertical="12dp">
 
         <!-- 左侧选中图标 -->
         <ImageView
@@ -34,30 +36,54 @@
                 android:id="@+id/tv_source_name"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="16sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="?attr/appTextPrimary"/>
+                android:textColor="?attr/appTextPrimary"
+                android:maxLines="1"
+                android:ellipsize="end"/>
 
             <TextView
                 android:id="@+id/tv_source_desc"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:textSize="12sp"
+                android:layout_marginTop="3dp"
+                android:textSize="11sp"
                 android:textColor="?attr/appTextSecondary"
-                android:maxLines="2"
+                android:maxLines="1"
                 android:ellipsize="end"/>
         </LinearLayout>
+
+        <!-- 正在使用的书源标记 -->
+        <TextView
+            android:id="@+id/tv_source_current"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_source_badge"
+            android:paddingHorizontal="5dp"
+            android:paddingVertical="2dp"
+            android:text="当前"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="?attr/appOnAccent"
+            android:visibility="gone"/>
 
         <!-- 类型标记 -->
         <TextView
             android:id="@+id/tv_source_type"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="?attr/appSeparator"
-            android:paddingHorizontal="6dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_source_tag"
+            android:paddingHorizontal="5dp"
             android:paddingVertical="2dp"
-            android:textSize="11sp"
-            android:textColor="?attr/appTextSecondary"/>
+            android:textSize="10sp"
+            android:textColor="?attr/appTextTertiary"/>
     </LinearLayout>
+
+    <View
+        android:id="@+id/v_row_divider"
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:background="?attr/appSeparator"/>
 </LinearLayout>

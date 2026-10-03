@@ -27,10 +27,17 @@ public class SourceSelectAdapter extends RecyclerView.Adapter<SourceSelectAdapte
 
     private final List<SourceInfo> list = new ArrayList<>();
     private String selectedType;
+    /** 书城当前正在使用的书源 type：行尾打「当前」徽标，与本次待确认的 selectedType 区分开 */
+    private String appliedType = "";
     private OnSourceSelectedListener listener;
 
     public void setListener(OnSourceSelectedListener listener) {
         this.listener = listener;
+    }
+
+    public void setAppliedType(String appliedType) {
+        this.appliedType = appliedType == null ? "" : appliedType;
+        notifyDataSetChanged();
     }
 
     public void setData(List<SourceInfo> sources, String selectedType) {
@@ -86,8 +93,17 @@ public class SourceSelectAdapter extends RecyclerView.Adapter<SourceSelectAdapte
         h.ivRadio.setImageResource(isSelected
                 ? R.drawable.ic_checkbox_checked_orange
                 : R.drawable.ic_checkbox_unchecked);
+        // 选中行的主色薄底走 itemView 的 state_selected（bg_source_row），文字同时转主色
+        h.itemView.setSelected(isSelected);
         h.tvName.setTextColor(ThemeAttrs.color(h.itemView.getContext(),
                 isSelected ? R.attr.appAccent : R.attr.appTextPrimary, 0));
+
+        boolean isApplied = item.getType() != null && item.getType().equals(appliedType);
+        h.tvCurrent.setVisibility(isApplied ? View.VISIBLE : View.GONE);
+        // 「当前」已经点明这行是谁，type 标签就让位给它，避免行尾挤两个胶囊
+        boolean showType = !isApplied && item.getType() != null && !item.getType().isEmpty();
+        h.tvType.setVisibility(showType ? View.VISIBLE : View.GONE);
+        h.vDivider.setVisibility(position == getItemCount() - 1 ? View.GONE : View.VISIBLE);
 
         h.itemView.setOnClickListener(v -> {
             if (listener != null) {
@@ -108,6 +124,8 @@ public class SourceSelectAdapter extends RecyclerView.Adapter<SourceSelectAdapte
         final TextView tvName;
         final TextView tvDesc;
         final TextView tvType;
+        final TextView tvCurrent;
+        final View vDivider;
 
         VH(View v) {
             super(v);
@@ -115,6 +133,8 @@ public class SourceSelectAdapter extends RecyclerView.Adapter<SourceSelectAdapte
             tvName = v.findViewById(R.id.tv_source_name);
             tvDesc = v.findViewById(R.id.tv_source_desc);
             tvType = v.findViewById(R.id.tv_source_type);
+            tvCurrent = v.findViewById(R.id.tv_source_current);
+            vDivider = v.findViewById(R.id.v_row_divider);
         }
     }
 }

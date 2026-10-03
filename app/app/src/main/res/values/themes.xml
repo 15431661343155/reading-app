@@ -71,6 +71,8 @@
         <item name="appAccentBottom">@color/ios_blue</item>
         <item name="appDangerTop">@color/ios_danger_btn</item>
         <item name="appDangerBottom">@color/ios_danger_btn</item>
+        <item name="appDangerTint">@color/ios_danger_tint</item>
+        <item name="appDangerStroke">@color/ios_danger_stroke</item>
         <item name="appGhostBg">@color/chip_bg</item>
         <item name="appFieldBg">@color/chip_bg</item>
         <item name="appFieldStroke">@color/ios_field_stroke</item>
@@ -119,6 +121,9 @@
         <item name="appAccentBottom">@color/gf_action_bottom</item>
         <item name="appDangerTop">@color/gf_action_top</item>
         <item name="appDangerBottom">@color/gf_action_bottom</item>
+        <!-- 宣纸档警示条与主色同系（朱砂），薄底/描边直接复用主色那组，不再另立一档 -->
+        <item name="appDangerTint">@color/xz_accent_tint</item>
+        <item name="appDangerStroke">@color/xz_accent_stroke</item>
         <item name="appGhostBg">@color/gf_ghost_bg</item>
         <item name="appFieldBg">@color/gf_paper_in</item>
         <item name="appFieldStroke">@color/gf_field_line</item>

@@ -127,6 +127,12 @@
     -->
     <style name="CacheSheetStyle" parent="BottomDialogStyle">
         <item name="android:backgroundDimEnabled">false</item>
+        <!--
+          窗口级滑动一并关掉：Window 动画移动的是整个窗口，遮罩 v_cache_dim 就住在
+          窗口里，于是入场时阴影会跟着面板一起从底部推上来。面板由 MineFragment 自己做
+          translationY 入场，遮罩只做原地 alpha 淡入，两者才互不牵连。
+        -->
+        <item name="android:windowAnimationStyle">@null</item>
     </style>
 
     <!-- 清理完成卡片：居中、无标题、淡入微放大 -->

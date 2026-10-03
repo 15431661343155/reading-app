@@ -364,7 +364,7 @@ public class MineFragment extends Fragment {
             cachedSizes = null;
         });
 
-        // 入场：先在首帧前把面板推到屏幕外，再滑上来
+        // 入场：先在首帧前把面板推到屏幕外、遮罩压成全透明，再各自滑上来 / 淡进来
         if (cacheSheetPanel != null) {
             cacheSheetPanel.setVisibility(View.INVISIBLE);
             final View panel = cacheSheetPanel;
@@ -380,10 +380,28 @@ public class MineFragment extends Fragment {
                             .setDuration(240)
                             .setInterpolator(new AccelerateDecelerateInterpolator())
                             .start();
+                    // 遮罩与退场共用 applySheetDim：只做原地 alpha 过渡，位置纹丝不动
+                    applySheetDim(1f);
+                    android.animation.ValueAnimator dimAnim =
+                            android.animation.ValueAnimator.ofFloat(1f, 0f);
+                    dimAnim.setDuration(240);
+                    dimAnim.setInterpolator(new AccelerateDecelerateInterpolator());
+                    dimAnim.addUpdateListener(a -> applySheetDim((float) a.getAnimatedValue()));
+                    dimAnim.start();
                     return true;
                 }
             });
         }
+
+        // 窗口动画已关掉，返回键若走系统默认路径会"啪"地消失，这里改接到带动画的关闭流程
+        sheet.setOnKeyListener((d, keyCode, event) -> {
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK
+                    && event.getAction() == android.view.KeyEvent.ACTION_UP) {
+                dismissClearCacheSheet();
+                return true;
+            }
+            return false;
+        });
 
         sheet.show();
     }

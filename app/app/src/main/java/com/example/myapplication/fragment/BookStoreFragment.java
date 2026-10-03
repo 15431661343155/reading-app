@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewpager2.widget.ViewPager2;
 
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
@@ -174,52 +175,84 @@ public class BookStoreFragment extends Fragment {
 
     /* ================= 书城模式面板（本站藏书 / 外站书城） ================= */
 
+    /** 面板只构建一次并复用：书源弹窗取消后要 hide→show 回到这里，而不是重建 */
+    private AlertDialog modePanelDialog;
+    private ImageView ivRadioLocal, ivRadioExternal;
+    private View optExternalCard;
+    private LinearLayout llSourceHint;
+    private TextView tvSourceState, tvSourceStateType, tvSelectSource;
+
     private void showBookStoreModePanel() {
-        // 使用 AlertDialog.Builder 构建自定义面板（两个大选项）
+        ensureModePanel();
+        refreshModePanel();
+        modePanelDialog.show();
+    }
+
+    private void ensureModePanel() {
+        if (modePanelDialog != null) return;
+
         View panel = LayoutInflater.from(getContext())
                 .inflate(R.layout.dialog_bookstore_mode_panel, null, false);
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
-                .setView(panel)
-                .create();
+        ivRadioLocal = panel.findViewById(R.id.iv_radio_local);
+        ivRadioExternal = panel.findViewById(R.id.iv_radio_external);
+        optExternalCard = panel.findViewById(R.id.opt_external);
+        llSourceHint = panel.findViewById(R.id.ll_source_hint);
+        tvSourceState = panel.findViewById(R.id.tv_source_state);
+        tvSourceStateType = panel.findViewById(R.id.tv_source_state_type);
+        tvSelectSource = panel.findViewById(R.id.tv_select_source);
 
-        // 选项 A：本站藏书
-        View optLocal = panel.findViewById(R.id.opt_local);
-        View optExt = panel.findViewById(R.id.opt_external);
-        ImageView ivClose = panel.findViewById(R.id.iv_close);
-        ImageView ivRadioLocal = panel.findViewById(R.id.iv_radio_local);
-        ImageView ivRadioExternal = panel.findViewById(R.id.iv_radio_external);
-        TextView tvSelectSource = panel.findViewById(R.id.tv_select_source);
-
-        // 根据当前模式同步两个 radio 的选中状态
-        applyRadioState(ivRadioLocal, ivRadioExternal);
-
-        optLocal.setOnClickListener(x -> {
-            dialog.dismiss();
+        panel.findViewById(R.id.opt_local).setOnClickListener(x -> {
+            modePanelDialog.dismiss();
             switchToLocalBooks();
         });
 
-        optExt.setOnClickListener(x -> {
-            dialog.dismiss();
-            // 使用上次保存的书源切换到外站书城；不再自动弹出书源选择弹窗。
-            if (externalSourceType != null && !externalSourceType.isEmpty()) {
+        // 已选过书源 → 点整卡直接切换；未选 → 弹窗保持打开，警示条就地显示
+        optExternalCard.setOnClickListener(x -> {
+            if (hasExternalSource()) {
+                modePanelDialog.dismiss();
                 switchToExternal(externalSourceType, externalSourceName);
             } else {
-                Hint.show(getContext(), "请先点击「选择书源」选一个外站书源");
+                showSourceHint();
             }
         });
 
-        // 选项 B 内「选择书源 →」按钮：单独打开书源选择弹窗（重选书源）
+        // 「选择书源 / 更换书源」：面板隐藏（不是关闭），书源弹窗取消后再回到面板
         tvSelectSource.setOnClickListener(x -> {
-            dialog.dismiss();
+            modePanelDialog.hide();
             showExternalSourceDialog();
         });
 
-        ivClose.setOnClickListener(x -> dialog.dismiss());
+        panel.findViewById(R.id.iv_close).setOnClickListener(x -> modePanelDialog.dismiss());
 
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        modePanelDialog = new AlertDialog.Builder(getContext())
+                .setView(panel)
+                .create();
+        if (modePanelDialog.getWindow() != null) {
+            modePanelDialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
-        dialog.show();
+    }
+
+    /** 每次打开面板时同步：单选圈、当前书源回显、按钮文案，并收起上一次的警示条 */
+    private void refreshModePanel() {
+        boolean has = hasExternalSource();
+        applyRadioState(ivRadioLocal, ivRadioExternal);
+        tvSourceState.setText(has ? "当前书源：" + externalSourceName : "尚未选择书源");
+        tvSourceStateType.setText(has ? externalSourceType : "");
+        tvSourceStateType.setVisibility(has ? View.VISIBLE : View.GONE);
+        tvSelectSource.setText(has ? "更换书源 →" : "选择书源 →");
+        llSourceHint.setVisibility(View.GONE);
+        optExternalCard.setBackgroundResource(R.drawable.bg_option_card);
+    }
+
+    private void showSourceHint() {
+        optExternalCard.setBackgroundResource(R.drawable.bg_option_card_warn);
+        llSourceHint.setAlpha(0f);
+        llSourceHint.setVisibility(View.VISIBLE);
+        llSourceHint.animate().alpha(1f).setDuration(180).start();
+    }
+
+    private boolean hasExternalSource() {
+        return externalSourceType != null && !externalSourceType.isEmpty();
     }
 
     /**
@@ -252,74 +285,126 @@ public class BookStoreFragment extends Fragment {
 
     /* ================= 外站书城 —— 书源选择弹窗 ================= */
 
+    /** 书源弹窗单独留引用，Fragment 视图销毁时一并关掉，避免窗口泄漏 */
+    private AlertDialog sourceDialog;
+
     private void showExternalSourceDialog() {
         View layout = LayoutInflater.from(getContext())
                 .inflate(R.layout.dialog_source_select, null, false);
         AlertDialog dialog = new AlertDialog.Builder(getContext()).setView(layout).create();
+        sourceDialog = dialog;
 
         ImageView ivClose = layout.findViewById(R.id.iv_dialog_close);
         RecyclerView rvList = layout.findViewById(R.id.rv_source_list);
         rvList.setLayoutManager(new LinearLayoutManager(getContext()));
+        MaterialCardView cardList = layout.findViewById(R.id.card_source_list);
+        LinearLayout llLoading = layout.findViewById(R.id.ll_source_loading);
+        LinearLayout llError = layout.findViewById(R.id.ll_source_error);
+        TextView tvSelected = layout.findViewById(R.id.tv_source_selected);
+        TextView tvConfirm = layout.findViewById(R.id.tv_source_confirm);
+        TextView tvCancel = layout.findViewById(R.id.tv_source_cancel);
+        TextView tvError = layout.findViewById(R.id.tv_source_error);
+        TextView tvRetry = layout.findViewById(R.id.tv_source_retry);
 
-        SourceSelectAdapter adapter = new SourceSelectAdapter();
-        // 已有选中 sourceType 则高亮
-        adapter.setData(null, mainMode == MODE_EXTERNAL ? externalSourceType : "");
-        rvList.setAdapter(adapter);
+        SourceSelectAdapter sourceAdapter = new SourceSelectAdapter();
+        // 已应用的 type 打「当前」徽标，同时作为本次待确认的高亮项
+        String currentType = mainMode == MODE_EXTERNAL ? externalSourceType : "";
+        sourceAdapter.setAppliedType(currentType);
+        sourceAdapter.setData(null, currentType);
+        rvList.setAdapter(sourceAdapter);
 
-        // 最后点击的 source，用户需点击「确认」来切换
+        // 最后点击的 source，用户需点击「确认」才会真正切换
         final SourceInfo[] pending = new SourceInfo[1];
-        adapter.setListener(source -> {
+        final boolean[] applied = {false};
+
+        Runnable syncFooter = () -> {
+            SourceInfo s = pending[0] != null ? pending[0] : sourceAdapter.findSelected();
+            tvConfirm.setEnabled(s != null);
+            tvConfirm.setAlpha(s == null ? 0.4f : 1f);
+            tvSelected.setText(s == null ? "请选择一个书源" : "已选：" + s.getName());
+        };
+        sourceAdapter.setListener(source -> {
             pending[0] = source;
-            adapter.setSelectedType(source == null ? "" : source.getType());
+            sourceAdapter.setSelectedType(source == null ? "" : source.getType());
+            syncFooter.run();
         });
+
+        final Runnable[] load = new Runnable[1];
+        load[0] = () -> {
+            llLoading.setVisibility(View.VISIBLE);
+            llError.setVisibility(View.GONE);
+            cardList.setVisibility(View.GONE);
+            tvSelected.setText("正在获取书源…");
+            tvConfirm.setEnabled(false);
+            tvConfirm.setAlpha(0.4f);
+            RetrofitClient.getApiService().getOnlineSources()
+                    .enqueue(new Callback<ApiResponse<List<SourceInfo>>>() {
+                        @Override
+                        public void onResponse(Call<ApiResponse<List<SourceInfo>>> c,
+                                               Response<ApiResponse<List<SourceInfo>>> r) {
+                            if (!dialog.isShowing()) return;
+                            llLoading.setVisibility(View.GONE);
+                            if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
+                                    && r.body().getData() != null) {
+                                List<SourceInfo> sources = r.body().getData();
+                                sourceAdapter.setData(sources, currentType);
+                                cardList.setVisibility(View.VISIBLE);
+                                llError.setVisibility(View.GONE);
+                                capSourceListHeight(rvList, sources.size());
+                                syncFooter.run();
+                            } else {
+                                showSourceError(llError, tvError, "获取书源列表失败");
+                                syncFooter.run();
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(Call<ApiResponse<List<SourceInfo>>> c, Throwable t) {
+                            if (!dialog.isShowing()) return;
+                            llLoading.setVisibility(View.GONE);
+                            showSourceError(llError, tvError, "网络异常，请检查网络后重试");
+                            syncFooter.run();
+                        }
+                    });
+        };
+        tvRetry.setOnClickListener(x -> load[0].run());
 
         ivClose.setOnClickListener(x -> dialog.dismiss());
-
-        swipeRefresh.setRefreshing(true);
-        RetrofitClient.getApiService().getOnlineSources()
-                .enqueue(new Callback<ApiResponse<List<SourceInfo>>>() {
-                    @Override
-                    public void onResponse(Call<ApiResponse<List<SourceInfo>>> c,
-                                           Response<ApiResponse<List<SourceInfo>>> r) {
-                        swipeRefresh.setRefreshing(false);
-                        if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
-                                && r.body().getData() != null) {
-                            adapter.setData(r.body().getData(),
-                                    mainMode == MODE_EXTERNAL ? externalSourceType : "");
-                        } else {
-                            Hint.show(getContext(), "获取书源列表失败");
-                        }
-                    }
-                    @Override
-                    public void onFailure(Call<ApiResponse<List<SourceInfo>>> c, Throwable t) {
-                        swipeRefresh.setRefreshing(false);
-                        Hint.show(getContext(), "网络错误: " + t.getMessage());
-                    }
-                });
-
-        // 注册「确认」按钮：必须在 dialog.show() 之前 setButton，否则 AlertDialog 不会渲染按钮区
-        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "确认", (d, w) -> {
-            SourceInfo s = pending[0];
-            if (s == null) {
-                // 用户未显式点击条目但有高亮项（例如默认选中），直接使用高亮项
-                s = adapter.findSelected();
-            }
-            if (s != null) {
-                switchToExternal(s.getType(), s.getName());
-            } else {
-                Hint.show(getContext(), "请选择一个书源");
-            }
+        tvCancel.setOnClickListener(x -> dialog.dismiss());
+        tvConfirm.setOnClickListener(x -> {
+            SourceInfo s = pending[0] != null ? pending[0] : sourceAdapter.findSelected();
+            if (s == null) return;
+            applied[0] = true;
+            dialog.dismiss();
+            if (modePanelDialog != null) modePanelDialog.dismiss();
+            switchToExternal(s.getType(), s.getName());
         });
-        dialog.setButton(AlertDialog.BUTTON_NEGATIVE, "取消", (d, w) -> dialog.dismiss());
 
         dialog.setOnDismissListener(d -> {
-            // 仅作为兜底：若用户未点确认但已选中 source（例如按系统返回键），不自动应用以避免误操作
+            boolean userClosed = sourceDialog == d;
+            sourceDialog = null;
+            // 取消 / ✕ / 返回键 → 回到切换书城面板；点确认切换或视图正在销毁时不重开
+            if (!applied[0] && userClosed && isAdded()) showBookStoreModePanel();
         });
 
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
         dialog.show();
+        load[0].run();
+    }
+
+    private void showSourceError(LinearLayout llError, TextView tvError, String msg) {
+        llError.setVisibility(View.VISIBLE);
+        tvError.setText(msg);
+    }
+
+    /** 书源过多时给列表封顶（行高约 62dp，留 5 行后内部滚动），避免底部按钮被顶出屏幕 */
+    private void capSourceListHeight(RecyclerView rv, int count) {
+        if (count <= 5) return;
+        ViewGroup.LayoutParams lp = rv.getLayoutParams();
+        lp.height = (int) (62 * 5 * getResources().getDisplayMetrics().density + 0.5f);
+        rv.setLayoutParams(lp);
     }
 
     /* ================= 书城模式持久化（退出 App 后仍记忆上次选择） ================= */
@@ -376,6 +461,19 @@ public class BookStoreFragment extends Fragment {
                 }
             }.start();
         } catch (Throwable ignored) {}
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // 两个弹窗都跨开关复用，视图销毁时必须关掉避免窗口泄漏；
+        // 先摘掉引用再 dismiss，书源弹窗的 DismissListener 才不会把面板重新弹出来。
+        AlertDialog source = sourceDialog;
+        sourceDialog = null;
+        if (source != null) source.dismiss();
+        AlertDialog panel = modePanelDialog;
+        modePanelDialog = null;
+        if (panel != null) panel.dismiss();
     }
 
     private void restoreStateAndInit() {

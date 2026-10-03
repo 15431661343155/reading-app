@@ -30,6 +30,8 @@
     <!-- 弹窗家族素白档：对应宣纸档的描金 / 朱砂印章 / 输入框描边 -->
     <color name="ios_ornament_faint">#FFEAEAEF</color>    <!-- 云纹 / 水波纹：白卡上只留极淡灰线 -->
     <color name="ios_danger_btn">#FFCC4436</color>        <!-- 危险按钮底（白字约 4.6:1） -->
+    <color name="ios_danger_tint">#1FCC4436</color>       <!-- 警示提示条薄底（危险色 12%） -->
+    <color name="ios_danger_stroke">#57CC4436</color>     <!-- 警示提示条描边（危险色 34%） -->
     <color name="ios_field_stroke">#FFD6D6DB</color>      <!-- 输入框描边，比装饰线更实 -->
     <color name="ios_blue_dark">#FF0A84FF</color>         <!-- 深色模式主色 -->
     <color name="ios_system_orange">#FFFF9500</color>     <!-- 系统橙 -->

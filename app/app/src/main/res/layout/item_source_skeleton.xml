@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 书源弹窗加载骨架行：与 item_source_select 同尺寸，避免数据到位时列表跳动 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="13dp"
+        android:paddingVertical="14dp">
+
+        <ProgressBar
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            style="?android:attr/progressBarStyleSmall"/>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="11dp"
+            android:orientation="vertical">
+
+            <View
+                android:layout_width="96dp"
+                android:layout_height="13dp"
+                android:background="@drawable/bg_skeleton_bar"/>
+
+            <View
+                android:layout_width="152dp"
+                android:layout_height="10dp"
+                android:layout_marginTop="7dp"
+                android:background="@drawable/bg_skeleton_bar"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:background="?attr/appSeparator"/>
+</LinearLayout>
