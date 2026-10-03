@@ -52,6 +52,7 @@ import com.example.myapplication.bean.Bookshelf;
 import com.example.myapplication.bean.ChapterDto;
 import com.example.myapplication.bean.MajorChapter;
 import com.example.myapplication.bean.ReadingProgress;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.utils.LoginHelper;
 import com.example.myapplication.utils.ExternalPrefs;
@@ -524,7 +525,7 @@ public class BookDetailActivity extends BaseActivity{
         }
         sb.append(statusText).append(" · ").append(wordCountText);
         tvStatus.setText(sb.toString());
-        tvStatus.setTextColor(getColor(R.color.ios_text_secondary));
+        tvStatus.setTextColor(ThemeAttrs.color(this, R.attr.appTextSecondary, 0));
     }
 
     /**
@@ -858,13 +859,13 @@ public class BookDetailActivity extends BaseActivity{
     private void updateShelfVisual(boolean inShelf) {
         if (inShelf) {
             ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_selected);
-            ivShelfIcon.setColorFilter(ContextCompat.getColor(this, R.color.ios_blue), PorterDuff.Mode.SRC_IN);
-            tvAddShelf.setTextColor(ContextCompat.getColor(this, R.color.ios_blue));
+            ivShelfIcon.setColorFilter(ThemeAttrs.color(this, R.attr.appAccent, 0), PorterDuff.Mode.SRC_IN);
+            tvAddShelf.setTextColor(ThemeAttrs.color(this, R.attr.appAccent, 0));
             shelfChip.setBackgroundResource(R.drawable.bg_shelf_chip_selected);
         } else {
             ivShelfIcon.setImageResource(R.drawable.icon_bookshelf_add);
             ivShelfIcon.clearColorFilter();
-            tvAddShelf.setTextColor(ContextCompat.getColor(this, R.color.ios_text_primary));
+            tvAddShelf.setTextColor(ThemeAttrs.color(this, R.attr.appTextPrimary, 0));
             shelfChip.setBackgroundResource(R.drawable.bg_shelf_chip);
         }
     }
@@ -1680,7 +1681,8 @@ public class BookDetailActivity extends BaseActivity{
         if (currentChapterBgDrawable == null) {
             float d = getResources().getDisplayMetrics().density;
             int barW = Math.max(1, Math.round(3 * d));
-            currentChapterBgDrawable = new CurrentChapterBg(0x14007AFF, 0xFF007AFF, barW);
+            int accent = ThemeAttrs.color(this, R.attr.appAccent, 0xFF007AFF);
+            currentChapterBgDrawable = new CurrentChapterBg(accent & 0x00FFFFFF | 0x14000000, accent, barW);
         }
         return currentChapterBgDrawable;
     }
@@ -1698,7 +1700,8 @@ public class BookDetailActivity extends BaseActivity{
         float padH = 5 * d;
         float radius = 3 * d;
         int tagStart = full.length() - tag.length();
-        ss.setSpan(new CurrentTagSpan(0x1F007AFF, 0xFF007AFF, smallSize, padH, radius),
+        int accent = ThemeAttrs.color(this, R.attr.appAccent, 0xFF007AFF);
+        ss.setSpan(new CurrentTagSpan(accent & 0x00FFFFFF | 0x1F000000, accent, smallSize, padH, radius),
                 tagStart, full.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         return ss;
     }
@@ -1740,7 +1743,7 @@ public class BookDetailActivity extends BaseActivity{
             Object row = sheetRows.get(position);
             if (row instanceof String) {
                 tv.setText((String) row);
-                tv.setTextColor(getColor(R.color.ios_text_secondary));
+                tv.setTextColor(ThemeAttrs.color(BookDetailActivity.this, R.attr.appTextSecondary, 0));
                 return;
             }
             int realIndex = ((int[]) row)[0];
@@ -1755,14 +1758,14 @@ public class BookDetailActivity extends BaseActivity{
             if (realIndex == sheetCurrentIndex) {
                 // 当前章：淡蓝底 + 左侧蓝色竖条 + 蓝字粗体 + 行尾小号"当前"标记
                 tv.setBackground(getCurrentChapterBg());
-                tv.setTextColor(getColor(R.color.ios_blue));
+                tv.setTextColor(ThemeAttrs.color(BookDetailActivity.this, R.attr.appAccent, 0));
                 tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                 tv.setText(buildCurrentChapterTitle(tv, title));
             } else {
                 // 非当前章：彻底重置（纯文本 setText 清除所有 span；背景/字色/字重恢复原样），
                 // 避免 RecyclerView 复用把"当前"标记或竖条串到别的行上
                 tv.setTypeface(android.graphics.Typeface.DEFAULT);
-                tv.setTextColor(getColor(R.color.ios_text_primary));
+                tv.setTextColor(ThemeAttrs.color(BookDetailActivity.this, R.attr.appTextPrimary, 0));
                 tv.setBackgroundColor(0x00000000);
                 tv.setText(title);
             }

@@ -66,17 +66,22 @@ public class MainActivity extends BaseActivity {
     private View splashOverlay;
     private long mSplashStartAt;
 
+    /**
+     * 用「主页专用变体」（窗口背景=开屏底 + 系统启动屏同色）：
+     * 图标点击 → 系统启动屏（开屏底+图标）→ 主页内开屏浮层（开屏图）→ 书架，
+     * 全程单窗口、零 Activity 转场，无系统 starting window 伪影。
+     * 具体样式由 BaseActivity 按配色风格解析，日间/夜间由 values-night 同名色值解析。
+     */
+    @Override
+    protected boolean usesMainTheme() {
+        return true;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         instance = this;
 
-        // 主题必须在 super.onCreate 之前设置。
-        // 运行时用「主页专用变体」（窗口背景=开屏底 + 系统启动屏同色）：
-        // 图标点击 → 系统启动屏（开屏底+图标）→ 主页内开屏浮层（开屏图）→ 书架，
-        // 全程单窗口、零 Activity 转场，无系统 starting window 伪影。
-        // 日间/夜间由 values-night 的同名样式与 splash_bg 色值解析，这里不做分支。
-        setTheme(R.style.Theme_MyApp_Main);
-
+        // 主题（含配色风格）由 BaseActivity 在 super.onCreate 之前统一落到窗口上
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 

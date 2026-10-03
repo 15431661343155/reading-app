@@ -143,6 +143,15 @@ public class LoginActivity extends BaseActivity {
     private int lastMaskHeight = -1;
     private float lastMaskRatio = Float.NaN;
 
+    /**
+     * 登录页是独立的毛玻璃紫一族（login_* token），不跟随全站配色风格，
+     * 否则宣纸档会把米色底灌进紫色玻璃卡片，两边都不对。
+     */
+    @Override
+    protected boolean followSkin() {
+        return false;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // 登录页是品牌插画：整幅浅色背景图 login_bg + 紫色玻璃卡片，无夜间版本。

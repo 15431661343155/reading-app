@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- iOS 搜索框/分段背景：分组灰底、10dp 圆角 -->
-    <solid android:color="@color/ios_bg_grouped"/>
+    <solid android:color="?attr/appPageBg"/>
     <corners android:radius="10dp"/>
     <padding android:top="4dp" android:bottom="4dp"/>
 </shape>

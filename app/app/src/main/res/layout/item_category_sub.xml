@@ -13,7 +13,7 @@
     android:ellipsize="end"
     android:paddingStart="4dp"
     android:paddingEnd="4dp"
-    android:textColor="@color/ios_text_primary"
+    android:textColor="?attr/appTextPrimary"
     android:textSize="14sp"
     android:clickable="true"
     android:focusable="true"

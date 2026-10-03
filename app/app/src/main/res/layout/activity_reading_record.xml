@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ios_bg_grouped">
+    android:background="?attr/appPageBg">
 
     <!-- 标题栏容器 -->
     <FrameLayout
@@ -19,7 +19,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="@color/ios_bg"
+            android:background="?attr/appSurface"
             android:elevation="2dp"
             android:paddingHorizontal="16dp"
             android:minHeight="60dp">
@@ -49,7 +49,7 @@
                 android:layout_height="40dp"
                 android:text="编辑"
                 android:textSize="14sp"
-                android:textColor="#007AFF"
+                android:textColor="?attr/appAccent"
                 android:gravity="center"
                 android:paddingHorizontal="8dp"
                 android:background="?attr/selectableItemBackground"
@@ -63,7 +63,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="@color/ios_bg"
+            android:background="?attr/appSurface"
             android:elevation="4dp"
             android:paddingHorizontal="16dp"
             android:minHeight="60dp"
@@ -121,7 +121,7 @@
                 android:layout_height="match_parent"
                 app:fastScrollAutoHide="true"
                 app:fastScrollAutoHideDelay="2000"
-                app:fastScrollThumbColor="#007AFF"
+                app:fastScrollThumbColor="?attr/appAccent"
                 app:fastScrollTrackColor="#00000000" />
 
             <TextView
@@ -144,7 +144,7 @@
         android:layout_height="56dp"
         android:orientation="horizontal"
         android:gravity="center"
-        android:background="@color/ios_bg"
+        android:background="?attr/appSurface"
         android:elevation="8dp"
         android:visibility="gone">
 

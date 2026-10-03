@@ -3,7 +3,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ios_bg">
+    android:background="?attr/appSurface">
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rv_popup_bookmarks"
@@ -17,7 +17,7 @@
         android:layout_height="match_parent"
         android:text="暂无书签"
         android:textSize="15sp"
-        android:textColor="@color/ios_text_tertiary"
+        android:textColor="?attr/appTextTertiary"
         android:gravity="center"
         android:visibility="visible" />
 

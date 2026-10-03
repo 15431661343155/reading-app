@@ -74,7 +74,7 @@
                 android:background="@drawable/bg_about_icon_tile"
                 android:padding="8dp"
                 android:src="@drawable/ic_delete"
-                app:tint="@color/ios_blue" />
+                app:tint="?attr/appAccent" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -87,7 +87,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/mine_clear_cache"
-                    android:textColor="@color/ios_text_primary"
+                    android:textColor="?attr/appTextPrimary"
                     android:textSize="17sp"
                     android:textStyle="bold" />
 
@@ -96,7 +96,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:text="@string/mine_cache_sheet_sub"
-                    android:textColor="@color/ios_text_secondary"
+                    android:textColor="?attr/appTextSecondary"
                     android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
@@ -120,7 +120,7 @@
                 android:fontFamily="sans-serif-medium"
                 android:includeFontPadding="false"
                 android:text="0"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:textSize="30sp" />
 
             <TextView
@@ -130,7 +130,7 @@
                 android:layout_marginStart="7dp"
                 android:includeFontPadding="false"
                 android:text="@string/mine_cache_unit_idle"
-                android:textColor="@color/ios_text_secondary"
+                android:textColor="?attr/appTextSecondary"
                 android:textSize="12.5sp" />
 
             <Space
@@ -147,7 +147,7 @@
                 android:paddingTop="4dp"
                 android:paddingEnd="9dp"
                 android:paddingBottom="4dp"
-                android:textColor="@color/ios_blue"
+                android:textColor="?attr/appAccent"
                 android:textSize="11.5sp" />
         </LinearLayout>
 
@@ -167,7 +167,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/mine_cache_items_label"
-                android:textColor="@color/ios_text_secondary"
+                android:textColor="?attr/appTextSecondary"
                 android:textSize="12sp" />
 
             <LinearLayout
@@ -194,7 +194,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
                     android:text="@string/mine_cache_select_all"
-                    android:textColor="@color/ios_blue"
+                    android:textColor="?attr/appAccent"
                     android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
@@ -226,7 +226,7 @@
                 android:layout_height="15dp"
                 android:layout_marginTop="1dp"
                 android:src="@drawable/ic_info_outline"
-                app:tint="@color/ios_text_secondary" />
+                app:tint="?attr/appTextSecondary" />
 
             <TextView
                 android:id="@+id/tv_cache_local_note"
@@ -235,7 +235,7 @@
                 android:layout_marginStart="9dp"
                 android:layout_weight="1"
                 android:lineSpacingExtra="4dp"
-                android:textColor="@color/ios_text_secondary"
+                android:textColor="?attr/appTextSecondary"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -252,7 +252,7 @@
                 android:background="@drawable/bg_capsule_gray"
                 android:gravity="center"
                 android:text="@string/mine_cancel"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:textSize="16sp" />
 
             <TextView
@@ -264,7 +264,7 @@
                 android:background="@drawable/bg_btn_primary"
                 android:gravity="center"
                 android:text="@string/mine_cache_clear_all"
-                android:textColor="@color/white"
+                android:textColor="?attr/appOnAccent"
                 android:textSize="16.5sp"
                 android:textStyle="bold" />
         </LinearLayout>

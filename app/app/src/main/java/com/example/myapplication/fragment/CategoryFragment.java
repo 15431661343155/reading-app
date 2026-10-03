@@ -22,6 +22,7 @@ import com.example.myapplication.activity.CategoryBooksActivity;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.CategoryTree;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.Hint;
 import com.example.myapplication.widget.LoadingView;
 
@@ -255,14 +256,14 @@ public class CategoryFragment extends Fragment {
     /** 选中：白底 + 蓝色指示条 + 蓝色粗体；未选中：透明 + 主文字色 */
     private void applyMainRowStyle(MainRow row, boolean selected) {
         if (selected) {
-            row.itemView.setBackgroundColor(resolve(R.color.ios_bg));
-            row.bar.setBackgroundColor(resolve(R.color.ios_blue));
-            row.name.setTextColor(resolve(R.color.ios_blue));
+            row.itemView.setBackgroundColor(resolve(R.attr.appSurface));
+            row.bar.setBackgroundColor(resolve(R.attr.appAccent));
+            row.name.setTextColor(resolve(R.attr.appAccent));
             row.name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         } else {
             row.itemView.setBackgroundColor(0x00000000);
             row.bar.setBackgroundColor(0x00000000);
-            row.name.setTextColor(resolve(R.color.ios_text_primary));
+            row.name.setTextColor(resolve(R.attr.appTextPrimary));
             row.name.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
         }
     }
@@ -331,8 +332,9 @@ public class CategoryFragment extends Fragment {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    private int resolve(int colorRes) {
-        return requireContext().getColor(colorRes);
+    /** 取当前配色风格下的主题色：颜色不再只有唯一 @color 名字，需按 ?attr 解析。 */
+    private int resolve(int attr) {
+        return ThemeAttrs.color(requireContext(), attr, 0);
     }
 
     /** 左侧主分类一行的视图引用 */
@@ -352,7 +354,7 @@ public class CategoryFragment extends Fragment {
         if (getActivity() == null) return;
         // 状态栏背景与页面顶部颜色统一，消除割裂
         getActivity().getWindow().setStatusBarColor(
-                getActivity().getResources().getColor(R.color.ios_bg_grouped, null));
+                ThemeAttrs.color(requireActivity(), R.attr.appPageBg, 0));
         // 图标明暗交由宿主按当前日夜配置复位（夜间深色底要用浅色图标）
         ((BaseActivity) getActivity()).applyStatusBarIcons();
     }

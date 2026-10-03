@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.R;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
@@ -234,13 +235,13 @@ public class LocalStorePageAdapter extends RecyclerView.Adapter<LocalStorePageAd
                 tv.setTextSize(13);
                 tv.setPadding(18, 8, 18, 8);
                 if (selected) {
-                    tv.setTextColor(itemView.getContext().getColor(R.color.seg_text_selected));
+                    tv.setTextColor(ThemeAttrs.color(itemView.getContext(), R.attr.appSegText, 0));
                     GradientDrawable bg = new GradientDrawable();
                     bg.setCornerRadius(999);
-                    bg.setColor(itemView.getContext().getColor(R.color.ios_separator));
+                    bg.setColor(ThemeAttrs.color(itemView.getContext(), R.attr.appSeparator, 0));
                     tv.setBackground(bg);
                 } else {
-                    tv.setTextColor(itemView.getContext().getColor(R.color.ios_text_secondary));
+                    tv.setTextColor(ThemeAttrs.color(itemView.getContext(), R.attr.appTextSecondary, 0));
                     tv.setBackground(null);
                 }
 

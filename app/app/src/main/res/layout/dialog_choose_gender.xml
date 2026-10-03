@@ -39,7 +39,7 @@
                 android:includeFontPadding="false"
                 android:letterSpacing="0.25"
                 android:text="选择性别"
-                android:textColor="@color/gf_ink"
+                android:textColor="?attr/appTextPrimary"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
@@ -72,7 +72,7 @@
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:text="隐"
-                    android:textColor="@color/gf_gold"
+                    android:textColor="?attr/appOrnament"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -84,7 +84,7 @@
                     android:layout_weight="1"
                     android:letterSpacing="0.08"
                     android:text="保密"
-                    android:textColor="@color/gf_ink"
+                    android:textColor="?attr/appTextPrimary"
                     android:textSize="16sp" />
 
                 <TextView
@@ -94,7 +94,7 @@
                     android:layout_marginEnd="10dp"
                     android:letterSpacing="0.08"
                     android:text="当前"
-                    android:textColor="@color/gf_teal"
+                    android:textColor="?attr/appAccent"
                     android:textSize="11sp"
                     android:visibility="gone" />
 
@@ -126,7 +126,7 @@
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:text="乾"
-                    android:textColor="@color/gf_gold"
+                    android:textColor="?attr/appOrnament"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -138,7 +138,7 @@
                     android:layout_weight="1"
                     android:letterSpacing="0.08"
                     android:text="男"
-                    android:textColor="@color/gf_ink"
+                    android:textColor="?attr/appTextPrimary"
                     android:textSize="16sp" />
 
                 <TextView
@@ -148,7 +148,7 @@
                     android:layout_marginEnd="10dp"
                     android:letterSpacing="0.08"
                     android:text="当前"
-                    android:textColor="@color/gf_teal"
+                    android:textColor="?attr/appAccent"
                     android:textSize="11sp"
                     android:visibility="gone" />
 
@@ -180,7 +180,7 @@
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:text="坤"
-                    android:textColor="@color/gf_gold"
+                    android:textColor="?attr/appOrnament"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -192,7 +192,7 @@
                     android:layout_weight="1"
                     android:letterSpacing="0.08"
                     android:text="女"
-                    android:textColor="@color/gf_ink"
+                    android:textColor="?attr/appTextPrimary"
                     android:textSize="16sp" />
 
                 <TextView
@@ -202,7 +202,7 @@
                     android:layout_marginEnd="10dp"
                     android:letterSpacing="0.08"
                     android:text="当前"
-                    android:textColor="@color/gf_teal"
+                    android:textColor="?attr/appAccent"
                     android:textSize="11sp"
                     android:visibility="gone" />
 
@@ -233,7 +233,7 @@
                     android:gravity="center"
                     android:letterSpacing="0.1"
                     android:text="取消"
-                    android:textColor="@color/gf_ink_2"
+                    android:textColor="?attr/appTextStrong"
                     android:textSize="15sp" />
 
                 <TextView
@@ -250,7 +250,7 @@
                     android:gravity="center"
                     android:letterSpacing="0.1"
                     android:text="确定"
-                    android:textColor="#FFFFFF"
+                    android:textColor="?attr/appOnAccent"
                     android:textSize="15sp"
                     android:textStyle="bold" />
             </LinearLayout>

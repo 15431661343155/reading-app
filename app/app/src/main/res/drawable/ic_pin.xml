@@ -5,7 +5,7 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24"
-    android:tint="@color/ios_text_secondary">
+    android:tint="?attr/appTextSecondary">
     <!-- 钉帽+钉身 -->
     <path
         android:fillColor="@android:color/white"

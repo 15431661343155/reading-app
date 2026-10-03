@@ -6,4 +6,10 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>
+
+    <!-- 宣纸档夜间同样要关掉浅色系统栏图标；配色不需要重复定义，xz_* 已按 uiMode 覆盖 -->
+    <style name="Theme.MyApp.Xuanzhi" parent="Theme.MyApp.Xuanzhi.Base">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
 </resources>

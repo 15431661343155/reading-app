@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 分段选择器轨道：浅紫灰胶囊 -->
+<!-- 分段选择器轨道：跟随配色风格 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/cp_divider" />
+    <solid android:color="?attr/appSegTrack" />
     <corners android:radius="14dp" />
 </shape>

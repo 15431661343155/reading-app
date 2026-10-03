@@ -20,6 +20,7 @@ import com.example.myapplication.activity.BookDetailActivity;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.ReadingProgress;
 import com.example.myapplication.bean.ReadingRecord;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.ExternalPrefs;
 import com.example.myapplication.utils.ExternalSyncManager;
 import com.example.myapplication.utils.Hint;
@@ -55,11 +56,11 @@ public class ReadingRecordActivity extends BaseActivity {
         // 不再手动加状态栏padding：setDecorFits(true) 已让系统自动避让
         View headerLayout = findViewById(R.id.layout_header);
         if (headerLayout != null) {
-            headerLayout.setBackgroundColor(getResources().getColor(R.color.ios_bg_grouped, null));
+            headerLayout.setBackgroundColor(ThemeAttrs.color(this, R.attr.appPageBg, 0));
         }
 
         // 状态栏颜色与页面顶部统一
-        getWindow().setStatusBarColor(getResources().getColor(R.color.ios_bg_grouped, null));
+        getWindow().setStatusBarColor(ThemeAttrs.color(this, R.attr.appPageBg, 0));
         applyStatusBarIcons();
 
         recyclerView = findViewById(R.id.recycler_view);

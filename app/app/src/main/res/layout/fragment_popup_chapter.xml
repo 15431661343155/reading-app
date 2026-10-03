@@ -5,7 +5,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ios_bg">
+    android:background="?attr/appSurface">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,7 +18,7 @@
             android:layout_height="36dp"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="@color/ios_bg_grouped">
+            android:background="?attr/appPageBg">
 
             <TextView
                 android:id="@+id/tv_chapter_count"
@@ -28,7 +28,7 @@
                 android:text="共 0 章"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:textColor="@color/ios_text_secondary"
+                android:textColor="?attr/appTextSecondary"
                 android:gravity="center_vertical"
                 android:paddingStart="16dp"
                 android:paddingEnd="8dp" />
@@ -44,7 +44,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="0.5dp"
-            android:background="@color/ios_separator" />
+            android:background="?attr/appSeparator" />
 
         <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
             android:id="@+id/rv_fastscroll"
@@ -52,7 +52,7 @@
             android:layout_height="match_parent"
             app:fastScrollAutoHide="true"
             app:fastScrollAutoHideDelay="2000"
-            app:fastScrollThumbColor="@color/ios_blue"
+            app:fastScrollThumbColor="?attr/appAccent"
             app:fastScrollTrackColor="@android:color/transparent" />
     </LinearLayout>
 

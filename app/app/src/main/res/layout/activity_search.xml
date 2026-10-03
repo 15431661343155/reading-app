@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ios_bg_grouped">
+    android:background="?attr/appPageBg">
 
     <!-- 顶部导航栏 + 搜索框 -->
     <LinearLayout
@@ -13,7 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@color/ios_bg_grouped">
+        android:background="?attr/appPageBg">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -28,7 +28,7 @@
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:src="@drawable/ic_back_black"
-                app:tint="@color/ios_blue"
+                app:tint="?attr/appAccent"
                 android:contentDescription="@null"
                 android:padding="4dp"/>
 
@@ -46,7 +46,7 @@
                     android:layout_width="18dp"
                     android:layout_height="18dp"
                     android:src="@drawable/ic_search"
-                    app:tint="@color/ios_text_tertiary"
+                    app:tint="?attr/appTextTertiary"
                     android:contentDescription="@null"/>
 
                 <androidx.appcompat.widget.AppCompatEditText
@@ -56,11 +56,11 @@
                     android:layout_weight="1"
                     android:layout_marginStart="8dp"
                     android:hint="搜索书籍、作者、分类"
-                    android:textColorHint="@color/ios_text_tertiary"
+                    android:textColorHint="?attr/appTextTertiary"
                     android:background="@null"
                     android:gravity="center_vertical"
                     android:imeOptions="actionSearch"
-                    android:textColor="@color/ios_text_primary"
+                    android:textColor="?attr/appTextPrimary"
                     android:textSize="15sp"/>
 
                 <ImageView
@@ -68,7 +68,7 @@
                     android:layout_width="18dp"
                     android:layout_height="18dp"
                     android:src="@drawable/ic_close_grey"
-                    app:tint="@color/ios_text_tertiary"
+                    app:tint="?attr/appTextTertiary"
                     android:contentDescription="@null"
                     android:visibility="gone"/>
             </LinearLayout>
@@ -84,7 +84,7 @@
                 android:text="搜索"
                 android:textSize="17sp"
                 android:textStyle="bold"
-                android:textColor="@color/ios_blue"/>
+                android:textColor="?attr/appAccent"/>
         </LinearLayout>
     </LinearLayout>
 
@@ -92,7 +92,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="0.5dp"
-        android:background="@color/ios_separator"/>
+        android:background="?attr/appSeparator"/>
 
     <!-- 内容区域（ViewFlipper：历史/结果） -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -129,7 +129,7 @@
                             android:layout_width="18dp"
                             android:layout_height="18dp"
                             android:src="@drawable/ic_history"
-                            app:tint="@color/ios_text_secondary"
+                            app:tint="?attr/appTextSecondary"
                             android:contentDescription="@null"/>
 
                         <TextView
@@ -140,14 +140,14 @@
                             android:text="搜索历史"
                             android:textSize="17sp"
                             android:textStyle="bold"
-                            android:textColor="@color/ios_text_primary"/>
+                            android:textColor="?attr/appTextPrimary"/>
 
                         <ImageView
                             android:id="@+id/iv_clear_history"
                             android:layout_width="20dp"
                             android:layout_height="20dp"
                             android:src="@drawable/ic_more_vert_black"
-                            app:tint="@color/ios_text_secondary"
+                            app:tint="?attr/appTextSecondary"
                             android:contentDescription="@null"
                             android:alpha="0.6"/>
                     </LinearLayout>
@@ -191,7 +191,7 @@
                             android:text="热门搜索"
                             android:textSize="17sp"
                             android:textStyle="bold"
-                            android:textColor="@color/ios_text_primary"/>
+                            android:textColor="?attr/appTextPrimary"/>
                     </LinearLayout>
 
                     <!-- 热门关键词容器（动态添加，横向滚动） -->
@@ -223,13 +223,13 @@
                     android:id="@+id/tab_result_filter"
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
-                    android:background="@color/ios_bg_grouped"
+                    android:background="?attr/appPageBg"
                     app:tabMode="fixed"
                     app:tabGravity="fill"
-                    app:tabIndicatorColor="@color/ios_blue"
+                    app:tabIndicatorColor="?attr/appAccent"
                     app:tabIndicatorHeight="2dp"
-                    app:tabTextColor="@color/ios_text_secondary"
-                    app:tabSelectedTextColor="@color/ios_blue"/>
+                    app:tabTextColor="?attr/appTextSecondary"
+                    app:tabSelectedTextColor="?attr/appAccent"/>
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rv_search_result"

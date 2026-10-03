@@ -49,6 +49,7 @@ import com.example.myapplication.R;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.ProfileUpdateRequest;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.AvatarCache;
 import com.example.myapplication.utils.ExternalSyncManager;
 import com.example.myapplication.utils.Hint;
@@ -100,7 +101,7 @@ public class ProfileActivity extends BaseActivity {
         btnSave.setText(R.string.done);
         btnSave.setTextSize(17);
         btnSave.setTypeface(null, android.graphics.Typeface.BOLD);
-        btnSave.setTextColor(getColor(R.color.ios_blue));
+        btnSave.setTextColor(ThemeAttrs.color(this, R.attr.appAccent, 0));
         btnSave.setPadding(16, 0, 16, 0);
         Toolbar.LayoutParams lp = new Toolbar.LayoutParams(
                 Toolbar.LayoutParams.WRAP_CONTENT, Toolbar.LayoutParams.WRAP_CONTENT, Gravity.END);
@@ -176,7 +177,7 @@ public class ProfileActivity extends BaseActivity {
     private void updateEmailDisplay() {
         String email = sp.getString("email", "");
         tvEmail.setText(email.isEmpty() ? getString(R.string.unbound_tip) : maskEmail(email));
-        tvEmail.setTextColor(getColor(email.isEmpty() ? R.color.ios_text_secondary : R.color.ios_text_primary));
+        tvEmail.setTextColor(ThemeAttrs.color(this, email.isEmpty() ? R.attr.appTextSecondary : R.attr.appTextPrimary, 0));
     }
 
     private void updatePwdHint() {
@@ -379,8 +380,9 @@ public class ProfileActivity extends BaseActivity {
         refresh[0] = () -> {
             String value = input.getText() == null ? "" : input.getText().toString();
             counter.setText(value.length() + " / " + maxLen);
-            counter.setTextColor(ContextCompat.getColor(this,
-                    value.length() >= maxLen ? R.color.gf_seal : R.color.gf_muted));
+            counter.setTextColor(value.length() >= maxLen
+                    ? ThemeAttrs.color(this, R.attr.appAccent, 0)
+                    : ThemeAttrs.color(this, R.attr.appTextSecondary, 0));
             boolean valid = !value.trim().isEmpty();
             btnOk.setEnabled(valid);
             btnOk.setAlpha(valid ? 1f : 0.45f);
@@ -557,8 +559,9 @@ public class ProfileActivity extends BaseActivity {
                         on ? R.drawable.bg_gf_option_selected : R.drawable.bg_gf_option);
                 TextView stamp = root.findViewById(stampIds[i]);
                 stamp.setBackgroundResource(on ? R.drawable.bg_gf_stamp_selected : R.drawable.bg_gf_stamp);
-                stamp.setTextColor(ContextCompat.getColor(this,
-                        on ? R.color.gf_teal : R.color.gf_gold));
+                stamp.setTextColor(on
+                        ? ThemeAttrs.color(this, R.attr.appAccent, 0)
+                        : ThemeAttrs.color(this, R.attr.appOrnament, 0));
                 // 「当前」角标跟随弹窗内的选择，不只靠颜色区分状态
                 root.findViewById(flagIds[i]).setVisibility(on ? View.VISIBLE : View.GONE);
                 ((ImageView) root.findViewById(radioIds[i])).setImageResource(

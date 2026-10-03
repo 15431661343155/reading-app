@@ -9,7 +9,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ios_bg">
+    android:background="?attr/appSurface">
 
     <!-- 背景图：按屏幕等比裁切铺满 -->
     <ImageView

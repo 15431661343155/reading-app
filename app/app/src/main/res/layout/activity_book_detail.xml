@@ -11,11 +11,11 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:layout_alignParentTop="true"
-        android:background="@color/ios_bg_grouped"
+        android:background="?attr/appPageBg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="书籍详情"
         app:titleCentered="true"
-        app:titleTextColor="@color/ios_text_primary" />
+        app:titleTextColor="?attr/appTextPrimary" />
 
     <!-- 内容区域 -->
     <ScrollView
@@ -34,7 +34,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:background="@color/ios_bg_grouped"
+                android:background="?attr/appPageBg"
                 android:padding="20dp">
 
                 <!-- 封面和信息 -->
@@ -68,7 +68,7 @@
                             android:text="书名"
                             android:textSize="18sp"
                             android:textStyle="bold"
-                            android:textColor="@color/ios_text_primary" />
+                            android:textColor="?attr/appTextPrimary" />
 
                         <TextView
                             android:id="@+id/tv_detail_author"
@@ -76,7 +76,7 @@
                             android:layout_height="wrap_content"
                             android:text="作者"
                             android:textSize="12sp"
-                            android:textColor="@color/ios_text_primary"
+                            android:textColor="?attr/appTextPrimary"
                             android:alpha="0.8"
                             android:layout_marginTop="12dp" />
 
@@ -86,7 +86,7 @@
                             android:layout_height="wrap_content"
                             android:text="状态"
                             android:textSize="12sp"
-                            android:textColor="@color/ios_text_secondary"
+                            android:textColor="?attr/appTextSecondary"
                             android:layout_marginTop="36dp" />
 
                     </LinearLayout>
@@ -132,7 +132,7 @@
                     android:layout_gravity="end"
                     android:text="展开"
                     android:textSize="13sp"
-                    android:textColor="@color/ios_blue"
+                    android:textColor="?attr/appAccent"
                     android:paddingTop="6dp"
                     android:clickable="true"
                     android:focusable="true"
@@ -155,7 +155,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/ios_separator"
+                android:background="?attr/appSeparator"
                 android:layout_marginStart="20dp"
                 android:layout_marginEnd="20dp" />
 
@@ -188,7 +188,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:textSize="12sp"
-                    android:textColor="@color/ios_text_secondary"
+                    android:textColor="?attr/appTextSecondary"
                     android:singleLine="true"
                     android:ellipsize="end" />
 
@@ -203,7 +203,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/ios_separator"
+                android:background="?attr/appSeparator"
                 android:layout_marginStart="20dp"
                 android:layout_marginEnd="20dp" />
 
@@ -274,7 +274,7 @@
         <View
             android:layout_width="1dp"
             android:layout_height="30dp"
-            android:background="@color/ios_separator" />
+            android:background="?attr/appSeparator" />
 
         <!-- 开始阅读按钮（右侧，椭圆形） -->
         <Button

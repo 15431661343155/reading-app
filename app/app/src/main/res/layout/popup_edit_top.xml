@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@color/ios_bg"
+    android:background="?attr/appSurface"
     android:elevation="8dp"
     android:padding="10dp"
     android:paddingBottom="5dp">
@@ -16,7 +16,7 @@
         android:layout_height="wrap_content"
         android:text="完成"
         android:textSize="14sp"
-        android:textColor="@color/ios_text_primary"
+        android:textColor="?attr/appTextPrimary"
         android:gravity="center"
         android:paddingHorizontal="8dp" />
 
@@ -28,7 +28,7 @@
         android:layout_weight="1"
         android:text="已选择 0 本"
         android:textSize="11sp"
-        android:textColor="@color/ios_text_secondary"
+        android:textColor="?attr/appTextSecondary"
         android:gravity="center"
         android:letterSpacing="0.05" />
 
@@ -39,6 +39,6 @@
         android:text="全选"
         android:padding="6dp"
         android:textSize="14sp"
-        android:textColor="@color/ios_text_primary"
+        android:textColor="?attr/appTextPrimary"
         android:gravity="center" />
 </LinearLayout>

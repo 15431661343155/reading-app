@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--登录提示弹窗·主按钮「这就登录」：青绿实底-->
+<!--登录提示弹窗·主按钮「这就登录」：朱砂渐变实底 + 白字（与注销弹窗危险按钮同色，动作色全族统一）-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <corners android:radius="10dp" />
-    <solid android:color="#56A496" />
+    <gradient
+        android:angle="270"
+        android:startColor="?attr/appAccentTop"
+        android:endColor="?attr/appAccentBottom" />
 </shape>

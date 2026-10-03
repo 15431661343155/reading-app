@@ -26,6 +26,11 @@
 
     <!-- ===== iOS 浅色磨砂玻璃设计 Token ===== -->
     <color name="ios_blue">#FF007AFF</color>              <!-- 主色/选中态 -->
+    <color name="ios_accent_stroke">#57007AFF</color>     <!-- 主色 34% 描边（薄底胶囊/选中框） -->
+    <!-- 弹窗家族素白档：对应宣纸档的描金 / 朱砂印章 / 输入框描边 -->
+    <color name="ios_ornament_faint">#FFEAEAEF</color>    <!-- 云纹 / 水波纹：白卡上只留极淡灰线 -->
+    <color name="ios_danger_btn">#FFCC4436</color>        <!-- 危险按钮底（白字约 4.6:1） -->
+    <color name="ios_field_stroke">#FFD6D6DB</color>      <!-- 输入框描边，比装饰线更实 -->
     <color name="ios_blue_dark">#FF0A84FF</color>         <!-- 深色模式主色 -->
     <color name="ios_system_orange">#FFFF9500</color>     <!-- 系统橙 -->
     <color name="ios_bg">#FFFFFFFF</color>               <!-- 主背景 -->
@@ -73,14 +78,8 @@
     <!-- 国风开屏配色（仅保留在用项：系统启动屏/主页窗口背景底色） -->
     <color name="splash_bg">#F6EEDF</color>           <!-- 插画宣纸底色（取自新开屏图）；夜间见 values-night -->
 
-    <!-- ===== 修改密码 / 邮箱绑定页（登录同族淡紫配色）· 夜间值见 values-night/colors.xml ===== -->
-    <color name="cp_page_bg">#FFF3F1F8</color>            <!-- 页面底 -->
-    <color name="cp_surface">#FFFBFAFE</color>            <!-- 标题栏/卡片面 -->
-    <color name="cp_divider">#FFE4E0EE</color>            <!-- 进度条槽/细分隔 -->
-    <color name="cp_field_bg">#FFFFFFFF</color>           <!-- 输入框卡片底 -->
-    <color name="cp_field_stroke">#FFECE9F3</color>       <!-- 输入框卡片描边 -->
-    <color name="cp_chip_bg">#FFEFEAFD</color>            <!-- 验证码胶囊底 -->
-    <color name="cp_chip_stroke">#FFC9BCF7</color>        <!-- 验证码胶囊描边 -->
+    <!-- 修改密码 / 邮箱绑定页曾有一套写死的淡紫家族（cp_*），只跟日夜不跟配色风格；
+         现已整体改走 ?attr/appXxx，色值见上面素白档与 Theme.MyApp.Xuanzhi.Base。 -->
 
     <!-- ===== 登录页 · 毛玻璃紫主题 ===== -->
     <color name="login_accent">#FF6C5CE7</color>            <!-- 主色：紫（按钮/链接/选中） -->
@@ -103,14 +102,66 @@
     <color name="login_field_stroke">#26000000</color>      <!-- 输入框描边：15% 黑，极淡灰边 -->
     <color name="login_cb_stroke">#FF9A9AA5</color>         <!-- 协议勾选框未选描边 -->
 
-    <!-- ===== 国风弹窗（与登录提示弹窗同族）· 个人资料页弹窗专用 ===== -->
-    <color name="gf_teal">#FF3B8272</color>            <!-- 主色：黛青（白字对比度 4.5:1，比登录弹窗的 #56A496 更深） -->
-    <color name="gf_teal_tint">#FFEDF6F3</color>       <!-- 选中项浅青底 -->
-    <color name="gf_gold">#FFC9A96E</color>            <!-- 描金（与 ic_login_prompt_divider 一致） -->
+    <!-- ===== 弹窗危险操作文字（删除书签等） ===== -->
+    <color name="ios_destructive">#FFCC4436</color>
+
+    <!-- ===== 墨纸弹窗家族 token（登录提示 / 更新 / 昵称 / 性别 / 注销）=====
+         日间值全部等于这 5 个弹窗原先散落在 layout/drawable 里的硬编码色，仅收拢成一份；
+         values-night/colors.xml 用同名 token 给出「墨玉鎏金」夜间取值。 -->
+    <color name="gf_card_top">#FFFFFCF4</color>        <!-- 卡片纸面渐变·上 -->
+    <color name="gf_card_bottom">#FFF8F2E4</color>     <!-- 卡片纸面渐变·下 -->
+    <color name="gf_ink">#FF33261A</color>             <!-- 标题墨色 -->
+    <color name="gf_ink_2">#FF5A4A32</color>           <!-- 次按钮文字 -->
+    <color name="gf_body">#FF8C8177</color>            <!-- 正文说明 -->
+    <color name="gf_muted">#FF8A7F6A</color>           <!-- 弱化文字 / 计数 -->
+    <color name="gf_hint">#FFB9AE97</color>            <!-- 输入框占位 -->
+    <color name="gf_gold">#FFC9A96E</color>            <!-- 描金：分割线、印章框 -->
+    <color name="gf_gold_soft">#FFD9BE8C</color>       <!-- 次按钮描边 -->
+    <color name="gf_cloud">#FFE8D9B6</color>           <!-- 卡片角云纹 -->
+    <color name="gf_wave">#FFEDDFC2</color>            <!-- 卡片底水波 -->
+    <!-- 动作色：朱砂。黛青已从这个家族退出，主按钮 / 选中态 / 单选圈 / 进度条同用一色 -->
+    <color name="gf_action_top">#FFC25B49</color>       <!-- 按钮朱砂渐变·上 -->
+    <color name="gf_action_bottom">#FFAE4636</color>    <!-- 按钮朱砂渐变·下（文字落点约 4.9:1 对白） -->
+    <color name="gf_btn_text">#FFFFFFFF</color>         <!-- 按钮文字：彩色底坚持白字，日夜同值 -->
+    <color name="gf_action_edge">#FFB03A2E</color>      <!-- 选中描边 / 单选圈实心 -->
+    <color name="gf_action_tint">#FFFBEDE8</color>      <!-- 选中项浅砂底 -->
+    <color name="gf_progress">#FFB85040</color>         <!-- 下载进度条填充 -->
+    <color name="gf_ghost_bg">#FFFAF5E8</color>        <!-- 次按钮米底 -->
+    <color name="gf_inset">#FFF5EDDA</color>           <!-- 更新内容便签内衬 -->
+    <color name="gf_inset_text">#FF7A6F63</color>      <!-- 便签正文 -->
+    <color name="gf_pill">#FFF3EAD5</color>            <!-- 版本号/包大小胶囊 -->
     <color name="gf_paper_in">#FFFFFDF8</color>        <!-- 输入框/选项底 -->
     <color name="gf_field_line">#FFD8C9A8</color>      <!-- 输入框描边 -->
-    <color name="gf_muted">#FF8A7F6A</color>           <!-- 说明/计数文字 -->
-    <color name="gf_seal">#FFB03A2E</color>            <!-- 印章红（字数顶格） -->
-    <color name="gf_ink">#FF33261A</color>             <!-- 标题墨色（与登录弹窗标题一致） -->
-    <color name="gf_ink_2">#FF5A4A32</color>           <!-- 次按钮文字（与登录弹窗次按钮一致） -->
+    <color name="gf_radio_off">#FFC4B896</color>       <!-- 单选圈未选描边 -->
+    <color name="gf_clear">#FFE4D9C2</color>           <!-- 清空按钮小圆底 -->
+    <color name="gf_track">#FFEDE3CC</color>           <!-- 下载进度条槽 -->
+    <color name="gf_stamp_bg">#FFB93A2B</color>        <!-- 「新」印章底 -->
+    <color name="gf_stamp_text">#FFFFF7EA</color>      <!-- 「新」印章字 -->
+    <color name="gf_seal">#FFB03A2E</color>            <!-- 朱砂作文字：字数顶格提示、「当前」标签、选中印签 -->
+
+    <!-- ===== 「宣纸」配色风格 · 全 App 皮肤 token =====
+         由弹窗家族（gf_*）那套宣纸底 / 墨字 / 描金 / 朱砂扩到整站。
+         凡是与弹窗取值完全相同的项直接别名到 gf_*，让「同一套色」这层关系写死在资源里；
+         弹窗没有对应语义的（页面底、色带、底栏磨砂）才给独立值。夜间值见 values-night/colors.xml。 -->
+    <color name="xz_page_bg">#FFF6EFE0</color>         <!-- 页面底：宣纸，比卡片深一档好浮起 -->
+    <color name="xz_surface">@color/gf_card_top</color><!-- 抬起面 #FFFCF4 -->
+    <color name="xz_card">@color/gf_card_top</color>   <!-- 卡片面 #FFFCF4 -->
+    <color name="xz_card_soft">#FFFBF5E7</color>       <!-- 卡内芯片底：比卡片略深一点的米 -->
+    <color name="xz_text_primary">@color/gf_ink</color>
+    <color name="xz_text_secondary">@color/gf_body</color>
+    <color name="xz_text_tertiary">@color/gf_hint</color>
+    <color name="xz_separator">#FFEADFC4</color>       <!-- 分隔线：描金压淡 -->
+    <color name="xz_accent">@color/gf_action_edge</color><!-- 主色 / 选中态：朱砂 #B03A2E -->
+    <color name="xz_accent_tint">#1FC25B49</color>      <!-- 朱砂 12% 薄底（图标磁贴 / 选中胶囊） -->
+    <color name="xz_accent_tint_strong">#33C25B49</color><!-- 同上按压态 20% -->
+    <color name="xz_accent_stroke">#57C25B49</color>     <!-- 朱砂 34% 描边，与薄底同色系 -->
+    <color name="xz_on_accent">@color/gf_btn_text</color><!-- 彩色底坚持白字 -->
+    <color name="xz_nav_bg">#F0FBF6EC</color>          <!-- 底栏磨砂兜底：94% 米白 -->
+    <color name="xz_seg_track">#FFEFE5CE</color>       <!-- 分段控件轨道 -->
+    <color name="xz_seg_thumb">#FFFFFCF4</color>       <!-- 分段控件滑块 -->
+    <color name="xz_seg_text">#FFA63E2E</color>        <!-- 选中段文字：比底色更深的朱砂 -->
+    <color name="xz_band_top">#FF4A3626</color>        <!-- 顶部色带（我的 / 书城英雄区）· 檀褐三档 -->
+    <color name="xz_band_center">#FF5F4229</color>
+    <color name="xz_band_bottom">#FF7A5236</color>
+    <color name="xz_splash_bg">#FFF6EEDF</color>       <!-- 开屏底：与宣纸插画同色 -->
 </resources>

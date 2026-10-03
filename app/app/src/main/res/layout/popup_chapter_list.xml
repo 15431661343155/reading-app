@@ -5,7 +5,7 @@
     android:layout_width="280dp"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ios_bg">
+    android:background="?attr/appSurface">
 
     <!-- 书籍信息头：封面 / 书名 / 作者（目录与书签两个页签共用，位于列表上方） -->
     <LinearLayout
@@ -18,7 +18,7 @@
         android:paddingEnd="16dp"
         android:paddingTop="14dp"
         android:paddingBottom="14dp"
-        android:background="@color/ios_bg_grouped">
+        android:background="?attr/appPageBg">
 
         <ImageView
             android:id="@+id/iv_popup_book_cover"
@@ -44,7 +44,7 @@
                 android:text="书名"
                 android:textSize="16sp"
                 android:textStyle="bold"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
@@ -55,7 +55,7 @@
                 android:layout_marginTop="6dp"
                 android:text="作者"
                 android:textSize="13sp"
-                android:textColor="@color/ios_text_secondary"
+                android:textColor="?attr/appTextSecondary"
                 android:maxLines="1"
                 android:ellipsize="end" />
         </LinearLayout>
@@ -64,7 +64,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="0.5dp"
-        android:background="@color/ios_separator" />
+        android:background="?attr/appSeparator" />
 
     <!-- ViewPager2 - 内容区域 -->
     <androidx.viewpager2.widget.ViewPager2
@@ -78,11 +78,11 @@
         android:id="@+id/tab_layout_popup"
         android:layout_width="match_parent"
         android:layout_height="40dp"
-        android:background="@color/ios_bg_grouped"
-        app:tabIndicatorColor="@color/ios_blue"
+        android:background="?attr/appPageBg"
+        app:tabIndicatorColor="?attr/appAccent"
         app:tabIndicatorHeight="2dp"
-        app:tabSelectedTextColor="@color/ios_blue"
-        app:tabTextColor="@color/ios_text_secondary"
+        app:tabSelectedTextColor="?attr/appAccent"
+        app:tabTextColor="?attr/appTextSecondary"
         app:tabMode="fixed"
         app:tabGravity="fill" />
 

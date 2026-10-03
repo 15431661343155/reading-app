@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:clipChildren="false"
-    android:background="@color/ios_bg">
+    android:background="?attr/appSurface">
 
     <!-- 阅读内容区域（嵌套 FrameLayout 防止导航栏显隐导致 WebView 高度变化） -->
     <!-- ✅ 不再放置占位 WebView：改由 ReadActivity 把复用池里的 WebView 动态插入，避免每次开书都 inflate 一个 WebView -->
@@ -70,7 +70,7 @@
                 android:layout_marginTop="16dp"
                 android:text="加载出错，请稍后再试"
                 android:textSize="14sp"
-                android:textColor="@color/ios_text_secondary" />
+                android:textColor="?attr/appTextSecondary" />
 
             <TextView
                 android:id="@+id/btn_load_fail_retry"
@@ -94,7 +94,7 @@
         android:layout_height="56dp"
         android:layout_gravity="top"
         android:orientation="horizontal"
-        android:background="@color/ios_tab_bar"
+        android:background="?attr/appNavBg"
         android:elevation="10dp"
         android:visibility="gone">
 
@@ -103,7 +103,7 @@
             android:layout_width="48dp"
             android:layout_height="match_parent"
             android:src="@drawable/ic_back_black"
-            app:tint="@color/ios_blue"
+            app:tint="?attr/appAccent"
             android:padding="12dp"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
@@ -118,7 +118,7 @@
             android:text="书名"
             android:textSize="17sp"
             android:textStyle="bold"
-            android:textColor="@color/ios_text_primary"
+            android:textColor="?attr/appTextPrimary"
             android:gravity="center" />
 
         <ImageView
@@ -126,7 +126,7 @@
             android:layout_width="48dp"
             android:layout_height="match_parent"
             android:src="@drawable/ic_more_vert_black"
-            app:tint="@color/ios_text_primary"
+            app:tint="?attr/appTextPrimary"
             android:padding="12dp"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
@@ -143,7 +143,7 @@
         android:layout_gravity="bottom"
         android:orientation="vertical"
         android:clipChildren="false"
-        android:background="@color/ios_tab_bar"
+        android:background="?attr/appNavBg"
         android:elevation="10dp"
         android:visibility="gone">
 
@@ -151,7 +151,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="0.5dp"
-            android:background="@color/ios_separator"/>
+            android:background="?attr/appSeparator"/>
 
         <!-- 第一行：上一章、进度条、下一章（滑轨与两侧按钮文字同线居中；
              clipToPadding/clipChildren=false 允许浮窗向上溢出本行绘制） -->
@@ -207,7 +207,7 @@
                     android:layout_gravity="bottom|center_horizontal"
                     android:layout_marginBottom="1dp"
                     android:textSize="11sp"
-                    android:textColor="@color/ios_text_secondary" />
+                    android:textColor="?attr/appTextSecondary" />
             </FrameLayout>
 
             <!-- 下一章 -->
@@ -258,7 +258,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:src="@drawable/ic_list_black"
-                    app:tint="@color/ios_text_primary"
+                    app:tint="?attr/appTextPrimary"
                     android:contentDescription="目录" />
 
                 <TextView
@@ -267,7 +267,7 @@
                     android:layout_height="wrap_content"
                     android:text="目录"
                     android:textSize="12sp"
-                    android:textColor="@color/ios_text_secondary"
+                    android:textColor="?attr/appTextSecondary"
                     android:layout_marginTop="2dp" />
             </LinearLayout>
 
@@ -287,7 +287,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:src="@drawable/ic_night"
-                    app:tint="@color/ios_text_primary"
+                    app:tint="?attr/appTextPrimary"
                     android:contentDescription="夜间模式" />
 
                 <TextView
@@ -296,7 +296,7 @@
                     android:layout_height="wrap_content"
                     android:text="夜间"
                     android:textSize="12sp"
-                    android:textColor="@color/ios_text_secondary"
+                    android:textColor="?attr/appTextSecondary"
                     android:layout_marginTop="2dp" />
             </LinearLayout>
 
@@ -316,7 +316,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:src="@drawable/ic_settings_black"
-                    app:tint="@color/ios_text_primary"
+                    app:tint="?attr/appTextPrimary"
                     android:contentDescription="设置" />
 
                 <TextView
@@ -325,7 +325,7 @@
                     android:layout_height="wrap_content"
                     android:text="设置"
                     android:textSize="12sp"
-                    android:textColor="@color/ios_text_secondary"
+                    android:textColor="?attr/appTextSecondary"
                     android:layout_marginTop="2dp" />
             </LinearLayout>
 

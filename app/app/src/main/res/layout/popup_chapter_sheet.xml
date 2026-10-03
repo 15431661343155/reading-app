@@ -51,7 +51,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="0.5dp"
-        android:background="@color/ios_separator" />
+        android:background="?attr/appSeparator" />
 
     <!-- 信息行（连载信息 / 共 X 章），无内容时隐藏 -->
     <TextView
@@ -59,7 +59,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="12sp"
-        android:textColor="@color/ios_text_tertiary"
+        android:textColor="?attr/appTextTertiary"
         android:paddingHorizontal="20dp"
         android:paddingTop="10dp"
         android:paddingBottom="2dp"

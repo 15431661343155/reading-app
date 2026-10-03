@@ -15,6 +15,7 @@ import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.BookSource;
 import com.example.myapplication.bean.ImportResult;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.ThemeManager;
 import com.example.myapplication.utils.Hint;
 import com.example.myapplication.widget.LoadingView;
@@ -102,7 +103,7 @@ public class BookSourceActivity extends BaseActivity {
         emptyTv.setText("暂无书源\n点击「网络导入」添加书源");
         emptyTv.setGravity(android.view.Gravity.CENTER);
         emptyTv.setPadding(0, 100, 0, 0);
-        emptyTv.setTextColor(getColor(R.color.ios_text_secondary));
+        emptyTv.setTextColor(ThemeAttrs.color(this, R.attr.appTextSecondary, 0));
         sourceListLayout.addView(emptyTv);
     }
 

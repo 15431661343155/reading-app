@@ -2,7 +2,7 @@
 <!-- 「加载中」后面那三个点：5dp 圆点（实际显示/隐藏由 LoadingView 控制 alpha） -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
-    <solid android:color="@color/ios_text_secondary" />
+    <solid android:color="?attr/appTextSecondary" />
     <size
         android:width="5dp"
         android:height="5dp" />

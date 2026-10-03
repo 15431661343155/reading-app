@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@color/ios_bg"
+    android:background="?attr/appSurface"
     android:elevation="12dp">
 
     <!-- 按钮行：三等分，中间 0.5dp 分隔线 -->
@@ -35,7 +35,7 @@
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:src="@drawable/ic_pin"
-                android:tint="@color/ios_text_primary"
+                android:tint="?attr/appTextPrimary"
                 android:contentDescription="置顶" />
 
             <TextView
@@ -43,7 +43,7 @@
                 android:layout_height="wrap_content"
                 android:text="置顶"
                 android:textSize="11sp"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:layout_marginTop="3dp" />
         </LinearLayout>
 
@@ -52,7 +52,7 @@
             android:layout_height="match_parent"
             android:layout_marginTop="4dp"
             android:layout_marginBottom="4dp"
-            android:background="@color/ios_separator" />
+            android:background="?attr/appSeparator" />
 
         <!-- 移动至分组 -->
         <LinearLayout
@@ -70,7 +70,7 @@
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:src="@drawable/ic_category"
-                android:tint="@color/ios_text_primary"
+                android:tint="?attr/appTextPrimary"
                 android:contentDescription="移动至" />
 
             <TextView
@@ -78,7 +78,7 @@
                 android:layout_height="wrap_content"
                 android:text="移动至"
                 android:textSize="11sp"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:layout_marginTop="3dp" />
         </LinearLayout>
 
@@ -87,7 +87,7 @@
             android:layout_height="match_parent"
             android:layout_marginTop="4dp"
             android:layout_marginBottom="4dp"
-            android:background="@color/ios_separator" />
+            android:background="?attr/appSeparator" />
 
         <!-- 删除 -->
         <LinearLayout
@@ -112,7 +112,7 @@
                 android:layout_height="wrap_content"
                 android:text="删除"
                 android:textSize="11sp"
-                android:textColor="#FF4444"
+                android:textColor="@color/ios_destructive"
                 android:layout_marginTop="3dp" />
         </LinearLayout>
     </LinearLayout>
@@ -122,5 +122,5 @@
         android:id="@+id/v_edit_bottom_filler"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="@color/ios_bg" />
+        android:background="?attr/appSurface" />
 </LinearLayout>

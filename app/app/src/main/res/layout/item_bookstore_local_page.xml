@@ -9,7 +9,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ios_bg_grouped">
+    android:background="?attr/appPageBg">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -21,7 +21,7 @@
             android:id="@+id/hsv_sub"
             android:layout_width="match_parent"
             android:layout_height="40dp"
-            android:background="@color/ios_bg_grouped"
+            android:background="?attr/appPageBg"
             android:scrollbars="none">
 
             <LinearLayout
@@ -39,7 +39,7 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:background="@color/ios_bg_grouped">
+            android:background="?attr/appPageBg">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rv_page"

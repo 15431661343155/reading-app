@@ -3,7 +3,7 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@color/ios_bg"
+    android:background="?attr/appSurface"
     android:elevation="8dp"
     android:padding="8dp">
 
@@ -30,11 +30,11 @@
             android:layout_height="wrap_content"
             android:text="宫格布局"
             android:textSize="15sp"
-            android:textColor="@color/ios_text_primary"
+            android:textColor="?attr/appTextPrimary"
             android:layout_marginStart="10dp" />
     </LinearLayout>
 
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/ios_separator" />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/appSeparator" />
 
     <!-- 导入书籍 -->
     <LinearLayout
@@ -57,11 +57,11 @@
             android:layout_height="wrap_content"
             android:text="导入书籍"
             android:textSize="15sp"
-            android:textColor="@color/ios_text_primary"
+            android:textColor="?attr/appTextPrimary"
             android:layout_marginStart="10dp" />
     </LinearLayout>
 
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/ios_separator" />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/appSeparator" />
 
     <!-- 分组管理 -->
     <LinearLayout
@@ -84,7 +84,7 @@
             android:layout_height="wrap_content"
             android:text="分组管理"
             android:textSize="15sp"
-            android:textColor="@color/ios_text_primary"
+            android:textColor="?attr/appTextPrimary"
             android:layout_marginStart="10dp" />
     </LinearLayout>
 

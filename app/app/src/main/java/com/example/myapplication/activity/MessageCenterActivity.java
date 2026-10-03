@@ -16,6 +16,7 @@ import com.example.myapplication.api.SafeCallback;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.UnreadCountResponse;
 import com.example.myapplication.fragment.MessageListFragment;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.ThemeManager;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
@@ -58,11 +59,11 @@ public class MessageCenterActivity extends BaseActivity {
         // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
         // 文字/指示条统一取语义色 token，日间夜间都随 values-night 自动解析
-        toolbar.setTitleTextColor(getColor(R.color.ios_text_primary));
-        tvMarkAllRead.setTextColor(getColor(R.color.ios_text_primary));
+        toolbar.setTitleTextColor(ThemeAttrs.color(this, R.attr.appTextPrimary, 0));
+        tvMarkAllRead.setTextColor(ThemeAttrs.color(this, R.attr.appTextPrimary, 0));
         tabLayout.setTabTextColors(
-                getColor(R.color.ios_text_secondary), getColor(R.color.ios_text_primary));
-        tabLayout.setSelectedTabIndicatorColor(getColor(R.color.ios_blue));
+                ThemeAttrs.color(this, R.attr.appTextSecondary, 0), ThemeAttrs.color(this, R.attr.appTextPrimary, 0));
+        tabLayout.setSelectedTabIndicatorColor(ThemeAttrs.color(this, R.attr.appAccent, 0));
 
         toolbar.setNavigationOnClickListener(v -> finish());
 
@@ -86,8 +87,8 @@ public class MessageCenterActivity extends BaseActivity {
                     tvTitle.setText(title);
 
                     tvTitle.setTextColor(position == viewPager.getCurrentItem()
-                            ? getColor(R.color.ios_text_primary)
-                            : getColor(R.color.ios_text_secondary));
+                            ? ThemeAttrs.color(this, R.attr.appTextPrimary, 0)
+                            : ThemeAttrs.color(this, R.attr.appTextSecondary, 0));
 
                     tab.setCustomView(customView);
                 }
@@ -119,8 +120,8 @@ public class MessageCenterActivity extends BaseActivity {
     private void updateTabTextColor(TabLayout.Tab tab, boolean selected) {
         if (tab.getCustomView() == null) return;
         TextView tvTitle = tab.getCustomView().findViewById(R.id.tv_tab_title);
-        tvTitle.setTextColor(selected ? getColor(R.color.ios_text_primary)
-                : getColor(R.color.ios_text_secondary));
+        tvTitle.setTextColor(selected ? ThemeAttrs.color(this, R.attr.appTextPrimary, 0)
+                : ThemeAttrs.color(this, R.attr.appTextSecondary, 0));
     }
 
     /**

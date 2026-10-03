@@ -6,23 +6,59 @@ import android.content.res.Configuration;
 
 import androidx.appcompat.app.AppCompatDelegate;
 
+import com.example.myapplication.R;
+
 /**
- * 外观（夜间模式）管理。
- * 三档取值直接复用 AppCompatDelegate 的常量，不再另建一层主题 ID 映射；
+ * 外观管理，两个正交维度：
+ * <ul>
+ *   <li><b>外观模式</b>（跟随系统 / 日间 / 夜间）—— 直接复用 AppCompatDelegate 常量，
+ *       由 values-night 资源限定符解析配色；</li>
+ *   <li><b>配色风格</b>（素白 / 宣纸）—— 由 {@link #themeResId} 选出对应主题，
+ *       主题里只换 {@code ?attr/appXxx} 的取值，布局不感知风格。</li>
+ * </ul>
  * 存储沿用原主题偏好的 SP 文件（历史 current_theme 键已随海滨主题一起废弃）。
  */
 public class ThemeManager {
     private static final String SP_NAME = "app_theme";
     private static final String KEY_NIGHT_MODE = "night_mode";
+    private static final String KEY_SKIN = "skin";
+
+    /** 素白：现状 iOS 磨砂玻璃档 */
+    public static final int SKIN_CLASSIC = 0;
+    /** 宣纸：弹窗家族的墨纸描金 + 朱砂动作色，扩到全 App */
+    public static final int SKIN_XUANZHI = 1;
+
+    private static SharedPreferences prefs(Context context) {
+        return context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
+    }
 
     public static int getNightMode(Context context) {
-        return context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
-                .getInt(KEY_NIGHT_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+        return prefs(context).getInt(KEY_NIGHT_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
     }
 
     public static void saveNightMode(Context context, int mode) {
-        context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
-                .edit().putInt(KEY_NIGHT_MODE, mode).apply();
+        prefs(context).edit().putInt(KEY_NIGHT_MODE, mode).apply();
+    }
+
+    public static int getSkin(Context context) {
+        return prefs(context).getInt(KEY_SKIN, SKIN_CLASSIC);
+    }
+
+    public static void saveSkin(Context context, int skin) {
+        prefs(context).edit().putInt(KEY_SKIN, skin).apply();
+    }
+
+    /**
+     * 按当前配色风格解析主题资源。
+     *
+     * @param main 主页专用（窗口底与开屏图同色，避免冷启动闪灰）
+     */
+    public static int themeResId(Context context, boolean main) {
+        boolean xuanzhi = getSkin(context) == SKIN_XUANZHI;
+        if (main) {
+            return xuanzhi ? R.style.Theme_MyApp_Main_Xuanzhi : R.style.Theme_MyApp_Main;
+        }
+        return xuanzhi ? R.style.Theme_MyApp_Xuanzhi : R.style.Theme_MyApp;
     }
 
     /** 进程启动时调用一次，之后新建/恢复的 Activity 都会按偏好解析日夜资源 */

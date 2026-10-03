@@ -2,6 +2,6 @@
 <!-- 关于书阁：列表行左侧 30dp 图标底（主题色 12% 淡底 + 9dp 圆角） -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#1F007AFF" />
+    <solid android:color="?attr/appAccentTint" />
     <corners android:radius="9dp" />
 </shape>

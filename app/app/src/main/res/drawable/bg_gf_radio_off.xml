@@ -7,5 +7,5 @@
         android:height="19dp" />
     <stroke
         android:width="1.5dp"
-        android:color="#C4B896" />
+        android:color="?attr/appOrnament" />
 </shape>

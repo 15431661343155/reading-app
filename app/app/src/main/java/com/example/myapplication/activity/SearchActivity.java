@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.myapplication.R;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.ThemeManager;
 import com.example.myapplication.adapter.BookAdapter;
 import com.example.myapplication.utils.ActivityTransition;
@@ -94,11 +95,13 @@ public class SearchActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // 本页不继承 BaseActivity，配色风格要自己落到主题上（必须在 super.onCreate 之前，主题一参与布局解析就改不了）
+        setTheme(ThemeManager.themeResId(this, false));
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_search);
 
         // 状态栏与搜索页顶部同色；图标明暗跟随日夜配置（本页不继承 BaseActivity，故就地处理）
-        getWindow().setStatusBarColor(getResources().getColor(R.color.ios_bg, null));
+        getWindow().setStatusBarColor(ThemeAttrs.color(this, R.attr.appSurface, 0));
         int barFlags = getWindow().getDecorView().getSystemUiVisibility();
         if (ThemeManager.isNight(this)) {
             barFlags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
@@ -238,7 +241,7 @@ public class SearchActivity extends AppCompatActivity {
             TextView tv = new TextView(this);
             tv.setText("暂无搜索历史");
             tv.setTextSize(13);
-            tv.setTextColor(getColor(R.color.ios_text_tertiary));
+            tv.setTextColor(ThemeAttrs.color(this, R.attr.appTextTertiary, 0));
             layoutHistoryTags.addView(tv);
             return;
         }
@@ -263,11 +266,11 @@ public class SearchActivity extends AppCompatActivity {
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(999); // iOS 胶囊全圆
         if (isHistory) {
-            bg.setColor(getColor(R.color.ios_bg_grouped_2)); // 二级底
-            tv.setTextColor(getColor(R.color.ios_text_primary));
+            bg.setColor(ThemeAttrs.color(this, R.attr.appCardSoft, 0)); // 二级底
+            tv.setTextColor(ThemeAttrs.color(this, R.attr.appTextPrimary, 0));
         } else {
-            bg.setColor(getColor(R.color.ios_separator));
-            tv.setTextColor(getColor(R.color.ios_blue));
+            bg.setColor(ThemeAttrs.color(this, R.attr.appSeparator, 0));
+            tv.setTextColor(ThemeAttrs.color(this, R.attr.appAccent, 0));
         }
         tv.setBackground(bg);
 

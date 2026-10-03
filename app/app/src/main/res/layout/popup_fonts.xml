@@ -35,7 +35,7 @@
             android:layout_weight="1"
             android:text="选择字体"
             android:textSize="18sp"
-            android:textColor="@color/ios_text_primary"
+            android:textColor="?attr/appTextPrimary"
             android:textStyle="bold"
             android:gravity="center"/>
 

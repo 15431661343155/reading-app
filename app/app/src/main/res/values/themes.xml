@@ -15,11 +15,11 @@
         <!-- Toolbar 与页面同底，图标/文字颜色走 ios_text_* token（夜间自动反相） -->
         <item name="actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar</item>
         <item name="android:actionBarTheme">@style/ThemeOverlay.MyApp.ActionBar</item>
-        <!-- 状态栏：Toolbar 白色背景 → 状态栏也白色统一 -->
-        <item name="android:statusBarColor">@color/ios_bg</item>
+        <!-- 状态栏 / 导航栏跟随皮肤：素白档解析出的仍是 ios_bg / ios_bg_grouped，与接入前一致 -->
+        <item name="android:statusBarColor">?attr/appSurface</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowBackground">@color/ios_bg_grouped</item>
-        <item name="android:navigationBarColor">@color/ios_bg_grouped</item>
+        <item name="android:windowBackground">?attr/appPageBg</item>
+        <item name="android:navigationBarColor">?attr/appPageBg</item>
         <item name="android:windowLightNavigationBar">true</item>
         <!-- 圆角：iOS continuous corner，10/12/16dp -->
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.iOS.Small</item>
@@ -36,10 +36,104 @@
         <item name="navRipple">@color/ios_separator</item>
         <item name="navTextSelectedColor">@color/ios_blue</item>
         <item name="navTextUnselectedColor">@color/ios_text_tertiary</item>
+        <!-- ===== 配色风格皮肤属性 · 素白档 =====
+             全部指回现有 @color/ios_*，所以这一档与接入前逐像素一致；
+             宣纸档由 Theme.MyApp.Xuanzhi.Base 逐项覆盖成 @color/xz_*。 -->
+        <item name="appPageBg">@color/ios_bg_grouped</item>
+        <item name="appSurface">@color/ios_bg</item>
+        <item name="appCard">@color/ios_card_bg</item>
+        <item name="appCardSoft">@color/chip_bg</item>
+        <item name="appTextPrimary">@color/ios_text_primary</item>
+        <item name="appTextSecondary">@color/ios_text_secondary</item>
+        <item name="appTextTertiary">@color/ios_text_tertiary</item>
+        <item name="appSeparator">@color/ios_separator</item>
+        <item name="appAccent">@color/ios_blue</item>
+        <item name="appOnAccent">@color/white</item>
+        <item name="appNavBg">@color/ios_tab_bar</item>
+        <item name="appSegTrack">@color/seg_track_bg</item>
+        <item name="appSegThumb">@color/seg_thumb_bg</item>
+        <item name="appSegText">@color/seg_text_selected</item>
+        <item name="appBandTop">#FF2E8FFF</item>
+        <item name="appBandCenter">@color/ios_blue</item>
+        <item name="appBandBottom">#FF0062D6</item>
+        <item name="appAccentTint">#1F007AFF</item>
+        <item name="appAccentTintStrong">#33007AFF</item>
+        <item name="appAccentStroke">@color/ios_accent_stroke</item>
+        <item name="appNavPillTop">#FF5BB0FF</item>
+        <item name="appNavPillCenter">#FF007AFF</item>
+        <item name="appNavPillBottom">#FF0062D6</item>
+        <!-- 弹窗家族素白档：纯白卡平涂、iOS 蓝主按钮、装饰线转中性灰 -->
+        <item name="appCardBottom">@color/ios_card_bg</item>
+        <item name="appTextStrong">@color/ios_text_primary</item>
+        <item name="appOrnament">@color/ios_separator_opaque</item>
+        <item name="appOrnamentFaint">@color/ios_ornament_faint</item>
+        <item name="appAccentTop">@color/ios_blue</item>
+        <item name="appAccentBottom">@color/ios_blue</item>
+        <item name="appDangerTop">@color/ios_danger_btn</item>
+        <item name="appDangerBottom">@color/ios_danger_btn</item>
+        <item name="appGhostBg">@color/chip_bg</item>
+        <item name="appFieldBg">@color/chip_bg</item>
+        <item name="appFieldStroke">@color/ios_field_stroke</item>
+        <item name="appInsetBg">@color/chip_bg</item>
     </style>
 
     <!-- 对外主题名：日间直接等于 Base，夜间由 values-night/themes.xml 的同名样式覆盖系统栏图标明暗 -->
     <style name="Theme.MyApp" parent="Theme.MyApp.Base" />
+
+    <!-- ===== 宣纸配色风格 =====
+         只覆盖上面那组 appXxx，其余（圆角、按钮、卡片样式、系统栏）全部继承，
+         所以新增一个页面不需要再声明第二遍。
+         与素白同构：Base 放取值，对外名字留一层空壳给 values-night 覆盖系统栏图标明暗。 -->
+    <style name="Theme.MyApp.Xuanzhi.Base" parent="Theme.MyApp.Base">
+        <item name="appPageBg">@color/xz_page_bg</item>
+        <item name="appSurface">@color/xz_surface</item>
+        <item name="appCard">@color/xz_card</item>
+        <item name="appCardSoft">@color/xz_card_soft</item>
+        <item name="appTextPrimary">@color/xz_text_primary</item>
+        <item name="appTextSecondary">@color/xz_text_secondary</item>
+        <item name="appTextTertiary">@color/xz_text_tertiary</item>
+        <item name="appSeparator">@color/xz_separator</item>
+        <item name="appAccent">@color/xz_accent</item>
+        <item name="appOnAccent">@color/xz_on_accent</item>
+        <item name="appNavBg">@color/xz_nav_bg</item>
+        <item name="appSegTrack">@color/xz_seg_track</item>
+        <item name="appSegThumb">@color/xz_seg_thumb</item>
+        <item name="appSegText">@color/xz_seg_text</item>
+        <item name="appBandTop">@color/xz_band_top</item>
+        <item name="appBandCenter">@color/xz_band_center</item>
+        <item name="appBandBottom">@color/xz_band_bottom</item>
+        <item name="appAccentTint">@color/xz_accent_tint</item>
+        <item name="appAccentTintStrong">@color/xz_accent_tint_strong</item>
+        <item name="appAccentStroke">@color/xz_accent_stroke</item>
+        <!-- 选中胶囊沿用弹窗朱砂渐变（日夜各自一档），白字不动 -->
+        <item name="appNavPillTop">@color/gf_action_top</item>
+        <item name="appNavPillCenter">@color/xz_accent</item>
+        <item name="appNavPillBottom">@color/gf_action_bottom</item>
+        <!-- 弹窗家族：逐格等于原 @color/gf_*，所以接入前后宣纸档像素一致
+             （仅水波并入云纹、gf_gold_soft / gf_radio_off 并入描金、gf_pill 并入内衬底这几处近似合并） -->
+        <item name="appCardBottom">@color/gf_card_bottom</item>
+        <item name="appTextStrong">@color/gf_ink_2</item>
+        <item name="appOrnament">@color/gf_gold</item>
+        <item name="appOrnamentFaint">@color/gf_cloud</item>
+        <item name="appAccentTop">@color/gf_action_top</item>
+        <item name="appAccentBottom">@color/gf_action_bottom</item>
+        <item name="appDangerTop">@color/gf_action_top</item>
+        <item name="appDangerBottom">@color/gf_action_bottom</item>
+        <item name="appGhostBg">@color/gf_ghost_bg</item>
+        <item name="appFieldBg">@color/gf_paper_in</item>
+        <item name="appFieldStroke">@color/gf_field_line</item>
+        <item name="appInsetBg">@color/gf_inset</item>
+        <!-- Material 主色跟随风格，避免原生控件漏出 iOS 蓝 -->
+        <item name="colorPrimary">@color/xz_accent</item>
+        <item name="colorPrimaryVariant">@color/xz_accent</item>
+        <item name="colorSecondary">@color/xz_accent</item>
+        <item name="colorSecondaryVariant">@color/xz_accent</item>
+        <item name="navSelectedColor">@color/xz_accent</item>
+        <item name="navTextSelectedColor">@color/xz_accent</item>
+    </style>
+
+    <!-- 对外主题名：日间等于 Xuanzhi.Base，夜间由 values-night/themes.xml 同名样式覆盖系统栏图标明暗 -->
+    <style name="Theme.MyApp.Xuanzhi" parent="Theme.MyApp.Xuanzhi.Base" />
 
     <!-- 主页专用主题 = 启动入口主题（MainActivity 是 LAUNCHER）：
          系统启动屏/窗口背景与开屏图同底，主页首帧内的开屏浮层展示开屏图，
@@ -50,15 +144,21 @@
         <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
     </style>
 
-    <!-- ===== Toolbar 覆盖层：图标/文字随 ios_text_* token 日夜反相 ===== -->
+    <!-- 宣纸档主页：窗口底换成宣纸开屏同色，避免冷启动闪出素白灰 -->
+    <style name="Theme.MyApp.Main.Xuanzhi" parent="Theme.MyApp.Xuanzhi">
+        <item name="android:windowBackground">@color/xz_splash_bg</item>
+        <item name="android:windowSplashScreenBackground">@color/xz_splash_bg</item>
+    </style>
+
+    <!-- ===== Toolbar 覆盖层：图标/文字跟随配色风格与日夜 ===== -->
     <style name="ThemeOverlay.MyApp.ActionBar" parent="ThemeOverlay.AppCompat.ActionBar">
-        <item name="android:windowBackground">@color/ios_bg</item>
-        <item name="android:textColorPrimary">@color/ios_text_primary</item>
-        <item name="android:textColorSecondary">@color/ios_text_secondary</item>
+        <item name="android:windowBackground">?attr/appSurface</item>
+        <item name="android:textColorPrimary">?attr/appTextPrimary</item>
+        <item name="android:textColorSecondary">?attr/appTextSecondary</item>
         <item name="actionBarWidgetTheme">@style/ThemeOverlay.MyApp.ActionBar.Widget</item>
     </style>
     <style name="ThemeOverlay.MyApp.ActionBar.Widget" parent="ThemeOverlay.AppCompat.Light">
-        <item name="colorControlNormal">@color/ios_text_primary</item>
+        <item name="colorControlNormal">?attr/appTextPrimary</item>
     </style>
 
     <!-- ===== iOS 圆角样式（continuous corner） ===== -->
@@ -78,8 +178,8 @@
     <!-- ===== iOS 按钮样式 ===== -->
     <style name="Widget.MyApp.Button.iOS" parent="Widget.MaterialComponents.Button">
         <item name="cornerRadius">10dp</item>
-        <item name="backgroundTint">@color/ios_blue</item>
-        <item name="android:textColor">@color/white</item>
+        <item name="backgroundTint">?attr/appAccent</item>
+        <item name="android:textColor">?attr/appOnAccent</item>
         <item name="elevation">0dp</item>
         <item name="android:textSize">17sp</item>
         <item name="android:textStyle">bold</item>
@@ -88,7 +188,7 @@
 
     <!-- ===== iOS 卡片样式 ===== -->
     <style name="Widget.MyApp.CardView.iOS" parent="Widget.MaterialComponents.CardView">
-        <item name="cardBackgroundColor">@color/ios_card_bg</item>
+        <item name="cardBackgroundColor">?attr/appCard</item>
         <item name="cardCornerRadius">12dp</item>
         <item name="cardElevation">1dp</item>
         <item name="strokeWidth">0dp</item>

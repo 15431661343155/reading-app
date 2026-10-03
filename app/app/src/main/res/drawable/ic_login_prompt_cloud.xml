@@ -7,13 +7,13 @@
     android:viewportHeight="16">
     <path
         android:pathData="M4,12 q3.5,-6 7,0 q3.5,-6 7,0 q3.5,-6 7,0"
-        android:strokeColor="#E8D9B6"
+        android:strokeColor="?attr/appOrnamentFaint"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
         android:strokeWidth="1.4" />
     <path
         android:pathData="M4,12 L25,12"
-        android:strokeColor="#E8D9B6"
+        android:strokeColor="?attr/appOrnamentFaint"
         android:strokeLineCap="round"
         android:strokeWidth="1.4" />
 </vector>

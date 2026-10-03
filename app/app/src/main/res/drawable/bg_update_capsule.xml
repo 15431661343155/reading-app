@@ -2,6 +2,6 @@
 <!--更新弹窗·版本号/包大小胶囊底-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#F3EAD5" />
+    <solid android:color="?attr/appInsetBg" />
     <corners android:radius="99dp" />
 </shape>

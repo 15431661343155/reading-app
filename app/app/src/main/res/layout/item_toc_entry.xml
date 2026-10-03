@@ -24,7 +24,7 @@
             android:layout_height="wrap_content"
             android:text="▸"
             android:textSize="12sp"
-            android:textColor="@color/ios_text_secondary"
+            android:textColor="?attr/appTextSecondary"
             android:gravity="center" />
 
         <TextView
@@ -37,7 +37,7 @@
             android:paddingBottom="13dp"
             android:text="第一章"
             android:textSize="16sp"
-            android:textColor="@color/ios_text_primary"
+            android:textColor="?attr/appTextPrimary"
             android:lineSpacingExtra="2dp" />
     </LinearLayout>
 
@@ -45,6 +45,6 @@
         android:layout_width="match_parent"
         android:layout_height="0.5dp"
         android:layout_marginStart="16dp"
-        android:background="@color/ios_separator" />
+        android:background="?attr/appSeparator" />
 
 </LinearLayout>

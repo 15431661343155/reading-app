@@ -12,11 +12,11 @@
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:background="@color/ios_bg_grouped"
+        android:background="?attr/appPageBg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="@string/feedback_title"
         app:titleCentered="true"
-        app:titleTextColor="@color/ios_text_primary" />
+        app:titleTextColor="?attr/appTextPrimary" />
 
     <ScrollView
         android:layout_width="match_parent"

@@ -6,17 +6,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ios_bg_grouped">
+    android:background="?attr/appPageBg">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:background="@color/ios_bg_grouped"
+        android:background="?attr/appPageBg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="@string/theme_setting"
         app:titleCentered="true"
-        app:titleTextColor="@color/ios_text_primary" />
+        app:titleTextColor="?attr/appTextPrimary" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -31,7 +31,7 @@
             android:layout_marginHorizontal="20dp"
             android:layout_marginBottom="10dp"
             android:text="@string/appearance_footer"
-            android:textColor="@color/ios_text_secondary"
+            android:textColor="?attr/appTextSecondary"
             android:textSize="13sp" />
 
         <LinearLayout
@@ -52,7 +52,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/appearance_follow_system"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:textSize="16sp" />
 
             <ImageView
@@ -66,7 +66,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/ios_separator" />
+            android:background="?attr/appSeparator" />
 
         <LinearLayout
             android:id="@+id/row_light"
@@ -86,7 +86,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/appearance_light"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:textSize="16sp" />
 
             <ImageView
@@ -100,7 +100,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/ios_separator" />
+            android:background="?attr/appSeparator" />
 
         <LinearLayout
             android:id="@+id/row_dark"
@@ -120,7 +120,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/appearance_dark"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:textSize="16sp" />
 
             <ImageView
@@ -130,6 +130,157 @@
                 android:src="@drawable/ic_appearance_check"
                 android:contentDescription="@null" />
         </LinearLayout>
+
+        <!-- ===== 配色风格：与上面的外观模式正交，只换色板不换日夜 ===== -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="26dp"
+            android:layout_marginBottom="6dp"
+            android:text="@string/skin_section"
+            android:textColor="?attr/appTextSecondary"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/row_skin_classic"
+            android:layout_width="match_parent"
+            android:layout_height="62dp"
+            style="@style/AppearanceRow">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="14dp"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:background="@drawable/bg_skin_swatch"
+                    android:backgroundTint="@color/ios_bg" />
+
+                <View
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="3dp"
+                    android:background="@drawable/bg_skin_swatch"
+                    android:backgroundTint="@color/ios_bg_grouped" />
+
+                <View
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="3dp"
+                    android:background="@drawable/bg_skin_swatch"
+                    android:backgroundTint="@color/ios_blue" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/skin_classic"
+                    android:textColor="?attr/appTextPrimary"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/skin_classic_desc"
+                    android:textColor="?attr/appTextSecondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/check_skin_classic"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_appearance_check"
+                android:contentDescription="@null" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?attr/appSeparator" />
+
+        <LinearLayout
+            android:id="@+id/row_skin_xuanzhi"
+            android:layout_width="match_parent"
+            android:layout_height="62dp"
+            style="@style/AppearanceRow">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="14dp"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:background="@drawable/bg_skin_swatch"
+                    android:backgroundTint="@color/xz_card" />
+
+                <View
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="3dp"
+                    android:background="@drawable/bg_skin_swatch"
+                    android:backgroundTint="@color/xz_page_bg" />
+
+                <View
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="3dp"
+                    android:background="@drawable/bg_skin_swatch"
+                    android:backgroundTint="@color/xz_accent" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/skin_xuanzhi"
+                    android:textColor="?attr/appTextPrimary"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/skin_xuanzhi_desc"
+                    android:textColor="?attr/appTextSecondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/check_skin_xuanzhi"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_appearance_check"
+                android:contentDescription="@null" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="10dp"
+            android:text="@string/skin_footer"
+            android:textColor="?attr/appTextSecondary"
+            android:textSize="13sp" />
 
     </LinearLayout>
 </LinearLayout>

@@ -1,5 +1,6 @@
 package com.example.myapplication.adapter;
 
+import android.content.Context;
 import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -13,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.myapplication.R;
 import com.example.myapplication.activity.ReadActivity;
 import com.example.myapplication.utils.LocalBookParser;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.TocOrder;
 
 import java.util.ArrayList;
@@ -234,7 +236,8 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
             holder.tvTitle.setTextSize(16f);
             // 卷内包含当前阅读章节时，卷标题也用强调色，收起状态下也能一眼定位
             boolean holdsCurrent = containsChapter(vol, currentChapterIndex);
-            holder.tvTitle.setTextColor(holdsCurrent ? accentColor() : textPrimaryColor());
+            Context itemCtx = holder.itemView.getContext();
+            holder.tvTitle.setTextColor(holdsCurrent ? accentColor(itemCtx) : textPrimaryColor(itemCtx));
             holder.rowContent.setPaddingRelative(dp(PAD_VOLUME_DP, density), 0,
                     dp(PAD_VOLUME_DP, density), 0);
             holder.itemView.setOnClickListener(v -> toggleVolume(row.volumePos));
@@ -245,7 +248,8 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
             holder.tvTitle.setText(chapter.getTitle());
             holder.tvTitle.setTextSize(15f);
             boolean isCurrent = chapter.getIndex() == currentChapterIndex;
-            holder.tvTitle.setTextColor(isCurrent ? accentColor() : textPrimaryColor());
+            Context itemCtx = holder.itemView.getContext();
+            holder.tvTitle.setTextColor(isCurrent ? accentColor(itemCtx) : textPrimaryColor(itemCtx));
             // 只有分卷书才把章行缩进一层（表示从属关系）；无分卷的平铺列表保持常规边距
             int chapterPad = volumes.isEmpty() ? PAD_VOLUME_DP : PAD_CHAPTER_DP;
             holder.rowContent.setPaddingRelative(dp(chapterPad, density), 0,
@@ -262,14 +266,16 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
         }
     }
 
-    /** 当前章节强调色：阅读器目录跟随背景派生色，其它页面用详情页自身配色 */
-    private int accentColor() {
-        return followReaderTheme ? ReadActivity.getAccentColor() : Color.parseColor("#007AFF");
+    /** 当前章节强调色：阅读器目录跟随背景派生色，其它页面走宿主主题的 appAccent */
+    private int accentColor(Context context) {
+        return followReaderTheme ? ReadActivity.getAccentColor()
+                : ThemeAttrs.color(context, R.attr.appAccent, 0xFF007AFF);
     }
 
-    /** 普通章节文字色：阅读器目录跟随背景派生色，其它页面用详情页自身配色 */
-    private int textPrimaryColor() {
-        return followReaderTheme ? ReadActivity.getTextPrimaryColor() : Color.parseColor("#1D1D1F");
+    /** 普通章节文字色：阅读器目录跟随背景派生色，其它页面走宿主主题的 appTextPrimary */
+    private int textPrimaryColor(Context context) {
+        return followReaderTheme ? ReadActivity.getTextPrimaryColor()
+                : ThemeAttrs.color(context, R.attr.appTextPrimary, 0xFF1D1D1F);
     }
 
     private static int dp(int value, float density) {

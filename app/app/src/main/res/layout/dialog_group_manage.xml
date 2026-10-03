@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@color/ios_bg"
+    android:background="?attr/appSurface"
     android:padding="16dp">
 
     <TextView
@@ -13,7 +13,7 @@
         android:text="分组管理"
         android:textSize="18sp"
         android:textStyle="bold"
-        android:textColor="@color/ios_text_primary"
+        android:textColor="?attr/appTextPrimary"
         android:gravity="center"
         android:layout_marginBottom="12dp" />
 
@@ -23,7 +23,7 @@
         android:layout_height="wrap_content"
         android:text="默认分组"
         android:textSize="13sp"
-        android:textColor="@color/ios_text_secondary"
+        android:textColor="?attr/appTextSecondary"
         android:layout_marginBottom="4dp" />
 
     <TextView
@@ -32,13 +32,13 @@
         android:layout_height="wrap_content"
         android:text="全部 / 本地 / 未分组 / 外站"
         android:textSize="14sp"
-        android:textColor="@color/ios_text_secondary"
+        android:textColor="?attr/appTextSecondary"
         android:layout_marginBottom="12dp" />
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/ios_separator"
+        android:background="?attr/appSeparator"
         android:layout_marginBottom="12dp" />
 
     <!-- 自定义分组列表 -->
@@ -47,7 +47,7 @@
         android:layout_height="wrap_content"
         android:text="自定义分组"
         android:textSize="13sp"
-        android:textColor="@color/ios_text_secondary"
+        android:textColor="?attr/appTextSecondary"
         android:layout_marginBottom="4dp" />
 
     <ListView
@@ -56,7 +56,7 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:minHeight="80dp"
-        android:divider="@color/ios_separator"
+        android:divider="?attr/appSeparator"
         android:dividerHeight="1dp" />
 
     <!-- 添加分组 -->
@@ -85,7 +85,7 @@
             android:layout_height="wrap_content"
             android:text="添加"
             android:textColor="#FFFFFF"
-            android:backgroundTint="@color/ios_blue"
+            android:backgroundTint="?attr/appAccent"
             android:minHeight="0dp"
             android:minWidth="0dp"
             android:paddingHorizontal="16dp"
@@ -98,7 +98,7 @@
         android:layout_height="wrap_content"
         android:text="完成"
         android:textColor="#FFFFFF"
-        android:backgroundTint="@color/ios_blue"
+        android:backgroundTint="?attr/appAccent"
         android:layout_marginTop="12dp" />
 
 </LinearLayout>

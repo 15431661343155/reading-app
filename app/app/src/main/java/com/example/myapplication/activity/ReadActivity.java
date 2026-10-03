@@ -389,6 +389,15 @@ public class ReadActivity extends BaseActivity {
         return true;
     }
 
+    /**
+     * 阅读器不参与全站换肤：它自带一套纸张/夜间背景染色（ReadThemeController 逐色驱动），
+     * 宣纸档的底色会绕过 mapBgColor 的白名单原样透传，页面染色和分页都会错乱。
+     */
+    @Override
+    protected boolean followSkin() {
+        return false;
+    }
+
     @SuppressWarnings("deprecation")
     @Override
     protected void onCreate(Bundle savedInstanceState) {

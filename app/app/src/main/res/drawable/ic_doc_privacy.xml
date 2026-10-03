@@ -5,7 +5,7 @@
     android:height="18dp"
     android:viewportWidth="24"
     android:viewportHeight="24"
-    android:tint="@color/ios_blue">
+    android:tint="?attr/appAccent">
     <path
         android:fillColor="@android:color/white"
         android:pathData="M12,1L3,5v6c0,5.55 3.84,10.74 9,12 5.16,-1.26 9,-6.45 9,-12V5L12,1zM10.5,16.5L6.5,12.5l1.41,-1.41l2.59,2.58 5.59,-5.58L17.5,9.5L10.5,16.5z"/>

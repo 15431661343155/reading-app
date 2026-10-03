@@ -12,6 +12,13 @@
     <string name="appearance_dark">夜间</string>
     <string name="appearance_footer">选择应用外观。跟随系统时，会随设备的深色设置自动切换。</string>
     <string name="appearance_applied">外观已切换</string>
+    <!-- 配色风格（与上面的外观模式正交：风格决定色板，外观决定该色板的日/夜档） -->
+    <string name="skin_section">配色风格</string>
+    <string name="skin_classic">素白</string>
+    <string name="skin_classic_desc">系统磨砂玻璃质感</string>
+    <string name="skin_xuanzhi">宣纸</string>
+    <string name="skin_xuanzhi_desc">墨纸描金 · 朱砂动作色</string>
+    <string name="skin_footer">配色风格与上面的外观模式互不影响：选「宣纸」后切到夜间，用的是同一套色板的墨玉档。</string>
     <string name="settings">设置</string>
     <string name="profile">个人资料</string>
     <string name="account_security">账号管理</string>

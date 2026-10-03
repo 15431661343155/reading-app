@@ -9,11 +9,28 @@ import androidx.core.view.WindowCompat;
 
 import com.example.myapplication.R;
 import com.example.myapplication.utils.ActivityTransition;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.ThemeManager;
 
 public class BaseActivity extends AppCompatActivity {
 
     protected int statusBarHeight = 0;  // 状态栏高度
+
+    /** 本页是否用主页专用主题（窗口底与开屏图同色）。仅 MainActivity 重写为 true。 */
+    protected boolean usesMainTheme() {
+        return false;
+    }
+
+    /**
+     * 本页是否跟随「配色风格」。阅读器锁死日间且有自己的一套背景色板、登录页是独立的毛玻璃紫，
+     * 两者重写返回 false 保持素白，避免和皮肤互相覆盖。
+     */
+    protected boolean followSkin() {
+        return true;
+    }
+
+    /** onCreate 时生效的风格，onResume 用它判断是否需要重建 */
+    private int appliedSkin = ThemeManager.SKIN_CLASSIC;
 
     /**
      * 当前页面是否使用「从右向左滑入」转场。
@@ -25,8 +42,12 @@ public class BaseActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // 主题一律走清单里的 @style/Theme.MyApp：
-        // 日间/夜间由 values-night 资源限定符 + AppCompatDelegate 的夜间模式解析，不在这里分支
+        // 配色风格在 super.onCreate 之前落到主题上：主题一旦参与布局解析就改不了了。
+        // 日夜仍走清单里的 @style/Theme.MyApp + values-night，不在这里分支。
+        if (followSkin()) {
+            appliedSkin = ThemeManager.getSkin(this);
+            setTheme(ThemeManager.themeResId(this, usesMainTheme()));
+        }
         if (getResources() == null) {
             return;
         }
@@ -77,13 +98,11 @@ public class BaseActivity extends AppCompatActivity {
         // 恢复系统默认避让：内容不延伸到状态栏/导航栏后面
         WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
 
-        // 状态栏默认白色（匹配白色 Toolbar），MainActivity Fragment 覆盖为灰色
-        getWindow().setStatusBarColor(
-            getResources().getColor(R.color.ios_bg, null));
+        // 状态栏默认与标题栏同色（二级页 Toolbar 用 appSurface），MainActivity Fragment 覆盖为页面底色
+        getWindow().setStatusBarColor(ThemeAttrs.color(this, R.attr.appSurface, 0));
 
-        // 导航栏统一用 grouped 背景色
-        getWindow().setNavigationBarColor(
-            getResources().getColor(R.color.ios_bg_grouped, null));
+        // 导航栏统一用页面底色
+        getWindow().setNavigationBarColor(ThemeAttrs.color(this, R.attr.appPageBg, 0));
 
         // 系统图标明暗由当前配置决定：浅色底配深色图标，深色底配浅色图标
         int flags = getWindow().getDecorView().getSystemUiVisibility();
@@ -155,7 +174,10 @@ public class BaseActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // 不在此处 setTheme()：会覆盖 Fragment 设置的状态栏颜色
-        // 主题在 onCreate 和用户切换时已正确设置
+        // 配色风格变了不在这里 setTheme()（会覆盖 Fragment 设置的状态栏颜色），而是整页重建：
+        // 栈里其余页面各自在回到前台时这样补一次，用户不需要重启 App 就能看到全站换肤。
+        if (followSkin() && ThemeManager.getSkin(this) != appliedSkin) {
+            recreate();
+        }
     }
 }

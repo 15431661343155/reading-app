@@ -8,6 +8,50 @@
     <attr name="navTextSelectedColor" format="color" />
     <attr name="navTextUnselectedColor" format="color" />
 
+    <!-- ===== 配色风格皮肤属性（素白 / 宣纸）=====
+         布局与 drawable 只认这组 ?attr/appXxx，值由主题给：
+         Theme.MyApp.* 指向 @color/ios_*（素白，与接入前逐像素一致），
+         Theme.MyApp.Xuanzhi.* 指向 @color/xz_*（宣纸）。
+         日夜仍由 values-night 的同名颜色资源翻转，所以两维正交、互不加倍资源。 -->
+    <attr name="appPageBg" format="color" />        <!-- 页面底（分组背景） -->
+    <attr name="appSurface" format="color" />       <!-- 抬起面：标题栏 / 弹窗 / 状态栏 -->
+    <attr name="appCard" format="color" />          <!-- 卡片面 -->
+    <attr name="appCardSoft" format="color" />      <!-- 卡内芯片 / 子选项底 -->
+    <attr name="appTextPrimary" format="color" />
+    <attr name="appTextSecondary" format="color" />
+    <attr name="appTextTertiary" format="color" />
+    <attr name="appSeparator" format="color" />
+    <attr name="appAccent" format="color" />        <!-- 主色：选中态 / 主按钮 -->
+    <attr name="appOnAccent" format="color" />      <!-- 主色底上的文字，两风格都是白 -->
+    <attr name="appNavBg" format="color" />         <!-- 底部导航 -->
+    <attr name="appSegTrack" format="color" />      <!-- 分段控件轨道 -->
+    <attr name="appSegThumb" format="color" />      <!-- 分段控件滑块 -->
+    <attr name="appSegText" format="color" />       <!-- 分段控件选中文字 -->
+    <attr name="appBandTop" format="color" />       <!-- 顶部色带渐变·上（我的 / 书城英雄区） -->
+    <attr name="appBandCenter" format="color" />
+    <attr name="appBandBottom" format="color" />
+    <attr name="appAccentTint" format="color" />        <!-- 主色 12% 薄底：图标磁贴 / 选中胶囊 -->
+    <attr name="appAccentTintStrong" format="color" />  <!-- 同上，按压态 20% -->
+    <attr name="appAccentStroke" format="color" />      <!-- 主色 34% 描边：薄底胶囊/选中框 -->
+    <attr name="appNavPillTop" format="color" />     <!-- 底部导航选中胶囊渐变·上 -->
+    <attr name="appNavPillCenter" format="color" />
+    <attr name="appNavPillBottom" format="color" />
+
+    <!-- 弹窗家族（登录提示 / 更新 / 性别 / 昵称 / 注销）专用：原来写死 @color/gf_*，
+         只跟日夜不跟配色风格，切回素白仍是宣纸。以下每项宣纸档等于原 gf_* 色值。 -->
+    <attr name="appCardBottom" format="color" />     <!-- 卡片渐变下端（素白档与 appCard 同色＝平涂） -->
+    <attr name="appTextStrong" format="color" />     <!-- 次按钮文字：比正文重、比标题轻 -->
+    <attr name="appOrnament" format="color" />       <!-- 装饰描线：分隔、印章框、次按钮描边、未选圈 -->
+    <attr name="appOrnamentFaint" format="color" />  <!-- 更淡一档装饰：卡片角云纹、底部水波 -->
+    <attr name="appAccentTop" format="color" />      <!-- 主按钮渐变·上 -->
+    <attr name="appAccentBottom" format="color" />   <!-- 主按钮渐变·下 -->
+    <attr name="appDangerTop" format="color" />      <!-- 危险按钮（注销）渐变·上：素白档为红，不随主色 -->
+    <attr name="appDangerBottom" format="color" />
+    <attr name="appGhostBg" format="color" />        <!-- 实心次按钮底 -->
+    <attr name="appFieldBg" format="color" />        <!-- 输入框 / 选项行底 -->
+    <attr name="appFieldStroke" format="color" />    <!-- 输入框描边 -->
+    <attr name="appInsetBg" format="color" />        <!-- 版本号胶囊 / 便签内衬底 -->
+
     <!-- 磨砂玻璃容器 FrostedNavCardView -->
     <declare-styleable name="FrostedNavCardView">
         <!-- 背景采样源：采集该 View 位于本控件下方的区域做模糊 -->

@@ -25,6 +25,7 @@ import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.BindRequest;
 import com.example.myapplication.bean.SendCodeRequest;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.ThemeManager;
 import com.example.myapplication.utils.Hint;
 import com.example.myapplication.utils.PasswordPolicy;
@@ -95,9 +96,9 @@ public class ChangePasswordActivity extends BaseActivity {
         btnPasswordChange = findViewById(R.id.btn_password_change);
         btnEmailChange = findViewById(R.id.btn_email_change);
         btnSendCode = findViewById(R.id.btn_send_code);
-        btnPasswordChange.setIdleColor(0xFF6C5CE7);
+        btnPasswordChange.setIdleColor(ThemeAttrs.color(this, R.attr.appAccent, 0xFF007AFF));
         btnPasswordChange.setIdleText("确认修改");
-        btnEmailChange.setIdleColor(0xFF6C5CE7);
+        btnEmailChange.setIdleColor(ThemeAttrs.color(this, R.attr.appAccent, 0xFF007AFF));
         btnEmailChange.setIdleText("确认修改");
 
         ivOldEye = findViewById(R.id.iv_old_eye);
@@ -157,8 +158,6 @@ public class ChangePasswordActivity extends BaseActivity {
                 strengthSegsEmail, strengthLabelEmail));
     }
 
-    private static final int COL_SEL = 0xFF6C5CE7;
-
     private void switchToPasswordMode() {
         animateSegment(false);
     }
@@ -190,17 +189,18 @@ public class ChangePasswordActivity extends BaseActivity {
                     .start();
         }
 
-        // 标签颜色渐变（未选中色走 token，夜间为浅灰）
-        final int colUnsel = getColor(R.color.ios_text_secondary);
-        int selFrom = targetEmail ? colUnsel : COL_SEL;
-        int unsFrom = targetEmail ? COL_SEL : colUnsel;
+        // 标签颜色渐变（选中/未选中色都走 token，随配色风格与日夜变化）
+        final int colSel = ThemeAttrs.color(this, R.attr.appAccent, 0xFF007AFF);
+        final int colUnsel = ThemeAttrs.color(this, R.attr.appTextSecondary, 0);
+        int selFrom = targetEmail ? colUnsel : colSel;
+        int unsFrom = targetEmail ? colSel : colUnsel;
         ArgbEvaluator ev = new ArgbEvaluator();
         labelAnim = ValueAnimator.ofFloat(0f, 1f);
         labelAnim.setDuration(250L);
         labelAnim.addUpdateListener(a -> {
             float t = a.getAnimatedFraction();
             (targetEmail ? tvEmailVerify : tvPasswordVerify)
-                    .setTextColor((int) ev.evaluate(t, selFrom, COL_SEL));
+                    .setTextColor((int) ev.evaluate(t, selFrom, colSel));
             (targetEmail ? tvPasswordVerify : tvEmailVerify)
                     .setTextColor((int) ev.evaluate(t, unsFrom, colUnsel));
         });
@@ -415,7 +415,7 @@ public class ChangePasswordActivity extends BaseActivity {
         int color;
         String text;
         if (level == 0) {
-            color = getColor(R.color.cp_divider);
+            color = ThemeAttrs.color(this, R.attr.appSeparator, 0);
             text = "强度：弱";
         } else if (level == 1) {
             color = 0xFFFF5A5A;
@@ -428,10 +428,11 @@ public class ChangePasswordActivity extends BaseActivity {
             text = "强度：强";
         }
         for (int i = 0; i < segs.length; i++) {
-            segs[i].setBackgroundColor(i < level ? color : getColor(R.color.cp_divider));
+            segs[i].setBackgroundColor(i < level ? color
+                    : ThemeAttrs.color(this, R.attr.appSeparator, 0));
         }
         label.setText(text);
-        label.setTextColor(getColor(level == 0 ? R.color.ios_text_tertiary : R.color.ios_text_primary));
+        label.setTextColor(ThemeAttrs.color(this, level == 0 ? R.attr.appTextTertiary : R.attr.appTextPrimary, 0));
     }
 
     /** 监听新密码输入，实时刷新强度条。 */

@@ -35,7 +35,7 @@
             android:layout_weight="1"
             android:text="选择背景"
             android:textSize="18sp"
-            android:textColor="@color/ios_text_primary"
+            android:textColor="?attr/appTextPrimary"
             android:textStyle="bold"
             android:gravity="center"/>
 
@@ -67,7 +67,7 @@
                 android:layout_height="wrap_content"
                 android:text="纯色"
                 android:textSize="15sp"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:textStyle="bold"
                 android:paddingBottom="10dp" />
 
@@ -83,7 +83,7 @@
                 android:layout_height="wrap_content"
                 android:text="纹理"
                 android:textSize="15sp"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:textStyle="bold"
                 android:paddingTop="18dp"
                 android:paddingBottom="10dp" />

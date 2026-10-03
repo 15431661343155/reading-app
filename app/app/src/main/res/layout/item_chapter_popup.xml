@@ -14,13 +14,13 @@
         android:layout_height="wrap_content"
         android:text="第一章"
         android:textSize="15sp"
-        android:textColor="@color/ios_text_primary"
+        android:textColor="?attr/appTextPrimary"
         android:padding="16dp" />
 
     <View
         android:layout_width="match_parent"
         android:layout_height="0.5dp"
         android:layout_marginStart="16dp"
-        android:background="@color/ios_separator" />
+        android:background="?attr/appSeparator" />
 
 </LinearLayout>

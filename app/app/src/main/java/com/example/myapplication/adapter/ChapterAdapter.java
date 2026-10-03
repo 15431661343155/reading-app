@@ -9,6 +9,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.R;
 import com.example.myapplication.activity.ReadActivity;
 
@@ -60,10 +61,10 @@ public class ChapterAdapter extends RecyclerView.Adapter<ChapterAdapter.ChapterH
         // 高亮当前阅读章节（按章节索引匹配，而非列表位置）
         if (chapter.getIndex() == currentChapterIndex) {
             holder.tvChapterTitle.setTextColor(followReaderTheme ? ReadActivity.getAccentColor()
-                    : holder.itemView.getContext().getColor(R.color.ios_blue));
+                    : ThemeAttrs.color(holder.itemView.getContext(), R.attr.appAccent, 0));
         } else {
             holder.tvChapterTitle.setTextColor(followReaderTheme ? ReadActivity.getTextPrimaryColor()
-                    : holder.itemView.getContext().getColor(R.color.ios_text_primary));
+                    : ThemeAttrs.color(holder.itemView.getContext(), R.attr.appTextPrimary, 0));
         }
 
         // 列表项（文字/分割线/背景）跟随阅读器背景派生配色；

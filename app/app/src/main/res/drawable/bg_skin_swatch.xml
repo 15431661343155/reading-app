@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--配色风格预览色块：白色底 + 细描边，实际颜色由 View 的 backgroundTint 决定 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="4dp" />
+    <solid android:color="#FFFFFFFF" />
+    <stroke
+        android:width="0.5dp"
+        android:color="?attr/appSeparator" />
+</shape>

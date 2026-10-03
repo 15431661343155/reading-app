@@ -2,6 +2,6 @@
 <!-- 缓存体积大字底板：浅灰圆角 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#F7F7FA" />
+    <solid android:color="?attr/appInsetBg" />
     <corners android:radius="12dp" />
 </shape>

@@ -2,5 +2,5 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <corners android:radius="8dp" />
-    <solid android:color="@color/ios_bg_grouped" />
+    <solid android:color="?attr/appPageBg" />
 </shape>

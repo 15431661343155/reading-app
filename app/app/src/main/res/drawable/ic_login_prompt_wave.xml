@@ -7,6 +7,6 @@
     android:viewportHeight="10">
     <path
         android:pathData="M0,5 c20,-3 39,-3 59,0 s39,3 59,0 s39,-3 59,0 s39,3 59,0"
-        android:strokeColor="#EDDFC2"
+        android:strokeColor="?attr/appOrnamentFaint"
         android:strokeWidth="1.5" />
 </vector>

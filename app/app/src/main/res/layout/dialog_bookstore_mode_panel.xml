@@ -22,7 +22,7 @@
             android:text="切换书城"
             android:textSize="18sp"
             android:textStyle="bold"
-            android:textColor="@color/ios_text_primary"/>
+            android:textColor="?attr/appTextPrimary"/>
 
         <ImageView
             android:id="@+id/iv_close"
@@ -72,14 +72,14 @@
                     android:text="本站藏书"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:textColor="@color/ios_text_primary"/>
+                    android:textColor="?attr/appTextPrimary"/>
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="服务器数据库内的书籍"
                     android:textSize="12sp"
-                    android:textColor="@color/ios_text_secondary"
+                    android:textColor="?attr/appTextSecondary"
                     android:layout_marginTop="2dp"/>
             </LinearLayout>
 
@@ -129,7 +129,7 @@
                     android:text="外站书城"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:textColor="@color/ios_text_primary"/>
+                    android:textColor="?attr/appTextPrimary"/>
 
                 <!-- 「选择书源」按钮：放到原说明位置，点击单独打开书源选择弹窗 -->
                 <TextView
@@ -138,7 +138,7 @@
                     android:layout_height="wrap_content"
                     android:text="选择书源 →"
                     android:textSize="12sp"
-                    android:textColor="@color/ios_blue"
+                    android:textColor="?attr/appAccent"
                     android:layout_marginTop="4dp"
                     android:background="?attr/selectableItemBackground"
                     android:paddingHorizontal="2dp"

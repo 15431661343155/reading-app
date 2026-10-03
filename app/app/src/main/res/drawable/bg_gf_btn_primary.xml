@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--国风弹窗·主按钮「确定」：黛青实底（比登录弹窗 #56A496 更深，保证白字 4.5:1）-->
+<!--国风弹窗·主按钮「确定」：朱砂渐变实底 + 白字（与登录提示弹窗主按钮同色）-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <corners android:radius="12dp" />
-    <solid android:color="@color/gf_teal" />
+    <gradient
+        android:angle="270"
+        android:startColor="?attr/appAccentTop"
+        android:endColor="?attr/appAccentBottom" />
 </shape>

@@ -28,9 +28,9 @@
                         <corners android:radius="22dp" />
                         <gradient
                             android:angle="270"
-                            android:startColor="#5BB0FF"
-                            android:centerColor="#007AFF"
-                            android:endColor="#0062D6"
+                            android:startColor="?attr/appNavPillTop"
+                            android:centerColor="?attr/appNavPillCenter"
+                            android:endColor="?attr/appNavPillBottom"
                             android:type="linear" />
                     </shape>
                 </item>

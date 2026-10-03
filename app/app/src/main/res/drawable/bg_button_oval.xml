@@ -2,6 +2,6 @@
 <!-- iOS 按钮：主色底、10dp 圆角 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/ios_blue"/>
+    <solid android:color="?attr/appAccent"/>
     <corners android:radius="10dp"/>
 </shape>

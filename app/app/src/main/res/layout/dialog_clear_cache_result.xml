@@ -33,7 +33,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="11dp"
         android:text="@string/mine_cache_done"
-        android:textColor="@color/ios_text_primary"
+        android:textColor="?attr/appTextPrimary"
         android:textSize="14sp"
         android:textStyle="bold" />
 
@@ -42,6 +42,6 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="5dp"
-        android:textColor="@color/ios_text_secondary"
+        android:textColor="?attr/appTextSecondary"
         android:textSize="12sp" />
 </LinearLayout>

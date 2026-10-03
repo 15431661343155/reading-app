@@ -9,6 +9,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.R;
 import com.example.myapplication.bean.SourceInfo;
 
@@ -85,8 +86,8 @@ public class SourceSelectAdapter extends RecyclerView.Adapter<SourceSelectAdapte
         h.ivRadio.setImageResource(isSelected
                 ? R.drawable.ic_checkbox_checked_orange
                 : R.drawable.ic_checkbox_unchecked);
-        h.tvName.setTextColor(h.itemView.getContext().getColor(
-                isSelected ? R.color.ios_blue : R.color.ios_text_primary));
+        h.tvName.setTextColor(ThemeAttrs.color(h.itemView.getContext(),
+                isSelected ? R.attr.appAccent : R.attr.appTextPrimary, 0));
 
         h.itemView.setOnClickListener(v -> {
             if (listener != null) {

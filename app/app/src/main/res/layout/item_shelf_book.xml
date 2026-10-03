@@ -59,7 +59,7 @@
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:text="书名"
-                android:textColor="@color/ios_text_primary"
+                android:textColor="?attr/appTextPrimary"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
@@ -68,7 +68,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
-                android:textColor="@color/ios_text_secondary"
+                android:textColor="?attr/appTextSecondary"
                 android:layout_marginTop="4dp"
                 android:text="作者" />
 
@@ -78,7 +78,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
-                android:textColor="@color/ios_text_secondary"
+                android:textColor="?attr/appTextSecondary"
                 android:layout_marginTop="4dp"
                 android:text="继续阅读 第1章" />
 
@@ -87,7 +87,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="11sp"
-                android:textColor="@color/ios_text_tertiary"
+                android:textColor="?attr/appTextTertiary"
                 android:layout_marginTop="2dp"
                 android:text="最新章节 第120章"
                 android:visibility="gone" />

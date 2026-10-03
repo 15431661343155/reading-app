@@ -3,13 +3,13 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ios_bg_grouped"
+    android:background="?attr/appPageBg"
     android:orientation="vertical">
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:background="@color/ios_bg_grouped">
+        android:background="?attr/appPageBg">
 
         <ImageView
             android:id="@+id/iv_doc_back"
@@ -27,7 +27,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:textColor="@color/ios_text_primary"
+            android:textColor="?attr/appTextPrimary"
             android:textSize="17sp"
             android:textStyle="bold" />
     </FrameLayout>
@@ -35,7 +35,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/ios_separator" />
+        android:background="?attr/appSeparator" />
 
     <WebView
         android:id="@+id/web_doc"

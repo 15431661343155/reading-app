@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ios_bg_grouped">
+    android:background="?attr/appPageBg">
 
     <!-- 标题栏：返回 + 分类名 -->
     <LinearLayout
@@ -13,7 +13,7 @@
         android:layout_height="56dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="@color/ios_bg_grouped"
+        android:background="?attr/appPageBg"
         android:elevation="2dp"
         android:paddingStart="6dp"
         android:paddingEnd="6dp">
@@ -37,7 +37,7 @@
             android:gravity="center"
             android:textSize="18sp"
             android:textStyle="bold"
-            android:textColor="@color/ios_text_primary"
+            android:textColor="?attr/appTextPrimary"
             android:maxLines="1"
             android:ellipsize="end"
             android:text="分类"/>
@@ -73,7 +73,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:text="该分类下暂无书籍"
-            android:textColor="@color/ios_text_secondary"
+            android:textColor="?attr/appTextSecondary"
             android:textSize="14sp"
             android:visibility="gone"/>
     </FrameLayout>

@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 我的页：英雄区蓝色渐变底（自上而下由亮蓝到主蓝，营造纵深） -->
+<!-- 我的页：英雄区色带渐变底（自上而下三档，营造纵深）。
+     取值走主题属性：素白档是原来的亮蓝→主蓝→深蓝，宣纸档换成檀褐→墨玉。
+     状态栏要跟着染成 appBandTop，见 MineFragment#paintStatusBarForHero。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <gradient
         android:angle="270"
-        android:startColor="#FF2E8FFF"
-        android:centerColor="#FF007AFF"
-        android:endColor="#FF0062D6"
+        android:startColor="?attr/appBandTop"
+        android:centerColor="?attr/appBandCenter"
+        android:endColor="?attr/appBandBottom"
         android:type="linear" />
 </shape>

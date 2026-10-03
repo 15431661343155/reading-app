@@ -5,6 +5,6 @@
     <corners android:radius="20dp" />
     <gradient
         android:angle="270"
-        android:endColor="#F8F2E4"
-        android:startColor="#FFFCF4" />
+        android:endColor="?attr/appCardBottom"
+        android:startColor="?attr/appCard" />
 </shape>

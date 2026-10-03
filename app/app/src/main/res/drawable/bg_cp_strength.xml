@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 密码强度条底槽 -->
+<!-- 密码强度条底槽：跟随配色风格（填充段是红/黄/绿语义色，不动） -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/cp_divider" />
+    <solid android:color="?attr/appSeparator" />
     <corners android:radius="3dp" />
 </shape>

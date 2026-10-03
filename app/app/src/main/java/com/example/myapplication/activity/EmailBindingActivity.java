@@ -16,6 +16,7 @@ import com.example.myapplication.api.SafeCallback;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.BindRequest;
 import com.example.myapplication.bean.SendCodeRequest;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.ThemeManager;
 import com.example.myapplication.utils.Hint;
 import com.example.myapplication.widget.MorphSubmitButton;
@@ -53,7 +54,7 @@ public class EmailBindingActivity extends BaseActivity {
         loadCurrentEmail();
 
         btnSendCode.setOnClickListener(v -> sendVerificationCode());
-        btnBind.setIdleColor(0xFF6C5CE7);
+        btnBind.setIdleColor(ThemeAttrs.color(this, R.attr.appAccent, 0xFF007AFF));
         btnBind.setIdleText("绑定邮箱");
         btnBind.setOnClickListener(v -> bindEmail());
     }

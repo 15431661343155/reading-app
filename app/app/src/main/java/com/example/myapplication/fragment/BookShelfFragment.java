@@ -39,10 +39,12 @@ import com.example.myapplication.activity.ReaderWebViewPool;
 import com.example.myapplication.activity.UploadBookActivity;
 import com.example.myapplication.adapter.BookAdapter;
 import com.example.myapplication.api.RetrofitClient;
+import com.example.myapplication.api.SafeCallback;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.Book;
 import com.example.myapplication.bean.Bookshelf;
 import com.example.myapplication.bean.ReadingProgress;
+import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.utils.ExternalPrefs;
 import com.example.myapplication.utils.ExternalSyncManager;
@@ -167,7 +169,7 @@ public class BookShelfFragment extends Fragment {
             } catch (Throwable ignored) {}
         }, "html-cache-sweep").start();
 
-        swipeRefresh.setColorSchemeResources(R.color.ios_blue, R.color.ios_blue);
+        swipeRefresh.setColorSchemeColors(ThemeAttrs.color(requireActivity(), R.attr.appAccent, 0));
 
         // 编辑态返回键拦截：进入编辑态时启用，按返回退出编辑而不是退出页面
         editBackCallback = new OnBackPressedCallback(false) {
@@ -307,7 +309,7 @@ public class BookShelfFragment extends Fragment {
         if (getActivity() == null) return;
         // 状态栏背景与页面顶部颜色统一，消除割裂
         getActivity().getWindow().setStatusBarColor(
-            getActivity().getResources().getColor(R.color.ios_bg_grouped, null));
+            ThemeAttrs.color(requireActivity(), R.attr.appPageBg, 0));
         // 图标明暗交由宿主按当前日夜配置复位（夜间深色底要用浅色图标）
         ((BaseActivity) getActivity()).applyStatusBarIcons();
     }
@@ -1095,23 +1097,20 @@ public class BookShelfFragment extends Fragment {
             return;
         }
 
-        RetrofitClient.getApiService().getBookshelf(userId).enqueue(new Callback<ApiResponse<List<Bookshelf>>>() {
-            @Override
-            public void onResponse(@NonNull Call<ApiResponse<List<Bookshelf>>> call,
-                    @NonNull Response<ApiResponse<List<Bookshelf>>> response) {
-                if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
-                    applyServerBooks(response.body().getData(), localBooks, externalBooks);
+        // 必须走 SafeCallback：换肤 / 切夜间会重建 Activity，旧实例的在途响应回调落到已 detach 的
+        // Fragment 上时 getActivity() 为 null，applyServerBooks 里读阅读进度就直接 NPE 退出。
+        RetrofitClient.getApiService().getBookshelf(userId).enqueue(SafeCallback.from(this,
+                (call, response) -> {
+                    if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
+                        applyServerBooks(response.body().getData(), localBooks, externalBooks);
+                        firstLoadDone = true;
+                    }
+                    stopRefreshing();
+                },
+                (call, t) -> {
                     firstLoadDone = true;
-                }
-                stopRefreshing();
-            }
-
-            @Override
-            public void onFailure(@NonNull Call<ApiResponse<List<Bookshelf>>> call, @NonNull Throwable t) {
-                firstLoadDone = true;
-                stopRefreshing();
-            }
-        });
+                    stopRefreshing();
+                }));
     }
 
     /**
@@ -1440,21 +1439,16 @@ public class BookShelfFragment extends Fragment {
             final long bookId = idBox;
             if (progressMap.containsKey(bookId)) continue;
             RetrofitClient.getApiService().getProgress(userId, bookId)
-                    .enqueue(new Callback<ApiResponse<ReadingProgress>>() {
-                        @Override
-                        public void onResponse(@NonNull Call<ApiResponse<ReadingProgress>> call,
-                                               @NonNull Response<ApiResponse<ReadingProgress>> response) {
-                            if (response.isSuccessful() && response.body() != null
-                                    && response.body().isSuccess() && response.body().getData() != null) {
-                                ReadingProgress p = response.body().getData();
-                                progressMap.put(bookId, p.getChapterIndex());
-                                adapter.notifyDataSetChanged();
-                            }
-                        }
-
-                        @Override
-                        public void onFailure(@NonNull Call<ApiResponse<ReadingProgress>> call, @NonNull Throwable t) {}
-                    });
+                    .enqueue(SafeCallback.from(this,
+                            (call, response) -> {
+                                if (response.isSuccessful() && response.body() != null
+                                        && response.body().isSuccess() && response.body().getData() != null) {
+                                    ReadingProgress p = response.body().getData();
+                                    progressMap.put(bookId, p.getChapterIndex());
+                                    adapter.notifyDataSetChanged();
+                                }
+                            },
+                            (call, t) -> { }));
         }
     }
 
@@ -1615,8 +1609,8 @@ public class BookShelfFragment extends Fragment {
 
     /** 分段文字色走 token：夜间选中态落在深灰指示器上，不能沿用日间那层 iOS 蓝 */
     private int shelfChipColor(boolean selected) {
-        return getResources().getColor(selected ? R.color.seg_text_selected
-                : R.color.ios_text_secondary, null);
+        return ThemeAttrs.color(requireActivity(), selected ? R.attr.appSegText
+                : R.attr.appTextSecondary, 0);
     }
 
     private void applyChipStyle(TextView chip, boolean selected) {
@@ -1626,7 +1620,7 @@ public class BookShelfFragment extends Fragment {
                 chip.setBackground(null); // 白底由滑动指示器承担
             } else {
                 android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-                bg.setColor(getResources().getColor(R.color.seg_thumb_bg, null));
+                bg.setColor(ThemeAttrs.color(requireActivity(), R.attr.appSegThumb, 0));
                 bg.setCornerRadius(getResources().getDisplayMetrics().density * 6);
                 chip.setBackground(bg);
             }
@@ -1650,8 +1644,20 @@ public class BookShelfFragment extends Fragment {
     private void positionShelfThumb(boolean animate) {
         if (segThumbShelf == null || layoutGroupTabs == null) return;
         View target = findGroupChip(currentGroup);
-        if (target == null || target.getWidth() == 0) {
+        if (target == null) {
             segThumbShelf.setVisibility(View.INVISIBLE);
+            return;
+        }
+        if (target.getWidth() == 0) {
+            // onCreateView 里 post 的回调会在 attach 时、首次 layout 之前就跑掉，此刻宽度还是 0。
+            // 早退会让指示器整页都不显示（只剩文字变色），所以挂一次性布局监听等它量出来再定位。
+            target.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                @Override public void onLayoutChange(View v, int left, int top, int right, int bottom,
+                        int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                    v.removeOnLayoutChangeListener(this);
+                    if (isAdded()) positionShelfThumb(false);
+                }
+            });
             return;
         }
         segThumbShelf.setVisibility(View.VISIBLE);
@@ -1672,6 +1678,7 @@ public class BookShelfFragment extends Fragment {
     /** 指示器滑到指定 chip（等宽分段下即滑动到目标分段） */
     private void animateShelfThumbTo(View chip) {
         if (segThumbShelf == null || layoutGroupTabs == null) return;
+        segThumbShelf.setVisibility(View.VISIBLE);
         ViewGroup.LayoutParams lp = segThumbShelf.getLayoutParams();
         if (lp.width != chip.getWidth()) {
             lp.width = chip.getWidth();
@@ -1812,7 +1819,7 @@ public class BookShelfFragment extends Fragment {
                 TextView tv = (TextView) super.getView(position, convertView, parent);
                 tv.setText(getItem(position) + "    (长按删除)");
                 tv.setTextSize(14);
-                tv.setTextColor(getResources().getColor(R.color.ios_text_primary, null));
+                tv.setTextColor(ThemeAttrs.color(requireActivity(), R.attr.appTextPrimary, 0));
                 return tv;
             }
         };

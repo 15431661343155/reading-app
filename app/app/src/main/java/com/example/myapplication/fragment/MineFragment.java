@@ -45,6 +45,7 @@ import com.example.myapplication.utils.CacheManager;
 import com.example.myapplication.utils.LoginHelper;
 import com.example.myapplication.utils.ProfileSync;
 import com.example.myapplication.utils.ReadTimeText;
+import com.example.myapplication.utils.ThemeAttrs;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -147,15 +148,16 @@ public class MineFragment extends Fragment {
     }
 
     /**
-     * 状态栏与英雄区蓝底统一。
+     * 状态栏与英雄区色带统一。
      *
      * <p>activity_main.xml 的根布局带 fitsSystemWindows=true，fragment 从状态栏下方才开始绘制，
-     * 英雄区蓝底铺不到状态栏后面；这里把状态栏染成渐变顶部的同色（bg_mine_hero 的起始色 #2E8FFF），
-     * 让状态栏与英雄区连成一片、看不出断缝。
+     * 英雄区色带铺不到状态栏后面；这里把状态栏染成渐变顶部的同色（?attr/appBandTop，
+     * 素白档是 #2E8FFF、宣纸档是檀褐），让两者连成一片、看不出断缝。
      */
     private void updateStatusBarColor() {
         if (getActivity() == null) return;
-        getActivity().getWindow().setStatusBarColor(0xFF2E8FFF);
+        getActivity().getWindow().setStatusBarColor(
+                ThemeAttrs.color(getActivity(), R.attr.appBandTop, 0));
         int flags = getActivity().getWindow().getDecorView().getSystemUiVisibility();
         flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         getActivity().getWindow().getDecorView().setSystemUiVisibility(flags);
@@ -412,7 +414,7 @@ public class MineFragment extends Fragment {
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         name.setLayoutParams(nameLp);
         name.setTextSize(13.5f);
-        name.setTextColor(getResources().getColor(R.color.ios_text_primary, null));
+        name.setTextColor(ThemeAttrs.color(ctx, R.attr.appTextPrimary, 0));
         name.setText(itemTitle(item));
         name.setTag("name");
         row.addView(name);
@@ -421,7 +423,7 @@ public class MineFragment extends Fragment {
         sz.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         sz.setTextSize(13f);
-        sz.setTextColor(getResources().getColor(R.color.ios_text_tertiary, null));
+        sz.setTextColor(ThemeAttrs.color(ctx, R.attr.appTextTertiary, 0));
         sz.setText(CacheManager.formatSize(size));
         sz.setTag("size");
         row.addView(sz);
@@ -452,8 +454,8 @@ public class MineFragment extends Fragment {
         if (cb != null) cb.setSelected(on);
         View name = row.findViewWithTag("name");
         if (name instanceof TextView) {
-            ((TextView) name).setTextColor(getResources().getColor(
-                    on ? R.color.ios_text_primary : R.color.ios_text_secondary, null));
+            ((TextView) name).setTextColor(ThemeAttrs.color(row.getContext(),
+                    on ? R.attr.appTextPrimary : R.attr.appTextSecondary, 0));
         }
         View szView = row.findViewWithTag("size");
         if (szView instanceof TextView) {

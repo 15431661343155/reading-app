@@ -4,17 +4,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ios_bg_grouped">
+    android:background="?attr/appPageBg">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar_back"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:background="@color/ios_bg_grouped"
+        android:background="?attr/appPageBg"
         app:navigationIcon="@drawable/ic_back_black"
         app:title="@string/profile"
         app:titleCentered="true"
-        app:titleTextColor="@color/ios_text_primary" />
+        app:titleTextColor="?attr/appTextPrimary" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -33,7 +33,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/basic_info"
                 android:textSize="13sp"
-                android:textColor="@color/ios_text_secondary"
+                android:textColor="?attr/appTextSecondary"
                 android:layout_marginStart="4dp"
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="8dp" />
@@ -63,7 +63,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/avatar"
                         android:textSize="16sp"
-                        android:textColor="@color/ios_text_primary" />
+                        android:textColor="?attr/appTextPrimary" />
 
                     <View
                         android:layout_width="0dp"
@@ -90,7 +90,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/ios_separator"
+                    android:background="?attr/appSeparator"
                     android:layout_marginStart="16dp" />
 
                 <!-- 用户名行 -->
@@ -110,7 +110,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/username"
                         android:textSize="16sp"
-                        android:textColor="@color/ios_text_primary" />
+                        android:textColor="?attr/appTextPrimary" />
 
                     <TextView
                         android:id="@+id/tv_username"
@@ -118,7 +118,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:textSize="16sp"
-                        android:textColor="@color/ios_text_primary"
+                        android:textColor="?attr/appTextPrimary"
                         android:textAlignment="textEnd"
                         android:layout_marginStart="12dp" />
 
@@ -133,7 +133,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/ios_separator"
+                    android:background="?attr/appSeparator"
                     android:layout_marginStart="16dp" />
 
                 <!-- 性别行 -->
@@ -153,7 +153,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/gender"
                         android:textSize="16sp"
-                        android:textColor="@color/ios_text_primary" />
+                        android:textColor="?attr/appTextPrimary" />
 
                     <TextView
                         android:id="@+id/tv_gender"
@@ -161,7 +161,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:textSize="16sp"
-                        android:textColor="@color/ios_text_primary"
+                        android:textColor="?attr/appTextPrimary"
                         android:textAlignment="textEnd"
                         android:layout_marginStart="12dp" />
 
@@ -176,7 +176,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/ios_separator"
+                    android:background="?attr/appSeparator"
                     android:layout_marginStart="16dp" />
 
                 <!-- UID 行 -->
@@ -192,7 +192,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/uid"
                         android:textSize="16sp"
-                        android:textColor="@color/ios_text_primary" />
+                        android:textColor="?attr/appTextPrimary" />
 
                     <TextView
                         android:id="@+id/tv_uid"
@@ -200,7 +200,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:textSize="16sp"
-                        android:textColor="@color/ios_text_secondary"
+                        android:textColor="?attr/appTextSecondary"
                         android:textAlignment="textEnd"
                         android:layout_marginStart="12dp" />
 
@@ -211,7 +211,7 @@
                         android:gravity="center"
                         android:text="@string/copy"
                         android:textSize="13sp"
-                        android:textColor="@color/ios_blue"
+                        android:textColor="?attr/appAccent"
                         android:background="@drawable/bg_copy"
                         android:paddingHorizontal="12dp"
                         android:layout_marginStart="8dp"
@@ -222,7 +222,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/ios_separator"
+                    android:background="?attr/appSeparator"
                     android:layout_marginStart="16dp" />
 
                 <!-- 邮箱行 -->
@@ -242,7 +242,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/email"
                         android:textSize="16sp"
-                        android:textColor="@color/ios_text_primary" />
+                        android:textColor="?attr/appTextPrimary" />
 
                     <TextView
                         android:id="@+id/tv_email"
@@ -250,7 +250,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:textSize="15sp"
-                        android:textColor="@color/ios_text_secondary"
+                        android:textColor="?attr/appTextSecondary"
                         android:textAlignment="textEnd"
                         android:layout_marginStart="12dp" />
 
@@ -270,7 +270,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/security_group"
                 android:textSize="13sp"
-                android:textColor="@color/ios_text_secondary"
+                android:textColor="?attr/appTextSecondary"
                 android:layout_marginStart="4dp"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="8dp" />
@@ -306,7 +306,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/change_password"
                     android:textSize="16sp"
-                    android:textColor="@color/ios_text_primary"
+                    android:textColor="?attr/appTextPrimary"
                     android:layout_marginStart="12dp" />
 
                 <View
@@ -319,7 +319,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="13sp"
-                    android:textColor="@color/ios_text_secondary"
+                    android:textColor="?attr/appTextSecondary"
                     android:visibility="gone" />
 
                 <ImageView
@@ -349,7 +349,7 @@
                     android:text="@string/logout_and_clear"
                     android:textSize="17sp"
                     android:textStyle="bold"
-                    android:textColor="@color/ios_text_primary" />
+                    android:textColor="?attr/appTextPrimary" />
             </LinearLayout>
 
             <!-- 注销账号（红底白字） -->

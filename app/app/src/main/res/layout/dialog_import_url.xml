@@ -10,7 +10,7 @@
         android:layout_height="wrap_content"
         android:text="书源链接 (URL)"
         android:textSize="14sp"
-        android:textColor="@color/ios_text_secondary"
+        android:textColor="?attr/appTextSecondary"
         android:layout_marginBottom="8dp"/>
 
     <EditText
@@ -21,13 +21,13 @@
         android:inputType="textUri"
         android:textSize="14sp"
         android:padding="12dp"
-        android:background="@color/ios_bg_grouped"/>
+        android:background="?attr/appPageBg"/>
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="支持单本书源 JSON 或书源数组 JSON 格式"
         android:textSize="12sp"
-        android:textColor="@color/ios_text_secondary"
+        android:textColor="?attr/appTextSecondary"
         android:layout_marginTop="8dp"/>
 </LinearLayout>
