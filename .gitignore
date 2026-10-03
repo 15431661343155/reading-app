@@ -21,6 +21,8 @@ local.properties
 _archive/
 screenshots/
 preview/
+# 效果图草稿区：本地随时重写，不进版本库
+design-preview/
 ppt_work/*.jpg
 *.log
 build_err.txt
