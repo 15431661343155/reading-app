@@ -61,6 +61,7 @@ import com.example.myapplication.utils.ThemeManager;
 import com.example.myapplication.utils.TocOrder;
 import com.example.myapplication.utils.VolumeDeriver;
 import com.example.myapplication.utils.Hint;
+import com.example.myapplication.widget.InkBookCover;
 
 import org.json.JSONArray;
 
@@ -311,11 +312,14 @@ public class BookDetailActivity extends BaseActivity{
         if (coverUrl != null && !coverUrl.isEmpty()) {
             // 将相对路径转换为完整URL
             String fullCoverUrl = RetrofitClient.getFullImageUrl(coverUrl);
+            Drawable noCover = InkBookCover.of(this, currentBook.getTitle());
             Glide.with(this)
                     .load(fullCoverUrl)
+                    .placeholder(noCover)
+                    .error(noCover)
                     .into(ivCover);
         } else {
-            ivCover.setImageResource(R.drawable.default_book_cover);
+            ivCover.setImageDrawable(InkBookCover.of(this, currentBook.getTitle()));
         }
 
         tvBookName.setText(currentBook.getTitle());

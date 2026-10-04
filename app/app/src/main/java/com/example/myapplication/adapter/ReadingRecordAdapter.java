@@ -2,6 +2,7 @@ package com.example.myapplication.adapter;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,6 +18,7 @@ import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.example.myapplication.R;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ReadingRecord;
+import com.example.myapplication.widget.InkBookCover;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -108,15 +110,16 @@ public class ReadingRecordAdapter extends RecyclerView.Adapter<ReadingRecordAdap
 
         if (record.getCover() != null && !record.getCover().isEmpty()) {
             String fullCoverUrl = RetrofitClient.getFullImageUrl(record.getCover());
+            Drawable noCover = InkBookCover.of(context, record.getBookName());
             Glide.with(context)
                     .load(fullCoverUrl)
-                    .placeholder(R.drawable.default_book_cover)
-                    .error(R.drawable.default_book_cover)
+                    .placeholder(noCover)
+                    .error(noCover)
                     .transform(new RoundedCorners(24))
                     .dontAnimate()
                     .into(holder.ivCover);
         } else {
-            holder.ivCover.setImageResource(R.drawable.default_book_cover);
+            holder.ivCover.setImageDrawable(InkBookCover.of(context, record.getBookName()));
         }
 
         // ========== 编辑模式选择框 ==========

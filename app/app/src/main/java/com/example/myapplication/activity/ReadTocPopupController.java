@@ -25,6 +25,7 @@ import com.example.myapplication.utils.Hint;
 import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.utils.VolumeDeriver;
+import com.example.myapplication.widget.InkBookCover;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
@@ -78,12 +79,12 @@ class ReadTocPopupController {
             if (cover.isEmpty() && activity.localBookCover != null) cover = activity.localBookCover.trim();
 
             if (cover.isEmpty()) {
-                ivCover.setImageResource(R.drawable.default_book_cover);
+                ivCover.setImageDrawable(InkBookCover.of(activity, title));
             } else {
                 Glide.with(activity)
                         .load(RetrofitClient.getFullImageUrl(cover))
-                        .placeholder(R.drawable.default_book_cover)
-                        .error(R.drawable.default_book_cover)
+                        .placeholder(InkBookCover.of(activity, title))
+                        .error(InkBookCover.of(activity, title))
                         .into(ivCover);
             }
         } catch (Throwable t) {

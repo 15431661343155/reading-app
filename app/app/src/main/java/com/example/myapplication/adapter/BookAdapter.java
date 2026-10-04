@@ -23,6 +23,7 @@ import com.bumptech.glide.request.target.Target;
 import com.example.myapplication.R;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.Book;
+import com.example.myapplication.widget.InkBookCover;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -187,14 +188,15 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
 
         // 加载封面图片（书架：不用位图圆角，由 cover_box 裁切；加载完成后重设 Matrix 等比裁切）
         String coverUrl = book.getCover();
+        Drawable noCover = InkBookCover.of(context, book.getTitle());
         if (coverUrl != null && !coverUrl.isEmpty()) {
             // 将相对路径转换为完整URL
             String fullCoverUrl = RetrofitClient.getFullImageUrl(coverUrl);
             if (holder.coverBox != null) {
                 Glide.with(context)
                         .load(fullCoverUrl)
-                        .placeholder(R.drawable.default_book_cover)
-                        .error(R.drawable.default_book_cover)
+                        .placeholder(noCover)
+                        .error(noCover)
                         .override(600, 800)
                         .dontAnimate()
                         .listener(new RequestListener<Drawable>() {
@@ -214,27 +216,21 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
                         })
                         .into(holder.ivBookCover);
                 // into() 返回时占位图（或缓存命中图）已就位：立即为当前 drawable 计算
-                // Matrix，否则旧图 Matrix（按 override 600×800 位图算的）会把 1773×2364
-                // 的占位图放大近 3 倍绘制一两帧 —— 即下拉刷新时「封面放大一下」
+                // Matrix，否则沿用旧图的 Matrix 会把占位图放大绘制一两帧
+                // —— 即下拉刷新时「封面放大一下」
                 holder.applyCoverMatrixNow();
-                holder.tvCoverTitle.setVisibility(View.GONE);
             } else {
                 Glide.with(context)
                         .load(fullCoverUrl)
-                        .placeholder(R.drawable.default_book_cover)
-                        .error(R.drawable.default_book_cover)
+                        .placeholder(noCover)
+                        .error(noCover)
                         .transform(new RoundedCorners(24))
                         .dontAnimate()
                         .into(holder.ivBookCover);
             }
         } else {
-            holder.ivBookCover.setImageResource(R.drawable.default_book_cover);
+            holder.ivBookCover.setImageDrawable(noCover);
             holder.applyCoverMatrixNow();
-            if (holder.tvCoverTitle != null) {
-                holder.tvCoverTitle.setText(book.getTitle());
-                // 宫格模式无封面时显示书名遮罩；列表模式仅显示默认封面
-                holder.tvCoverTitle.setVisibility(isGridMode ? View.VISIBLE : View.GONE);
-            }
         }
 
         // 选择框（可见性/图标；位置由 applyMode 按模式布置）
@@ -458,16 +454,6 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
         cbp.setMarginStart(0);
         h.ivCheckbox.setLayoutParams(cbp);
 
-        // 无封面遮罩：宫格显示书名蒙版、列表不显示。
-        // 不能只在「当前已可见」时切换——列表绑定时蒙版是 GONE，
-        //    旧写法导致 列表⇄宫格 切换后蒙版永远点不亮（刷新重绑才恢复）。
-        if (h.tvCoverTitle != null && position >= 0 && position < bookList.size()) {
-            Book b = bookList.get(position);
-            boolean noCover = b == null || b.getCover() == null || b.getCover().isEmpty();
-            h.tvCoverTitle.setVisibility(noCover && grid ? View.VISIBLE : View.GONE);
-            h.tvCoverTitle.setAlpha(1f);
-        }
-
         // 封面静止态 Matrix（等比 cover 裁切）：同步应用——新 holder 未布局时用
         // LayoutParams 兜底尺寸计算，杜绝首帧 identity 矩阵的占位图放大帧；
         // post 再校正一次（布局实测尺寸就绪后）
@@ -532,7 +518,6 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
     public class BookHolder extends RecyclerView.ViewHolder {
         public ImageView ivBookCover, ivCheckbox;
         public TextView tvName, tvAuthor, tvIntro, tvProgress, tvLastUpdate;
-        public TextView tvCoverTitle;
         // 双模式形变布局专属
         public View cardBg;
         public FrameLayout coverBox;
@@ -548,7 +533,6 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookHolder> {
             tvIntro = itemView.findViewById(R.id.tv_intro);
             tvProgress = itemView.findViewById(R.id.tv_read_progress);
             tvLastUpdate = itemView.findViewById(R.id.tv_last_update);
-            tvCoverTitle = itemView.findViewById(R.id.tv_cover_title);
             cardBg = itemView.findViewById(R.id.card_bg);
             coverBox = itemView.findViewById(R.id.cover_box);
             // 书城/分类/搜索/本地书城走的 item_book.xml 没有 cover_box 节点（那类封面走圆角
