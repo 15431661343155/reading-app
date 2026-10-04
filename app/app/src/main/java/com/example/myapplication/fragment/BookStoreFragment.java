@@ -412,10 +412,16 @@ public class BookStoreFragment extends Fragment {
     private static final String KEY_MAIN_MODE = "main_mode";      // 0=本地, 2=外站
     private static final String KEY_EXT_TYPE  = "ext_source_type";
     private static final String KEY_EXT_NAME  = "ext_source_name";
+    private static final String KEY_LOCAL_TAB = "local_tab_title"; // 本站模式：上次停留的主分类页标题
 
     private SharedPreferences prefState() {
         return requireContext().getApplicationContext()
                 .getSharedPreferences(PREF_NAME, android.content.Context.MODE_PRIVATE);
+    }
+
+    /** 外站二级分类的记忆 key：按书源隔离，切换书源时不会串味。 */
+    private String extSubKey() {
+        return "ext_sub:" + (externalSourceType == null ? "" : externalSourceType);
     }
 
     private void saveState() {
@@ -544,6 +550,18 @@ public class BookStoreFragment extends Fragment {
         localTabMediator = new TabLayoutMediator(tabLocalMain, vpLocalStore,
                 (tab, position) -> tab.setText(localPageAdapter.getPageTitle(position)));
         localTabMediator.attach();
+
+        // 记住用户停留的主分类页：点 Tab 或左右滑动都会回调这里。
+        // localPagesReady 之前不写盘，避免首次挂载的空适配器把「新书」覆盖掉已保存的选择。
+        vpLocalStore.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                if (!localPagesReady) return;
+                String title = localPageAdapter.getPageTitle(position);
+                if (title == null || title.isEmpty()) return;
+                prefState().edit().putString(KEY_LOCAL_TAB, title).apply();
+            }
+        });
     }
 
     /**
@@ -582,13 +600,30 @@ public class BookStoreFragment extends Fragment {
 
     private void applyLocalPages(List<LocalStorePageAdapter.PageSpec> specs) {
         localPageAdapter.setPages(specs);
-        if (vpLocalStore.getCurrentItem() >= specs.size()) {
-            vpLocalStore.setCurrentItem(0, false);
+
+        // 恢复上次停留的主分类页：按标题对齐，后台增删主分类后仍能定位到同一页。
+        int restorePos = 0;
+        String savedTitle = prefState().getString(KEY_LOCAL_TAB, "");
+        if (savedTitle != null && !savedTitle.isEmpty()) {
+            for (int i = 0; i < specs.size(); i++) {
+                if (savedTitle.equals(specs.get(i).title)) {
+                    restorePos = i;
+                    break;
+                }
+            }
         }
+        if (restorePos >= specs.size()) restorePos = 0;
+        if (vpLocalStore.getCurrentItem() != restorePos) {
+            // 静默定位，不播放滑动动画
+            vpLocalStore.setCurrentItem(restorePos, false);
+        }
+
         if (localPagesReady) {
             // 已初始化过：分类可能有变动，强制刷新当前页
             localPageAdapter.requestReload(vpLocalStore.getCurrentItem());
         }
+        // 就绪标记放在 setCurrentItem 之后：首次恢复触发的 onPageSelected 不写盘，
+        // 之后用户的翻页/点 Tab 才会保存。
         localPagesReady = true;
     }
 
@@ -635,7 +670,14 @@ public class BookStoreFragment extends Fragment {
                                     }
                                 }
                             }
-                            currentSubCategory = (defaultCat == null) ? "" : defaultCat;
+                            // 优先恢复该书源上次停留的二级分类（按书源隔离）；否则用书源默认分类
+                            String savedSub = prefState().getString(extSubKey(), "");
+                            if (savedSub != null && !savedSub.isEmpty()
+                                    && subCategoryList.contains(savedSub)) {
+                                currentSubCategory = savedSub;
+                            } else {
+                                currentSubCategory = (defaultCat == null) ? "" : defaultCat;
+                            }
                             hsvSubCategory.setVisibility(
                                     subCategoryList.isEmpty() ? View.GONE : View.VISIBLE);
                         } else {
@@ -693,6 +735,8 @@ public class BookStoreFragment extends Fragment {
             tv.setOnClickListener(v -> {
                 // 每个 Tab 都是书源的真实分类名，直接作为查询分类（无 synthetic "全部" → 空串）
                 currentSubCategory = category;
+                // 记住该书源下停留的二级分类，重进/换肤后恢复
+                prefState().edit().putString(extSubKey(), category).apply();
                 refreshSubCategoryViews();
                 loadDataForCurrentMode();
             });
