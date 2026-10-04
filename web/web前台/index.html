@@ -621,6 +621,55 @@
 
     .store-page { flex: 0 0 100%; min-width: 0; }
 
+    /* 书城列表行：所有书卡片高度统一（简介单行截断 + 固定最小高度） */
+    .store-book-row {
+      align-items: flex-start;
+      min-height: 96px;
+    }
+
+    .store-book-row .book-row-cover { align-self: center; }
+
+    /* 标题/副标题单行省略，避免长书名把行撑高 */
+    .store-book-row .book-row-title {
+      display: block;
+      color: inherit;
+      text-decoration: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .store-book-row .book-row-info {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 简介最多 2 行，超出省略（-webkit-line-clamp 兼容 Chrome/Safari/Edge） */
+    .store-book-row .book-row-desc {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-top: 6px;
+      line-height: 1.55;
+      color: var(--ink-secondary);
+      min-height: calc(1.55em * 2); /* 简介为空/仅一行时也保留两行高度，保证所有卡片等高 */
+    }
+
+    .store-book-row .book-row-tags {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: nowrap;
+      overflow: hidden;
+    }
+
+    .store-book-row .book-row-rating {
+      align-self: center;
+      min-width: 84px;
+    }
+
     /* Rank list modern */
     .rank-list { display: flex; flex-direction: column; gap: 4px; }
 
@@ -1727,6 +1776,9 @@
       .book-row { grid-template-columns: 50px 1fr; }
       .book-row-rating { display: none; }
       .book-row-cover { width: 50px; height: 70px; }
+      /* 书城行在窄屏下简介收成 1 行，保持卡片紧凑等高 */
+      .store-book-row { min-height: 0; }
+      .store-book-row .book-row-desc { -webkit-line-clamp: 1; min-height: 0; }
     }
 
     /* ===== 状态展示：空 / 错误 / 加载 ===== */
@@ -2791,16 +2843,16 @@
         name: 'BookCardRow',
         props: { book: { type: Object, required: true } },
         template: [
-          '<div class="book-row">',
+          '<div class="book-row store-book-row">',
           '  <router-link :to="\'/book/\' + book.id" class="book-row-cover" :style="{ background: gradientFor(book.title) }">',
           '    <img v-if="book.cover" class="cover-img" :src="coverUrl(book.cover)" :alt="book.title" @error="hideImg">',
           '    <span class="cover-layer">{{ book.title[0] }}</span>',
           '  </router-link>',
           '  <div class="book-row-meta">',
-          '    <router-link :to="\'/book/\' + book.id" style="text-decoration: none; color: inherit;"><h4>{{ book.title }}</h4></router-link>',
-          '    <p>{{ book.author }} · {{ book.words }} · {{ book.chapterCount }} 章 · {{ book.categoryLabel }}</p>',
-          '    <p style="margin-top: 6px; line-height: 1.55; color: var(--ink-secondary);">{{ book.desc }}</p>',
-          '    <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">',
+          '    <router-link :to="\'/book/\' + book.id" class="book-row-title"><h4>{{ book.title }}</h4></router-link>',
+          '    <p class="book-row-info">{{ book.author }} · {{ book.words }} · {{ book.chapterCount }} 章 · {{ book.categoryLabel }}</p>',
+          '    <p class="book-row-desc">{{ book.desc || "暂无简介" }}</p>',
+          '    <div class="book-row-tags">',
           '      <span class="tag">{{ book.statusText }}</span>',
           '      <span class="tag">{{ book.viewCount }} 阅读</span>',
           '      <span class="tag">{{ book.likeCount }} 点赞</span>',
