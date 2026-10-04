@@ -32,32 +32,20 @@
         app:frostTint="@color/nav_frost_tint"
         app:frostBaseColor="@color/nav_frost_base"
         app:frostSheen="@color/nav_frost_sheen"
-        app:frostBlurRadius="24dp"
-        app:frostDownscale="3"
+        app:frostBlurRadius="18dp"
+        app:frostDownscale="6"
         app:frostNoiseAlpha="0"
         app:frostEnabled="true"
         app:frostCornerRadius="28dp">
 
-        <!-- 四个 tab：书架 / 书城 / 讨论 / 我的
-             未选中：图标与文字均为黑色；选中：白色图标文字 + 主题色胶囊背景 -->
-        <com.google.android.material.bottomnavigation.BottomNavigationView
+        <!-- 四个 tab：书架 / 书城 / 分类 / 我的
+             未选中只显示图标；选中显示图标+文字并垫主题色胶囊，切换时槽位互相让位 -->
+        <com.example.myapplication.widget.YieldBottomNav
             android:id="@+id/bottom_navigation"
             android:layout_width="match_parent"
             android:layout_height="60dp"
-            android:background="@null"
-            app:backgroundTint="@android:color/transparent"
-            app:menu="@menu/menu_bottom_nav"
-            app:labelVisibilityMode="labeled"
-            app:itemIconTint="@color/nav_item_color"
-            app:itemTextColor="@color/nav_item_text_color"
-            app:itemIconSize="18dp"
-            app:itemTextAppearanceActive="@style/NavTextAppearance"
-            app:itemTextAppearanceInactive="@style/NavTextAppearance"
-            app:itemHorizontalTranslationEnabled="false"
-            app:itemBackground="@drawable/nav_item_pill_bg"
-            app:itemActiveIndicatorStyle="@null"
-            app:itemRippleColor="@null"
-            app:elevation="0dp" />
+            app:yieldMenu="@menu/menu_bottom_nav"
+            app:yieldCornerRadius="28dp" />
 
     </com.example.myapplication.widget.FrostedNavCardView>
 

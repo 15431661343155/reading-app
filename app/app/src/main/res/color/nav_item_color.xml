@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 底部导航图标：选中白色（叠在主题色胶囊背景上），未选中黑色 -->
-    <item android:color="@color/nav_item_selected" android:state_checked="true" />
-    <item android:color="@color/nav_item_normal" />
-</selector>

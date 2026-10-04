@@ -81,4 +81,12 @@
         <!-- 奔跑插画的边长（默认 160dp；放在窄栏里时可调小） -->
         <attr name="lvGifSize" format="dimension" />
     </declare-styleable>
+
+    <!-- 让位式底部导航 YieldBottomNav -->
+    <declare-styleable name="YieldBottomNav">
+        <!-- tab 定义来源，沿用 menu 资源（android:id / android:title / android:icon） -->
+        <attr name="yieldMenu" format="reference" />
+        <!-- 宿主卡片容器的圆角：胶囊要按它算首尾槽位的横向余量，别越过圆角 -->
+        <attr name="yieldCornerRadius" format="dimension" />
+    </declare-styleable>
 </resources>

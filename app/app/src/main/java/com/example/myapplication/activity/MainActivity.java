@@ -20,15 +20,9 @@ import com.example.myapplication.utils.ExternalPrefs;
 import com.example.myapplication.utils.ExternalSyncManager;
 import com.example.myapplication.utils.ShelfPrefetch;
 import com.example.myapplication.utils.SystemBarInsets;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.example.myapplication.widget.YieldBottomNav;
 
-import java.lang.reflect.Field;
-
-import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.animation.AccelerateInterpolator;
-import android.view.animation.OvershootInterpolator;
 
 public class MainActivity extends BaseActivity {
 
@@ -49,7 +43,7 @@ public class MainActivity extends BaseActivity {
     private long lastBookstoreTapTime = 0;
 
     private Fragment currentFragment;
-    private BottomNavigationView bottomNavigationView;
+    private YieldBottomNav bottomNavigationView;
     private int currentTabIndex = TAB_BOOKSHELF;
 
     public static MainActivity instance;
@@ -138,8 +132,6 @@ public class MainActivity extends BaseActivity {
         }
 
         bottomNavigationView = findViewById(R.id.bottom_navigation);
-        // 底部避让已由根布局统一负责，关掉 Material 自己那份，否则叠加后导航栏内容塌陷
-        SystemBarInsets.ignoreNavigationBarInset(bottomNavigationView);
 
         //重建时从FragmentManager获取
         if (savedInstanceState != null) {
@@ -154,78 +146,43 @@ public class MainActivity extends BaseActivity {
             currentFragment = fragmentForIndex(currentTabIndex);
         }
 
-        //切换Fragment
-        bottomNavigationView.setOnItemSelectedListener(item -> {
-            int id = item.getItemId();
-            lastSelectedItemId = id;
-
-            if (id == R.id.nav_bookshelf) {
-                switchFragment(getBookShelfFragment(), "BOOKSHELF", TAB_BOOKSHELF);
-                return true;
-            } else if (id == R.id.nav_bookstore) {
-                switchFragment(getStoreFragment(), "STORE", TAB_BOOKSTORE);
-                return true;
-            } else if (id == R.id.nav_category) {
-                switchFragment(getCategoryFragment(), "CATEGORY", TAB_CATEGORY);
-                return true;
-            } else if (id == R.id.nav_mine) {
-                switchFragment(getMineFragment(), "MINE", TAB_MINE);
-                return true;
-            }
-            return false;
-        });
-
-        // 书城 tab 双击：刷新界面 + 列表回到顶部（仅在已选中书城页、再次点击时触发）
-        bottomNavigationView.setOnNavigationItemReselectedListener(item -> {
-            if (item.getItemId() != R.id.nav_bookstore) return;
-            long now = System.currentTimeMillis();
-            if (now - lastBookstoreTapTime <= BOOKSTORE_DOUBLE_TAP_MS) {
-                // 双击命中：刷新并回到顶部
-                BookStoreFragment f = getStoreFragment();
-                if (f != null) {
-                    f.onDoubleTapStore();
+        //切换Fragment（控件回调同步发出，首帧即带上正确页面）
+        bottomNavigationView.setOnTabSelectedListener(new YieldBottomNav.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(int itemId) {
+                lastSelectedItemId = itemId;
+                if (itemId == R.id.nav_bookshelf) {
+                    switchFragment(getBookShelfFragment(), "BOOKSHELF", TAB_BOOKSHELF);
+                } else if (itemId == R.id.nav_bookstore) {
+                    switchFragment(getStoreFragment(), "STORE", TAB_BOOKSTORE);
+                } else if (itemId == R.id.nav_category) {
+                    switchFragment(getCategoryFragment(), "CATEGORY", TAB_CATEGORY);
+                } else if (itemId == R.id.nav_mine) {
+                    switchFragment(getMineFragment(), "MINE", TAB_MINE);
                 }
-                lastBookstoreTapTime = 0; // 消费后重置，避免三击误触发
-            } else {
-                lastBookstoreTapTime = now;
+            }
+
+            // 书城 tab 双击：刷新界面 + 列表回到顶部（仅在已选中书城页、再次点击时触发）
+            @Override
+            public void onTabReselected(int itemId) {
+                if (itemId != R.id.nav_bookstore) return;
+                long now = System.currentTimeMillis();
+                if (now - lastBookstoreTapTime <= BOOKSTORE_DOUBLE_TAP_MS) {
+                    // 双击命中：刷新并回到顶部
+                    BookStoreFragment f = getStoreFragment();
+                    if (f != null) {
+                        f.onDoubleTapStore();
+                    }
+                    lastBookstoreTapTime = 0; // 消费后重置，避免三击误触发
+                } else {
+                    lastBookstoreTapTime = now;
+                }
             }
         });
 
-        // 恢复最后选中的tab（仅同步导航栏的选中态，未必会触发 listener）
+        // 恢复最后停留的 tab：控件首次落选中态不播让位动画，直接同步回调切页面
         bottomNavigationView.setSelectedItemId(lastSelectedItemId);
-
-        // 兜底：部分机型 setSelectedItemId 的选中回调是异步 post 的，
-        // 若 onCreate 结束时片段尚未提交，这里直接同步提交书架片段，
-        // 保证冷启动首帧即包含完整书架视图（数据已由开屏预取就绪），
-        // 否则首帧会露出空容器（窗口底色）再闪成书架
-        if (currentFragment == null) {
-            switchFragment(getBookShelfFragment(), "BOOKSHELF", TAB_BOOKSHELF);
-        }
         getSupportFragmentManager().executePendingTransactions();
-
-        // 导航 item 点击反馈：按下缩到 0.92、松手弹性回弹（无波纹，波纹已在布局中置 @null）
-        setupNavItemPressFeedback();
-
-        // 消除选中/未选中文字的“标签缩放过渡”：强制每个 item 的 scale 因子为 1，
-        // 配合 active/inactive 同一份 NavTextAppearance，使切换一步到位、不再“先变色后变粗”。
-        bottomNavigationView.post(this::normalizeNavLabelScale);
-
-        // 兜底：确保首屏 fragment 一定被加载。
-        // 部分 Material 版本下 setSelectedItemId 对"已选中项"不会触发 OnNavigationItemSelectedListener，
-        // 导致 fragment_container 一直为空——首屏只剩底部导航栏、磨砂栏也因背后无内容显得异常；
-        // 切到别的 tab 选中态变化后才正常。这里在 currentFragment 为空时手动加载一次首屏。
-        if (currentFragment == null) {
-            int initIndex = tabIndex(lastSelectedItemId);
-            Fragment initFrag;
-            String initTag;
-            switch (initIndex) {
-                case TAB_BOOKSTORE: initFrag = getStoreFragment(); initTag = "STORE"; break;
-                case TAB_CATEGORY: initFrag = getCategoryFragment(); initTag = "CATEGORY"; break;
-                case TAB_MINE: initFrag = getMineFragment(); initTag = "MINE"; break;
-                default: initFrag = getBookShelfFragment(); initTag = "BOOKSHELF";
-            }
-            switchFragment(initFrag, initTag, initIndex);
-        }
 
         // 进入APP后后台检查更新（延迟2秒，不影响其他功能）。
         // 只在冷启动排队：换肤/日夜会在后台重建主页，每次重建都排一遍就会凭空多弹一次更新框；
@@ -380,83 +337,14 @@ public class MainActivity extends BaseActivity {
 
     /**
      * 切到底部导航的指定 tab（供其它页面 / 空状态跳转用）。
-     * 同时记住 lastSelectedItemId，避免重建后回到旧 tab。
+     * lastSelectedItemId 由选中回调统一记录，这里不重复维护。
      */
     public void switchToTab(int itemId) {
-        lastSelectedItemId = itemId;
-        bottomNavigationView.post(() -> bottomNavigationView.setSelectedItemId(itemId));
+        bottomNavigationView.setSelectedItemId(itemId);
     }
 
     //修复 switchToMine
     public void switchToMine() {
         switchToTab(R.id.nav_mine);
-    }
-
-    /**
-     * 给每个底部导航 item 加“按下回弹”点击反馈：
-     *  - 手指按下：item 整体缩到 0.92（轻微下压手感）
-     *  - 手指松开/移出：用 OvershootInterpolator 弹性回弹到 1.0（带轻微过冲）
-     * 波纹已在布局 itemRippleColor=@null 中去掉；此处 TouchListener 返回 false，不消费事件，
-     * 因此 BottomNavigationView 的选中逻辑（含书城双击检测）不受影响。
-     */
-    private void setupNavItemPressFeedback() {
-        if (bottomNavigationView.getChildCount() == 0) return;
-        View menuView = bottomNavigationView.getChildAt(0); // BottomNavigationMenuView
-        if (!(menuView instanceof ViewGroup)) return;
-        ViewGroup menu = (ViewGroup) menuView;
-        for (int i = 0; i < menu.getChildCount(); i++) {
-            View itemView = menu.getChildAt(i);
-            itemView.setOnTouchListener(new View.OnTouchListener() {
-                @Override
-                public boolean onTouch(View v, MotionEvent event) {
-                    switch (event.getAction()) {
-                        case MotionEvent.ACTION_DOWN:
-                            v.animate().cancel();
-                            v.animate().scaleX(0.92f).scaleY(0.92f)
-                                    .setDuration(60).setInterpolator(new AccelerateInterpolator()).start();
-                            break;
-                        case MotionEvent.ACTION_UP:
-                        case MotionEvent.ACTION_CANCEL:
-                            v.animate().cancel();
-                            v.animate().scaleX(1f).scaleY(1f)
-                                    .setDuration(260).setInterpolator(new OvershootInterpolator(2.2f)).start();
-                            break;
-                        default:
-                            break;
-                    }
-                    return false; // 不消费，保证选中/双击逻辑正常
-                }
-            });
-        }
-    }
-
-    /**
-     * 强制底部导航每个 item 的标签缩放因子为 1，消除切换选中时的“标签缩放过渡”动画。
-     * Material 1.11.0 的 NavigationBarItemView 内部用 smallLabel/largeLabel 两个独立 TextView，
-     * 并以 scaleUpFactor/scaleDownFactor（= 选中/未选中字号之比）做缩放过渡。若 active 与 inactive
-     * 的字号/字重不一致（Material 默认选中态加粗），切换时会先变色、再“变粗/变细”，产生分步卡顿感。
-     * 这里把缩放因子锁死为 1，配合 styles.xml 中 active/inactive 同一份 NavTextAppearance，
-     * 使选中切换“一步到位”。纯反射实现，失败不影响主流程。
-     */
-    private void normalizeNavLabelScale() {
-        try {
-            View menuView = bottomNavigationView.getChildAt(0);
-            if (!(menuView instanceof ViewGroup)) return;
-            Class<?> itemClass = Class.forName("com.google.android.material.navigation.NavigationBarItemView");
-            Field scaleUp = itemClass.getDeclaredField("scaleUpFactor");
-            Field scaleDown = itemClass.getDeclaredField("scaleDownFactor");
-            scaleUp.setAccessible(true);
-            scaleDown.setAccessible(true);
-            ViewGroup menu = (ViewGroup) menuView;
-            for (int i = 0; i < menu.getChildCount(); i++) {
-                View child = menu.getChildAt(i);
-                if (itemClass.isInstance(child)) {
-                    scaleUp.setFloat(child, 1.0f);
-                    scaleDown.setFloat(child, 1.0f);
-                }
-            }
-        } catch (Exception ignored) {
-            // 反射失败不阻断：恒定字重已通过样式保证，最坏只是保留原本的轻微缩放
-        }
     }
 }

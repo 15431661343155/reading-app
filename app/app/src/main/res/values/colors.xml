@@ -62,9 +62,9 @@
     <color name="nav_item_ripple">#1F000000</color>        <!-- 按压缩微水波纹 -->
 
     <!-- ===== 底部导航 · 磨砂玻璃 ===== -->
-    <color name="nav_frost_tint">#33FFFFFF</color>     <!-- 磨砂叠加：20% 白，去颗粒+更强模糊后更透 -->
+    <color name="nav_frost_tint">#99FFFFFF</color>     <!-- 磨砂叠加：60% 白，压住透出内容的拖影 -->
     <color name="nav_frost_base">#80F2F2F7</color>     <!-- 磨砂兜底底色：50% 浅灰 -->
-    <color name="nav_frost_sheen">#1AFFFFFF</color>    <!-- 顶部玻璃高光：弱 -->
+    <color name="nav_frost_sheen">#1FFFFFFF</color>    <!-- 顶部玻璃高光：弱 -->
     <color name="nav_frost_stroke">#33FFFFFF</color>    <!-- 玻璃描边：20% 白 -->
 
     <!-- iOS 夜间模式 -->

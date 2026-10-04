@@ -23,11 +23,11 @@ import java.util.Random;
 
 /**
  * 实时磨砂玻璃容器：采样背后指定内容（frostBackdrop）做模糊，叠加 tint / sheen / 颗粒，
- * 形成 iOS 风格的毛玻璃底栏。磨砂层每帧在 OnPreDraw 时重采样背后内容（节流 33ms）。
+ * 形成 iOS 风格的毛玻璃底栏。
  *
- * <p>切换 tab 的淡入淡出 + 横移动画期间，背后内容剧烈变化会导致模糊亮度局部起伏，
- * 表现为一条近白长条闪过。{@link #setCaptureFrozen(boolean)} 可在动画期间冻结采样、
- * 动画结束后解冻，消除该闪条。
+ * <p>采样挂在 OnPreDraw 上、节流 16ms：背后内容只有在视图树重绘时才会变化，所以这里
+ * 只在「模糊结果和上一帧不同」时才 invalidate 自己，不主动驱动重绘循环。
+ * 模糊用 3 趟可分离盒式，等效高斯（单趟盒式是平顶核，滑动时会留下可辨的方块残像）。
  *
  * <pre>
  * app:frostBackdrop      背景采样源：采集该 View 位于本控件下方的区域做模糊
@@ -44,7 +44,11 @@ import java.util.Random;
  */
 public class FrostedNavCardView extends MaterialCardView {
 
-    private static final long MIN_CAPTURE_INTERVAL_MS = 33L;
+    private static final long MIN_CAPTURE_INTERVAL_MS = 16L;
+    /** 盒式模糊趟数：3 趟即接近高斯，残像不再有平顶硬边。 */
+    private static final int BLUR_PASSES = 3;
+    /** 变化探测网格边数：16×16 个采样点，够密到不会漏掉任何肉眼可见的背景变化。 */
+    private static final int SIGNATURE_GRID = 16;
     private static final int NOISE_SIZE = 128;
 
     private final Path mClipPath = new Path();
@@ -63,8 +67,7 @@ public class FrostedNavCardView extends MaterialCardView {
     private Canvas mSrcCanvas;
     private int[] mBlurA;
     private int[] mBlurB;
-    private int[] mPrevPixels;
-    private int[] mCurrPixels;
+    private int[] mSignature = new int[SIGNATURE_GRID * SIGNATURE_GRID];
     private Bitmap mNoiseBitmap;
 
     private int mBackdropId;
@@ -80,7 +83,6 @@ public class FrostedNavCardView extends MaterialCardView {
     private long mLastCaptureAt = 0;
     private ViewTreeObserver.OnPreDrawListener mPreDrawListener;
     private boolean mDebugLogged = false;
-    private boolean mCaptureFrozen = false;
 
     public FrostedNavCardView(@NonNull Context context) {
         this(context, null);
@@ -158,15 +160,12 @@ public class FrostedNavCardView extends MaterialCardView {
             int n = sw * sh;
             mBlurA = new int[n];
             mBlurB = new int[n];
-            mPrevPixels = new int[n];
-            mCurrPixels = new int[n];
+            // 尺寸变了等于一切重来：清零签名，保证下一帧一定刷新一次磨砂
+            mSignature = new int[SIGNATURE_GRID * SIGNATURE_GRID];
         }
     }
 
     private boolean onBeforeDraw() {
-        if (mCaptureFrozen) {
-            return true;
-        }
         if (!mFrostEnabled) {
             return true;
         }
@@ -208,8 +207,31 @@ public class FrostedNavCardView extends MaterialCardView {
 
         int radius = Math.max(1, (int) (mBlurRadiusPx * scale));
         fastBlur(mSrcBitmap, mBlurBitmap, mBlurA, mBlurB, radius);
-        invalidate();
+        if (backdropChanged()) {
+            // 只有背景真的变了才重绘自己；不无条件 invalidate，否则会自驱一个常驻重绘循环
+            invalidate();
+        }
         return true;
+    }
+
+    /** 16×16 个采样点比对：判断这次模糊结果和上一次是否一致。 */
+    private boolean backdropChanged() {
+        int w = mBlurBitmap.getWidth();
+        int h = mBlurBitmap.getHeight();
+        boolean changed = false;
+        int idx = 0;
+        for (int gy = 0; gy < SIGNATURE_GRID; gy++) {
+            for (int gx = 0; gx < SIGNATURE_GRID; gx++) {
+                int p = mBlurBitmap.getPixel((gx * 2 + 1) * w / (SIGNATURE_GRID * 2),
+                        (gy * 2 + 1) * h / (SIGNATURE_GRID * 2));
+                if (mSignature[idx] != p) {
+                    changed = true;
+                    mSignature[idx] = p;
+                }
+                idx++;
+            }
+        }
+        return changed;
     }
 
     @Override
@@ -279,8 +301,6 @@ public class FrostedNavCardView extends MaterialCardView {
         mSrcCanvas = null;
         mBlurA = null;
         mBlurB = null;
-        mPrevPixels = null;
-        mCurrPixels = null;
     }
 
     private static Bitmap createNoiseBitmap(int size) {
@@ -296,13 +316,15 @@ public class FrostedNavCardView extends MaterialCardView {
         return bm;
     }
 
-    /** 可分离盒式模糊：先水平后垂直各一趟，结果写回 dst。 */
+    /** 可分离盒式模糊：横竖各一趟算一趟，共 {@link #BLUR_PASSES} 趟，叠加后逼近高斯核。 */
     private static void fastBlur(Bitmap src, Bitmap dst, int[] a, int[] b, int radius) {
         int w = src.getWidth();
         int h = src.getHeight();
         src.getPixels(a, 0, w, 0, 0, w, h);
-        boxPass(a, b, w, h, radius, true);
-        boxPass(b, a, w, h, radius, false);
+        for (int i = 0; i < BLUR_PASSES; i++) {
+            boxPass(a, b, w, h, radius, true);
+            boxPass(b, a, w, h, radius, false);
+        }
         dst.setPixels(a, 0, w, 0, 0, w, h);
     }
 
@@ -382,14 +404,5 @@ public class FrostedNavCardView extends MaterialCardView {
     public void refreshFrost() {
         mLastCaptureAt = 0;
         invalidate();
-    }
-
-    public void setCaptureFrozen(boolean frozen) {
-        mCaptureFrozen = frozen;
-        if (!frozen) {
-            // 解冻后立即允许重采样（绕过节流），动画结束瞬间刷新一帧真实模糊
-            mLastCaptureAt = 0;
-            invalidate();
-        }
     }
 }

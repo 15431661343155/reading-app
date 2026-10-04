@@ -146,18 +146,6 @@ public final class SystemBarInsets {
         setLightNavigationIcons(sheet, !isDark(surfaceColor));
     }
 
-    /**
-     * 关掉 Material {@code BottomNavigationView} 自带的系统栏避让：它在构造函数里就注册了监听，
-     * 把导航条 inset 加成自己的 paddingBottom。页面已经统一避让过时，两份叠加会把 60dp 的栏
-     * 压成只剩图标高度——图标溢出、标签被挤没。
-     */
-    public static void ignoreNavigationBarInset(View view) {
-        if (view == null) {
-            return;
-        }
-        ViewCompat.setOnApplyWindowInsetsListener(view, (v, insets) -> insets);
-    }
-
     /** 相对亮度低于 0.5 视为深底：系统栏图标该用浅色。与阅读器染色同一套算法。 */
     public static boolean isDark(int color) {
         return luminance(color) < 0.5;
