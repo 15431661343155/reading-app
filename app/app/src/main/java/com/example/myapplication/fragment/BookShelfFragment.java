@@ -52,6 +52,7 @@ import com.example.myapplication.utils.Hint;
 import com.example.myapplication.utils.ReadTimeText;
 import com.example.myapplication.utils.ShelfPinStore;
 import com.example.myapplication.utils.ShelfPrefetch;
+import com.example.myapplication.utils.SystemBarInsets;
 import com.example.myapplication.widget.LoadingView;
 import com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView;
 
@@ -129,11 +130,7 @@ public class BookShelfFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_shelf, container, false);
 
-        // 不再手动加状态栏padding：activity_main.xml 的 fitsSystemWindows + setDecorFits(true)
-        // 已经让系统自动避让状态栏和导航栏，双重叠加会导致顶部大空白
-
-        // 设置状态栏图标颜色为深色（因为书架页面背景是浅色）
-        updateStatusBarColor();
+        applySystemBars(view);
 
         rvShelf = view.findViewById(R.id.rv_shelf);
         swipeRefresh = view.findViewById(R.id.swipe_refresh);
@@ -303,15 +300,14 @@ public class BookShelfFragment extends Fragment {
     }
 
     /**
-     * 更新状态栏图标颜色（浅色背景用深色图标）
+     * 系统栏出血：页底铺到屏幕顶（paddingTop 叠加状态栏 inset，背景不被 padding 裁剪），
+     * 状态栏图标深浅按页底实际亮度判定。切页时顶部颜色随页面一起滑动，不再有独立色带。
      */
-    private void updateStatusBarColor() {
-        if (getActivity() == null) return;
-        // 状态栏背景与页面顶部颜色统一，消除割裂
-        getActivity().getWindow().setStatusBarColor(
-            ThemeAttrs.color(requireActivity(), R.attr.appPageBg, 0));
-        // 图标明暗交由宿主按当前日夜配置复位（夜间深色底要用浅色图标）
-        ((BaseActivity) getActivity()).applyStatusBarIcons();
+    private void applySystemBars(View view) {
+        if (getActivity() == null || view == null) return;
+        SystemBarInsets.bleedTop(view);
+        int pageBg = ThemeAttrs.color(requireActivity(), R.attr.appPageBg, 0);
+        ((BaseActivity) getActivity()).applyBarIcons(pageBg, pageBg);
     }
 
     /** 外站数据拉取完成后刷新书架（登录后 pullAll 是异步的，此前的加载会读不到数据）。 */
@@ -327,7 +323,7 @@ public class BookShelfFragment extends Fragment {
         if (getContext() != null) {
             ReaderWebViewPool.preload(getContext().getApplicationContext());
         }
-        updateStatusBarColor();
+        applySystemBars(getView());
         loadBookshelf();
         loadReadTime();
         if (getContext() != null) {
@@ -347,7 +343,7 @@ public class BookShelfFragment extends Fragment {
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
         if (!hidden) {
-            updateStatusBarColor();
+            applySystemBars(getView());
         }
     }
 

@@ -55,7 +55,6 @@ public class FeedbackActivity extends BaseActivity {
      */
     private void setupToolbar() {
         Toolbar toolbar = findViewById(R.id.toolbar_back);
-        // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
         toolbar.setNavigationOnClickListener(v -> finish());
     }

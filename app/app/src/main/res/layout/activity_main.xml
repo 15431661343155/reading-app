@@ -4,16 +4,18 @@
     android:id="@+id/root_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/appPageBg"
-    android:fitsSystemWindows="true">
+    android:background="?attr/appPageBg">
 
-    <!-- 内容区域：全屏铺满（顶部避开状态栏、底部避开系统导航栏由窗口装饰处理） -->
+    <!-- 内容区域：全屏铺满。系统栏出血下根布局不再 fitsSystemWindows：
+         顶部 inset 由各标签页自己决定落在哪一层（「我的」英雄区要铺到屏幕顶），
+         底部 inset 由 MainActivity#onCreate 加到本容器与下方磨砂卡上。 -->
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- 底部导航栏（实时磨砂玻璃：采样背后内容做模糊 + 半透明叠加 + 颗粒 + 高光） -->
+    <!-- 底部导航栏（实时磨砂玻璃：采样背后内容做模糊 + 半透明叠加 + 颗粒 + 高光）
+         系统导航条的避让由根布局 paddingBottom 统一负责，卡片本身不动布局 -->
     <com.example.myapplication.widget.FrostedNavCardView
         android:id="@+id/nav_card"
         android:layout_width="match_parent"
@@ -63,7 +65,9 @@
          冷启动时盖住整个主页，展示 ≥2.5s 且书架数据就绪后淡出揭示书架。
          与 MainActivity 窗口背景同图，替代原独立 SplashActivity，
          彻底消除系统转场/starting window 造成的白屏与「第二张开屏图」。
-         默认 GONE：仅冷启动（savedInstanceState==null）由代码置 VISIBLE。 ═══ -->
+         默认 GONE：仅冷启动（savedInstanceState==null）由代码置 VISIBLE。
+         系统栏出血后它连状态栏后面一起盖住，开屏期间不再露出窗口色带；
+         插画只有日间那一版奶油底，所以浮层期间图标一律压成深色，见 MainActivity。 ═══ -->
     <FrameLayout
         android:id="@+id/splash_overlay"
         android:layout_width="match_parent"

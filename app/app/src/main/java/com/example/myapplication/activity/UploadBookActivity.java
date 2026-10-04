@@ -46,7 +46,6 @@ public class UploadBookActivity extends BaseActivity {
         initView();
 
         Toolbar toolbar = findViewById(R.id.toolbar_back);
-        // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
         // 返回点击事件
         toolbar.setNavigationOnClickListener(v -> finish());

@@ -152,6 +152,12 @@ public class LoginActivity extends BaseActivity {
         return false;
     }
 
+    /** 登录页是整幅品牌插画 + 紫色玻璃卡，背景图自己铺到屏幕顶，图标深浅本页写死，不走统一出血。 */
+    @Override
+    protected boolean edgeToEdge() {
+        return false;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // 登录页是品牌插画：整幅浅色背景图 login_bg + 紫色玻璃卡片，无夜间版本。

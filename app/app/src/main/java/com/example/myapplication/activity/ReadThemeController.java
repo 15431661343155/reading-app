@@ -173,14 +173,19 @@ class ReadThemeController {
      */
     void applyChromeTheme() {
         updateChromePalette();
-        applyChromeColorsWith(sChrome1, sChrome2, sLine, sText1, sText2, sNavText, sAccent, sIsDark);
+        applyChromeColorsWith(sChrome1, sChrome2, sLine,
+                sText1, sText2, sNavText, sAccent, sIsDark);
         // 已显示的浮窗（目录 / 设置 / 更多 / 背景 / 字体）实时跟随
         themeShowingPopups();
     }
 
     /**
-     * 用给定的一组配色刷新上下导航栏、图标、文字与状态栏图标明暗。
-     * 供「平滑色彩渐变」过渡逐帧调用（传入插值后的中间色）。
+     * 用给定的一组配色刷新系统导航条、上下导航栏、图标、文字与状态栏图标明暗。
+     *
+     * <p>系统导航条必须显式染色：涂透明的话，三键导航机型会自己兜一条近白/近灰的底，
+     * 换任何纸张都不动（羊皮纸上尤其割裂）。色带取本帧面板底色 chrome1——这条带只在阅读器
+     * 上下导航栏滑出时可见（见 {@code ReadActivity#showSystemBars}），跟底栏同色才接得上。
+     * 图标深浅按这条色带的实色判定，日间⇄夜间的 1000ms 补间里才不会出现在同色底上看不清。
      */
     private void applyChromeColorsWith(int chrome1, int chrome2, int line,
                                        int text1, int text2, int navText, int accent, boolean dark) {
@@ -189,9 +194,14 @@ class ReadThemeController {
         int flags = decorView.getSystemUiVisibility();
         if (dark) {
             flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         } else {
             flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        }
+        // 系统导航条：色带取本帧面板底色，图标深浅按这条色带的实色判，不按目标档位判
+        activity.getWindow().setNavigationBarColor(chrome1);
+        if (relativeLuminance(chrome1) < DARK_LUM_THRESHOLD) {
+            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        } else {
             flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         }
         decorView.setSystemUiVisibility(flags);

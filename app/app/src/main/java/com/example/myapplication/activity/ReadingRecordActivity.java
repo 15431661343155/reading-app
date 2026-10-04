@@ -53,15 +53,11 @@ public class ReadingRecordActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_reading_record);
 
-        // 不再手动加状态栏padding：setDecorFits(true) 已让系统自动避让
+        // 头部底色即页底；系统栏出血与图标深浅由 BaseActivity 统一接管（头部认 layout_header）
         View headerLayout = findViewById(R.id.layout_header);
         if (headerLayout != null) {
             headerLayout.setBackgroundColor(ThemeAttrs.color(this, R.attr.appPageBg, 0));
         }
-
-        // 状态栏颜色与页面顶部统一
-        getWindow().setStatusBarColor(ThemeAttrs.color(this, R.attr.appPageBg, 0));
-        applyStatusBarIcons();
 
         recyclerView = findViewById(R.id.recycler_view);
         tvEmpty = findViewById(R.id.tv_empty);

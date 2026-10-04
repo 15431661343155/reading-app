@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.myapplication.R;
+import com.example.myapplication.utils.SystemBarInsets;
 import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.ThemeManager;
 import com.example.myapplication.adapter.BookAdapter;
@@ -100,15 +101,16 @@ public class SearchActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_search);
 
-        // 状态栏与搜索页顶部同色；图标明暗跟随日夜配置（本页不继承 BaseActivity，故就地处理）
-        getWindow().setStatusBarColor(ThemeAttrs.color(this, R.attr.appSurface, 0));
-        int barFlags = getWindow().getDecorView().getSystemUiVisibility();
-        if (ThemeManager.isNight(this)) {
-            barFlags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        } else {
-            barFlags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        }
-        getWindow().getDecorView().setSystemUiVisibility(barFlags);
+        // 系统栏出血（本页不继承 BaseActivity，故就地接）：搜索头部色带铺到状态栏底下，
+        // 列表按导航条 inset 避让，两根栏的图标深浅按页底实际亮度判定。
+        SystemBarInsets.enableEdgeToEdge(getWindow());
+        SystemBarInsets.extendHeader(findViewById(R.id.layout_search_header));
+        SystemBarInsets.bleedBottom(
+                ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0));
+        boolean lightBar = !SystemBarInsets.isDark(
+                ThemeAttrs.color(this, R.attr.appPageBg, 0));
+        SystemBarInsets.setLightStatusIcons(getWindow(), lightBar);
+        SystemBarInsets.setLightNavigationIcons(getWindow(), lightBar);
 
         bindViews();
         setupListeners();

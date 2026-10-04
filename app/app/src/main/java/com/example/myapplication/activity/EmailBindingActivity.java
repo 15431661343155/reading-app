@@ -39,7 +39,6 @@ public class EmailBindingActivity extends BaseActivity {
         setContentView(R.layout.activity_email_binding);
 
         Toolbar toolbar = findViewById(R.id.toolbar_back);
-        // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
         toolbar.setNavigationIcon(R.drawable.ic_back_black);
         toolbar.setNavigationOnClickListener(v -> finish());

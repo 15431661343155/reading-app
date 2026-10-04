@@ -14,8 +14,11 @@
 
         <!-- ================= 英雄区（蓝底） =================
              高度写死 216dp：统计卡从 y=170 起、高 92，腰部 = 170+46 = 216，
-             正好让蓝白交界线切在卡片中间（上半蓝、下半灰）。 -->
+             正好让蓝白交界线切在卡片中间（上半蓝、下半灰）。
+             MineFragment 会用 SystemBarInsets#extendHeader 把高度与 paddingTop 各加一个状态栏 inset，
+             让渐变从屏幕最顶端起笔，所以这里的 216dp 指的是状态栏以下那一段。 -->
         <FrameLayout
+            android:id="@+id/mine_hero"
             android:layout_width="match_parent"
             android:layout_height="216dp"
             android:background="@drawable/bg_mine_hero">

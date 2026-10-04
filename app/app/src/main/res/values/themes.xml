@@ -147,12 +147,17 @@
     <style name="Theme.MyApp.Main" parent="Theme.MyApp">
         <item name="android:windowBackground">@color/splash_bg</item>
         <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
+        <!-- 首帧（系统启动屏）也与开屏底同色：继承的 appSurface 白会在此刻露成一条顶带 -->
+        <item name="android:statusBarColor">@color/splash_bg</item>
+        <item name="android:navigationBarColor">@color/splash_bg</item>
     </style>
 
     <!-- 宣纸档主页：窗口底换成宣纸开屏同色，避免冷启动闪出素白灰 -->
     <style name="Theme.MyApp.Main.Xuanzhi" parent="Theme.MyApp.Xuanzhi">
         <item name="android:windowBackground">@color/xz_splash_bg</item>
         <item name="android:windowSplashScreenBackground">@color/xz_splash_bg</item>
+        <item name="android:statusBarColor">@color/xz_splash_bg</item>
+        <item name="android:navigationBarColor">@color/xz_splash_bg</item>
     </style>
 
     <!-- ===== Toolbar 覆盖层：图标/文字跟随配色风格与日夜 ===== -->

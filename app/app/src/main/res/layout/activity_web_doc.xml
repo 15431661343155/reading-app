@@ -6,7 +6,9 @@
     android:background="?attr/appPageBg"
     android:orientation="vertical">
 
+    <!-- app_header：见 BaseActivity#onContentChanged，头部色带延伸到状态栏底下 -->
     <FrameLayout
+        android:id="@+id/app_header"
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:background="?attr/appPageBg">

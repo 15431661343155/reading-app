@@ -128,6 +128,12 @@
     <style name="CacheSheetStyle" parent="BottomDialogStyle">
         <item name="android:backgroundDimEnabled">false</item>
         <!--
+          非浮动窗口：浮动（Dialog 默认）的子窗口帧被 WM 按 fitTypes=NAVIGATION_BARS 压到导航条上方，
+          加 FLAG_LAYOUT_IN_SCREEN 也抬不动，抽屉底下会留一条没变暗的页面色带。
+          改成非浮动后窗口占满整屏，面板得以贴到物理底边，避让改由面板 paddingBottom 负责。
+        -->
+        <item name="android:windowIsFloating">false</item>
+        <!--
           窗口级滑动一并关掉：Window 动画移动的是整个窗口，遮罩 v_cache_dim 就住在
           窗口里，于是入场时阴影会跟着面板一起从底部推上来。面板由 MineFragment 自己做
           translationY 入场，遮罩只做原地 alpha 淡入，两者才互不牵连。

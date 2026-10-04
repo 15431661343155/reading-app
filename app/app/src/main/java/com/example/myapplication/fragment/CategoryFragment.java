@@ -23,6 +23,7 @@ import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.bean.ApiResponse;
 import com.example.myapplication.bean.CategoryTree;
 import com.example.myapplication.utils.ThemeAttrs;
+import com.example.myapplication.utils.SystemBarInsets;
 import com.example.myapplication.utils.Hint;
 import com.example.myapplication.widget.LoadingView;
 
@@ -74,8 +75,7 @@ public class CategoryFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_category, container, false);
 
-        // 不再手动加状态栏padding：activity_main.xml 的 fitsSystemWindows 已让系统自动避让
-        updateStatusBarColor();
+        applySystemBars(view);
 
         layoutMain = view.findViewById(R.id.layout_main);
         rvSub = view.findViewById(R.id.rv_sub);
@@ -130,10 +130,13 @@ public class CategoryFragment extends Fragment {
                 ? mains.get(selectedIndex).getName() : "";
 
         RetrofitClient.getApiService().getCategoryTree()
+                // 回调落到主线程时本页可能已被换肤/改配色重建掉线，视图与 context 都没了，
+                // 再往下 renderMains 会踩 requireContext() 抛 IllegalStateException。
                 .enqueue(new Callback<ApiResponse<CategoryTree>>() {
                     @Override
                     public void onResponse(Call<ApiResponse<CategoryTree>> c,
                                            Response<ApiResponse<CategoryTree>> r) {
+                        if (!isAdded()) return;
                         loading = false;
                         loaded = true;
                         lastLoadedAt = System.currentTimeMillis();
@@ -160,6 +163,7 @@ public class CategoryFragment extends Fragment {
 
                     @Override
                     public void onFailure(Call<ApiResponse<CategoryTree>> c, Throwable t) {
+                        if (!isAdded()) return;
                         loading = false;
                         loaded = true;
                         lastLoadedAt = System.currentTimeMillis();
@@ -350,19 +354,21 @@ public class CategoryFragment extends Fragment {
         }
     }
 
-    private void updateStatusBarColor() {
-        if (getActivity() == null) return;
-        // 状态栏背景与页面顶部颜色统一，消除割裂
-        getActivity().getWindow().setStatusBarColor(
-                ThemeAttrs.color(requireActivity(), R.attr.appPageBg, 0));
-        // 图标明暗交由宿主按当前日夜配置复位（夜间深色底要用浅色图标）
-        ((BaseActivity) getActivity()).applyStatusBarIcons();
+    /**
+     * 系统栏出血：页底铺到屏幕顶（paddingTop 叠加状态栏 inset，背景不被 padding 裁剪），
+     * 状态栏图标深浅按页底实际亮度判定。切页时顶部颜色随页面一起滑动，不再有独立色带。
+     */
+    private void applySystemBars(View view) {
+        if (getActivity() == null || view == null) return;
+        SystemBarInsets.bleedTop(view);
+        int pageBg = ThemeAttrs.color(requireActivity(), R.attr.appPageBg, 0);
+        ((BaseActivity) getActivity()).applyBarIcons(pageBg, pageBg);
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        updateStatusBarColor();
+        applySystemBars(getView());
         // 从分类书单页返回 / 首次进入：数据过期时刷新
         if (layoutMain != null) refreshIfStale();
     }
@@ -371,7 +377,7 @@ public class CategoryFragment extends Fragment {
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
         if (!hidden) {
-            updateStatusBarColor();
+            applySystemBars(getView());
             if (layoutMain != null) refreshIfStale();
         }
     }

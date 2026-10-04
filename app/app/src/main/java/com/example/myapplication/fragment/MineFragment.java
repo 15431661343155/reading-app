@@ -32,6 +32,7 @@ import androidx.fragment.app.Fragment;
 
 import com.example.myapplication.R;
 import com.example.myapplication.activity.AboutActivity;
+import com.example.myapplication.activity.BaseActivity;
 import com.example.myapplication.activity.FeedbackActivity;
 import com.example.myapplication.activity.MessageCenterActivity;
 import com.example.myapplication.activity.LoginActivity;
@@ -45,6 +46,7 @@ import com.example.myapplication.utils.CacheManager;
 import com.example.myapplication.utils.LoginHelper;
 import com.example.myapplication.utils.ProfileSync;
 import com.example.myapplication.utils.ReadTimeText;
+import com.example.myapplication.utils.SystemBarInsets;
 import com.example.myapplication.utils.ThemeAttrs;
 
 import java.io.File;
@@ -90,8 +92,7 @@ public class MineFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_mine, container, false);
 
-        // 不再手动加状态栏padding：activity_main.xml 的 fitsSystemWindows 已让系统自动避让
-        updateStatusBarColor();
+        applySystemBars(view);
 
         initView(view);
         sp = getActivity().getSharedPreferences("user_info", getActivity().MODE_PRIVATE);
@@ -148,25 +149,22 @@ public class MineFragment extends Fragment {
     }
 
     /**
-     * 状态栏与英雄区色带统一。
-     *
-     * <p>activity_main.xml 的根布局带 fitsSystemWindows=true，fragment 从状态栏下方才开始绘制，
-     * 英雄区色带铺不到状态栏后面；这里把状态栏染成渐变顶部的同色（?attr/appBandTop，
-     * 素白档是 #2E8FFF、宣纸档是檀褐），让两者连成一片、看不出断缝。
+     * 系统栏出血：让英雄区连渐变一起从屏幕最顶端起笔（高度与 paddingTop 各加一个状态栏 inset），
+     * 顶部不再有一条独立于页面的色带；状态栏图标深浅按色带顶色的实际亮度判定，
+     * 素白档的亮蓝、宣纸档的檀褐、夜间的墨玉都自动给浅色图标，不必再写死。
      */
-    private void updateStatusBarColor() {
-        if (getActivity() == null) return;
-        getActivity().getWindow().setStatusBarColor(
-                ThemeAttrs.color(getActivity(), R.attr.appBandTop, 0));
-        int flags = getActivity().getWindow().getDecorView().getSystemUiVisibility();
-        flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        getActivity().getWindow().getDecorView().setSystemUiVisibility(flags);
+    private void applySystemBars(View view) {
+        if (getActivity() == null || view == null) return;
+        SystemBarInsets.extendHeader(view.findViewById(R.id.mine_hero));
+        int bandTop = ThemeAttrs.color(requireActivity(), R.attr.appBandTop, 0);
+        int pageBg = ThemeAttrs.color(requireActivity(), R.attr.appPageBg, 0);
+        ((BaseActivity) getActivity()).applyBarIcons(bandTop, pageBg);
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        updateStatusBarColor();
+        applySystemBars(getView());
         loadUserProfile();   // 内部会拉起 loadReadingStats（含连续天数徽章）
         loadUnreadCount();
         loadCacheSize();
@@ -180,7 +178,7 @@ public class MineFragment extends Fragment {
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
         if (!hidden) {
-            updateStatusBarColor();
+            applySystemBars(getView());
         }
     }
 
@@ -264,8 +262,13 @@ public class MineFragment extends Fragment {
         sheet.setContentView(root);
         Window w = sheet.getWindow();
         if (w != null) {
+            // 窗口越过导航条：面板底色铺到屏幕物理底边，遮罩也随之盖满整屏，
+            // 否则三键导航机型上抽屉底下会留一条没变暗的页面色带。
+            SystemBarInsets.extendSheetWindow(w, ThemeAttrs.color(ctx, R.attr.appSurface, 0));
             w.setGravity(Gravity.BOTTOM);
-            w.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT);
+            // 高度必须是 MATCH_PARENT：WRAP_CONTENT 时窗口按「去掉系统栏的可用高」测量，
+            // 整扇窗口（含遮罩）会被顶到 210px 以下，状态栏底下那条没变暗。
+            w.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
             w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         }
         sheet.setCanceledOnTouchOutside(true);
@@ -273,6 +276,9 @@ public class MineFragment extends Fragment {
         cacheSheetRoot = root;
         cacheSheetDim = root.findViewById(R.id.v_cache_dim);
         cacheSheetPanel = root.findViewById(R.id.sheet_panel_clear);
+
+        // 导航条让位加在面板自身的 paddingBottom 上：表面贴底、内容上移（面板 22dp 底边距记在 tag 里，不累加）
+        SystemBarInsets.bleedBottom(cacheSheetPanel);
 
         // 顶部圆角裁切：面板自带 bg_sheet_top_rounded，但子视图会溢出圆角，需要 clipToOutline
         if (cacheSheetPanel != null) {

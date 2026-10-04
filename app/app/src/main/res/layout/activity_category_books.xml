@@ -7,8 +7,9 @@
     android:orientation="vertical"
     android:background="?attr/appPageBg">
 
-    <!-- 标题栏：返回 + 分类名 -->
+    <!-- 标题栏：返回 + 分类名。标成 app_header 让色带铺到状态栏底下，见 BaseActivity#onContentChanged -->
     <LinearLayout
+        android:id="@+id/app_header"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:orientation="horizontal"

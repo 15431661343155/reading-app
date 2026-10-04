@@ -58,6 +58,8 @@ import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.RoundedBitmapDrawable;
 import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import android.content.res.ColorStateList;
 import androidx.fragment.app.FragmentActivity;
@@ -298,6 +300,8 @@ public class ReadActivity extends BaseActivity {
     final Runnable hideNavRunnable = this::hideNavigation;
     private int statusBarHeight = 0;  // 状态栏高度
     private int bottomNavHeight = 0;  // 底部导航栏高度缓存（避免每次滑动都重新 measure）
+    private int navBarInsetPx = 0;    // 导航条真实占位，由 inset 分发记录；0 = 手势导航或还没收到分发
+    private boolean bottomNavInsetApplied = false;  // 导航条让位只加一次，重复加会逐次累加
     private static final long NAV_ANIM_MS = 250L;  // 上下导航栏滑入/滑出时长
 
     // ========== 手势检测（滑动翻页 + 点击翻页） ==========
@@ -398,6 +402,12 @@ public class ReadActivity extends BaseActivity {
         return false;
     }
 
+    /** 阅读器自己管沉浸：状态栏随工具栏一起滑入滑出，不交给统一的系统栏出血。 */
+    @Override
+    protected boolean edgeToEdge() {
+        return false;
+    }
+
     @SuppressWarnings("deprecation")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -446,8 +456,10 @@ public class ReadActivity extends BaseActivity {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
         } else {
-            // 旧版本：LAYOUT_FULLSCREEN + LAYOUT_STABLE 确保窗口高度始终 = 屏幕高度
+            // 旧版本：LAYOUT_FULLSCREEN + LAYOUT_HIDE_NAVIGATION + LAYOUT_STABLE 确保窗口高度
+            // 始终 = 屏幕高度，两根栏显隐都不改尺寸
             int decorFlags = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                     | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
             getWindow().getDecorView().setSystemUiVisibility(decorFlags);
         }
@@ -462,7 +474,8 @@ public class ReadActivity extends BaseActivity {
         // 状态栏设为透明，让顶部导航栏（ios_tab_bar 白色毛玻璃）延伸到状态栏区域
         // 避免 BaseActivity 设置的蓝色状态栏与白色顶栏割裂
         getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
-        getWindow().setNavigationBarColor(getResources().getColor(R.color.ios_bg_grouped, null));
+        // 系统导航条不在这里定色：它得和阅读器底栏同色，写死任何一个值都会在换纸时留下色带。
+        // 统一由 applyChromeTheme() 在 effectiveBgBase 就位后染（见 ReadThemeController#applyChromeColorsWith）。
 
         setContentView(R.layout.activity_read);
 
@@ -518,8 +531,10 @@ public class ReadActivity extends BaseActivity {
 
         setupWebView();
         setupClickListeners();
-        // 初始状态隐藏手机状态栏，只显示阅读器自己的导航栏
-        hideSystemStatusBar();
+        // 先挂上 inset 监听，再提隐藏请求：隐藏之后系统只会分发 0，真实占位只有这一帧拿得到
+        watchNavBarInset();
+        // 初始状态隐藏系统两根栏（状态栏 + 三键导航条），只显示阅读器自己的导航栏
+        hideSystemBars();
         // 上下导航栏只在「第一次使用本软件」时自动展开一次，之后进入阅读器保持隐藏
         if (consumeFirstUseNavGuide()) {
             showNavigation();   // 内部已启动 5 秒后自动收起的计时
@@ -541,40 +556,43 @@ public class ReadActivity extends BaseActivity {
     }
 
     /**
-     * 隐藏系统状态栏（仅改变可见性，不改变窗口高度）
-     * 使用 LAYOUT_NO_LIMITS + WindowInsetsController，让窗口始终占满物理屏幕，
-     * 避免状态栏显隐导致 WebView 高度变化触发重新分页。
+     * 隐藏系统两根栏（状态栏 + 三键导航条），与阅读器自己的上下导航栏同步收起。
+     *
+     * <p>只改变可见性，不改变窗口高度：窗口常驻物理全屏（见 onCreate 的
+     * {@code setDecorFitsSystemWindows(false)} / {@code LAYOUT_*} 三件套），
+     * 避免状态栏或导航条显隐导致 WebView 高度变化触发重新分页。
+     * {@code BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE} 让手势上滑只唤出半透明的临时条，不回填布局。
      */
     @SuppressWarnings("deprecation")
-    private void hideSystemStatusBar() {
+    private void hideSystemBars() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             android.view.WindowInsetsController controller = getWindow().getInsetsController();
             if (controller != null) {
-                // 隐藏状态栏（保持窗口高度不变）
-                controller.hide(android.view.WindowInsets.Type.statusBars());
-                // 显示系统栏时不重新布局（窗口始终全屏）
+                controller.hide(android.view.WindowInsets.Type.statusBars()
+                        | android.view.WindowInsets.Type.navigationBars());
                 controller.setSystemBarsBehavior(
                         android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             }
         } else {
-            // 旧版本：仅用 SYSTEM_UI_FLAG_FULLSCREEN 改变可见性，
-            // 配合 LAYOUT_FULLSCREEN 让窗口高度保持不变
-            int flags = View.SYSTEM_UI_FLAG_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+            // 旧版本按位改可见性，LAYOUT_* 三件套原样留着，窗口高度才不会被系统改判
+            int flags = systemBarLayoutFlags()
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
             getWindow().getDecorView().setSystemUiVisibility(flags);
         }
     }
 
     /**
-     * 显示系统状态栏（仅改变可见性，不改变窗口高度）
+     * 显示系统两根栏（状态栏 + 三键导航条），与阅读器上下导航栏一起滑入。
      */
     @SuppressWarnings("deprecation")
-    private void showSystemStatusBar() {
+    private void showSystemBars() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             android.view.WindowInsetsController controller = getWindow().getInsetsController();
             if (controller != null) {
-                controller.show(android.view.WindowInsets.Type.statusBars());
+                controller.show(android.view.WindowInsets.Type.statusBars()
+                        | android.view.WindowInsets.Type.navigationBars());
                 controller.setSystemBarsBehavior(
                         android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                 // 日间模式状态栏图标用深色
@@ -589,15 +607,32 @@ public class ReadActivity extends BaseActivity {
                 }
             }
         } else {
-            // 旧版本：保持 LAYOUT_FULLSCREEN 让窗口高度始终不变，
-            // 只取消 SYSTEM_UI_FLAG_FULLSCREEN 让状态栏可见
-            int flags = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
-            if (!isNightMode) {
+            // 只摘掉「隐藏」那三位；图标深浅由 ReadThemeController 逐帧维护，这里不碰，
+            // 否则导航条刚显形会短暂配错深浅。
+            int flags = systemBarLayoutFlags();
+            if (isNightMode) {
+                flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            } else {
                 flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
             }
             getWindow().getDecorView().setSystemUiVisibility(flags);
         }
+    }
+
+    /**
+     * 旧版本（API 24–29）的「布局位基线」：抹掉全部可见性位、补齐 LAYOUT_* 三件套，
+     * 让调用方只决定显或隐，窗口高度始终由系统按物理屏高给。
+     */
+    private int systemBarLayoutFlags() {
+        int flags = getWindow().getDecorView().getSystemUiVisibility();
+        flags &= ~(View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        flags |= View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+        return flags;
     }
 
     private void initView() {
@@ -3118,7 +3153,7 @@ public class ReadActivity extends BaseActivity {
      * 与 hideNavigation() 的区别：不播放滑出动画，避免每次进书都闪一下导航栏。
      */
     private void hideNavigationImmediately() {
-        hideSystemStatusBar();
+        hideSystemBars();
 
         android.view.ViewGroup.LayoutParams params = layoutTopNav.getLayoutParams();
         params.height = (int) (56 * getResources().getDisplayMetrics().density);
@@ -3158,6 +3193,9 @@ public class ReadActivity extends BaseActivity {
      */
     private void ensureBottomNavHeight() {
         if (bottomNavHeight <= 0) {
+            // 先按导航条 inset 让位，再量高度：滑距用的是量出来的自身高度，
+            // 顺序反了「目录/夜间/设置」那行会整条停在导航键底下。
+            applyBottomNavInset();
             int w = getResources().getDisplayMetrics().widthPixels;
             int widthSpec = android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY);
             int heightSpec = android.view.View.MeasureSpec.makeMeasureSpec(0,
@@ -3167,8 +3205,52 @@ public class ReadActivity extends BaseActivity {
         }
     }
 
+    /**
+     * 三键导航机型上把底部工具行顶到导航键上方：面板表面照旧贴屏幕物理底边，只让内容上移。
+     *
+     * <p>本窗口用 {@code setDecorFitsSystemWindows(false)} 保持「高度恒等于物理屏高」，
+     * 好让 WebView 的 innerHeight 不随系统栏显隐变化而重新分页，代价是导航条 inset 没人消费，
+     * 底部面板得自己让位。手势导航机型上这个 inset 恒为 0，等于不做事。
+     *
+     * <p>取值只能信 {@link #watchNavBarInset()} 记下的历史最大值：导航条现在随工具栏一起隐藏，
+     * 隐藏态下当场读 {@code getRootWindowInsets()} 会得到 0，照那个值让位等于没让。
+     */
+    private void applyBottomNavInset() {
+        if (bottomNavInsetApplied || navBarInsetPx <= 0) {
+            return;
+        }
+        bottomNavInsetApplied = true;
+        layoutBottomNav.setPadding(layoutBottomNav.getPaddingLeft(),
+                layoutBottomNav.getPaddingTop(),
+                layoutBottomNav.getPaddingRight(), navBarInsetPx);
+    }
+
+    /**
+     * 记下导航条的真实占位高度。
+     *
+     * <p>窗口首次布局时导航条还看得见，这次分发带的是实际值（三键机型 126px）；
+     * 之后每次隐藏都分发 0，所以只认非零值。收到新值时把「已让位」标记清掉，
+     * 下次滑入前重新按新占位量一次。
+     */
+    private void watchNavBarInset() {
+        ViewCompat.setOnApplyWindowInsetsListener(getWindow().getDecorView(), (v, insets) -> {
+            int bottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+            if (bottom > navBarInsetPx) {
+                navBarInsetPx = bottom;
+                bottomNavInsetApplied = false;
+                bottomNavHeight = 0;
+                // 万一首次分发就已经是隐藏态（0），这里收到的就是「工具栏滑出后才到」的迟到值：
+                // 工具栏正显示着，当场补一次让位，别等下一次滑入。
+                if (layoutBottomNav != null && layoutBottomNav.getVisibility() == View.VISIBLE) {
+                    applyBottomNavInset();
+                }
+            }
+            return insets;
+        });
+    }
+
     private void showNavigation() {
-        showSystemStatusBar();  // 与滑入同步显示，避免动画结束后状态栏再突现
+        showSystemBars();  // 与滑入同步显示，避免动画结束后系统栏再突现
 
         int navHeight = (int) (56 * getResources().getDisplayMetrics().density);
         android.view.ViewGroup.LayoutParams params = layoutTopNav.getLayoutParams();
@@ -3206,7 +3288,7 @@ public class ReadActivity extends BaseActivity {
     }
 
     private void hideNavigation() {
-        hideSystemStatusBar();  // 与滑出同步隐藏，避免动画结束后状态栏再突隐
+        hideSystemBars();  // 与滑出同步隐藏，避免动画结束后系统栏再突隐
 
         mainHandler.removeCallbacks(hideNavRunnable);
         dismissPopups();

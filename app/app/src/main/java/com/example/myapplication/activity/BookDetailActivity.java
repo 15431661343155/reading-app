@@ -132,7 +132,6 @@ public class BookDetailActivity extends BaseActivity{
         setContentView(R.layout.activity_book_detail);
 
         Toolbar toolbar = findViewById(R.id.toolbar_back);
-        // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
         currentBook = (Book) getIntent().getSerializableExtra("book");
         if (currentBook == null) {

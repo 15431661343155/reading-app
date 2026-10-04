@@ -38,6 +38,7 @@ import com.example.myapplication.bean.CategoryTree;
 import com.example.myapplication.bean.PageResponse;
 import com.example.myapplication.bean.SourceInfo;
 import com.example.myapplication.utils.ThemeAttrs;
+import com.example.myapplication.utils.SystemBarInsets;
 import com.example.myapplication.utils.Hint;
 
 import java.util.ArrayList;
@@ -108,8 +109,7 @@ public class BookStoreFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_bookstore, container, false);
 
-        // 不再手动加状态栏padding：activity_main.xml 的 fitsSystemWindows 已让系统自动避让
-        updateStatusBarColor();
+        applySystemBars(view);
 
         bindViews(view);
         setupRecyclerView(view);
@@ -771,24 +771,26 @@ public class BookStoreFragment extends Fragment {
 
     /* ================= 生命周期 ================= */
 
-    private void updateStatusBarColor() {
-        if (getActivity() == null) return;
-        // 状态栏背景与页面顶部颜色统一，消除割裂
-        getActivity().getWindow().setStatusBarColor(
-            ThemeAttrs.color(requireActivity(), R.attr.appPageBg, 0));
-        // 图标明暗交由宿主按当前日夜配置复位（夜间深色底要用浅色图标）
-        ((BaseActivity) getActivity()).applyStatusBarIcons();
+    /**
+     * 系统栏出血：页底铺到屏幕顶（paddingTop 叠加状态栏 inset，背景不被 padding 裁剪），
+     * 状态栏图标深浅按页底实际亮度判定。切页时顶部颜色随页面一起滑动，不再有独立色带。
+     */
+    private void applySystemBars(View view) {
+        if (getActivity() == null || view == null) return;
+        SystemBarInsets.bleedTop(view);
+        int pageBg = ThemeAttrs.color(requireActivity(), R.attr.appPageBg, 0);
+        ((BaseActivity) getActivity()).applyBarIcons(pageBg, pageBg);
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        updateStatusBarColor();
+        applySystemBars(getView());
     }
 
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
-        if (!hidden) updateStatusBarColor();
+        if (!hidden) applySystemBars(getView());
     }
 }

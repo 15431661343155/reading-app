@@ -55,8 +55,6 @@ public class MessageCenterActivity extends BaseActivity {
         viewPager    = findViewById(R.id.view_pager);
         tvMarkAllRead = findViewById(R.id.tv_mark_all_read);
 
-        // Toolbar 延伸到状态栏
-        // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
         // 文字/指示条统一取语义色 token，日间夜间都随 values-night 自动解析
         toolbar.setTitleTextColor(ThemeAttrs.color(this, R.attr.appTextPrimary, 0));

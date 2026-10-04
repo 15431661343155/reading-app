@@ -16,7 +16,6 @@ public class SettingsActivity extends BaseActivity {
         setContentView(R.layout.activity_settings);
 
         Toolbar toolbar = findViewById(R.id.toolbar_back);
-        // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
         toolbar.setNavigationOnClickListener(v -> finish());
 
         LinearLayout btnTheme = findViewById(R.id.btn_theme);

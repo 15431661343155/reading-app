@@ -19,6 +19,7 @@ import com.example.myapplication.manager.UpdateManager;
 import com.example.myapplication.utils.ExternalPrefs;
 import com.example.myapplication.utils.ExternalSyncManager;
 import com.example.myapplication.utils.ShelfPrefetch;
+import com.example.myapplication.utils.SystemBarInsets;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.lang.reflect.Field;
@@ -65,6 +66,8 @@ public class MainActivity extends BaseActivity {
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
     private View splashOverlay;
     private long mSplashStartAt;
+    /** 开屏浮层挡屏期间挂起的页面系统栏配色，浮层退场时补发一次。 */
+    private int[] mDeferredBarColors;
 
     /**
      * 用「主页专用变体」（窗口背景=开屏底 + 系统启动屏同色）：
@@ -77,6 +80,15 @@ public class MainActivity extends BaseActivity {
         return true;
     }
 
+    /**
+     * 主页自己接管 inset 落在哪一层：开屏图与页底铺满整屏，顶部由各标签页决定
+     * （书架/书城/分类落在根布局 padding，「我的」落在英雄区上），所以不走 BaseActivity 的统一接管。
+     */
+    @Override
+    protected boolean autoBleedSystemBars() {
+        return false;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         instance = this;
@@ -85,11 +97,20 @@ public class MainActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // 底部避让落在根布局的 paddingBottom 上：一次布局同时抬升内容容器与悬浮磨砂卡，
+        // 与迁移前 root_layout 的 fitsSystemWindows 等价。
+        // 顶部不在这里处理——书架/书城/分类把状态栏 inset 落在自己根布局的 padding 上，「我的」落在英雄区上。
+        SystemBarInsets.bleedBottom(findViewById(R.id.root_layout));
+
         splashOverlay = findViewById(R.id.splash_overlay);
 
         if (savedInstanceState == null) {
             // ─── 冷启动：主页自身充当启动页 ───
             splashOverlay.setVisibility(View.VISIBLE);
+            // 开屏插画只有日间那一版奶油底，没有夜间变体，且它铺满整屏（含两根系统栏底下）。
+            // 所以浮层期间图标一律深色，页面自己按底色判定的结果挂起到浮层退场后再补。
+            SystemBarInsets.setLightStatusIcons(getWindow(), true);
+            SystemBarInsets.setLightNavigationIcons(getWindow(), true);
 
             // 接管系统启动屏（Android 12+）的退出动画：默认播放 ~300-400ms 的图标放大淡出，
             // 这里改成 60ms 即刻淡出移除 → 系统启动屏在首帧一绘完就结束。
@@ -117,6 +138,8 @@ public class MainActivity extends BaseActivity {
         }
 
         bottomNavigationView = findViewById(R.id.bottom_navigation);
+        // 底部避让已由根布局统一负责，关掉 Material 自己那份，否则叠加后导航栏内容塌陷
+        SystemBarInsets.ignoreNavigationBarInset(bottomNavigationView);
 
         //重建时从FragmentManager获取
         if (savedInstanceState != null) {
@@ -260,8 +283,25 @@ public class MainActivity extends BaseActivity {
             return;
         }
         splashOverlay.animate().alpha(0f).setDuration(180)
-                .withEndAction(() -> splashOverlay.setVisibility(View.GONE))
+                .withEndAction(() -> {
+                    splashOverlay.setVisibility(View.GONE);
+                    // 浮层彻底没了才交还图标深浅：淡出过程中奶油底还在，提前翻会糊在一起
+                    if (mDeferredBarColors != null) {
+                        int[] c = mDeferredBarColors;
+                        mDeferredBarColors = null;
+                        super.applyBarIcons(c[0], c[1]);
+                    }
+                })
                 .start();
+    }
+
+    @Override
+    public void applyBarIcons(int topColor, int bottomColor) {
+        if (splashOverlay != null && splashOverlay.getVisibility() == View.VISIBLE) {
+            mDeferredBarColors = new int[]{topColor, bottomColor};
+            return;
+        }
+        super.applyBarIcons(topColor, bottomColor);
     }
 
     private void switchFragment(Fragment fragment, String tag, int tabIndex) {

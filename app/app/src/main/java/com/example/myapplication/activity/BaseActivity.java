@@ -2,6 +2,7 @@ package com.example.myapplication.activity;
 
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.animation.AnimationUtils;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -9,12 +10,11 @@ import androidx.core.view.WindowCompat;
 
 import com.example.myapplication.R;
 import com.example.myapplication.utils.ActivityTransition;
+import com.example.myapplication.utils.SystemBarInsets;
 import com.example.myapplication.utils.ThemeAttrs;
 import com.example.myapplication.utils.ThemeManager;
 
 public class BaseActivity extends AppCompatActivity {
-
-    protected int statusBarHeight = 0;  // 状态栏高度
 
     /** 本页是否用主页专用主题（窗口底与开屏图同色）。仅 MainActivity 重写为 true。 */
     protected boolean usesMainTheme() {
@@ -26,6 +26,26 @@ public class BaseActivity extends AppCompatActivity {
      * 两者重写返回 false 保持素白，避免和皮肤互相覆盖。
      */
     protected boolean followSkin() {
+        return true;
+    }
+
+    /**
+     * 本页是否交给 {@link #setupStatusBar()} 做系统栏出血：窗口铺满整屏、系统栏涂透明，
+     * 顶部与底部的颜色由页面自己的背景提供（接法见 {@link SystemBarInsets}）。
+     *
+     * <p>默认全站开启。阅读器与登录页有自己的沉浸／全屏逻辑，头像裁剪页是纯黑取景底，
+     * 三者重写返回 false 回到「系统避让 + 窗口染色」的老路。
+     */
+    protected boolean edgeToEdge() {
+        return true;
+    }
+
+    /**
+     * 出血之后，是否由 {@link #onContentChanged()} 统一接管头部长高与底部避让。
+     *
+     * <p>主页自己按标签页决定 inset 落在哪一层（「我的」要铺到屏幕顶），所以重写返回 false。
+     */
+    protected boolean autoBleedSystemBars() {
         return true;
     }
 
@@ -53,9 +73,7 @@ public class BaseActivity extends AppCompatActivity {
         }
         super.onCreate(savedInstanceState);
 
-        getStatusBarHeight();
-        
-        // 状态栏适配 - 让内容绘制在状态栏下方，保持状态栏显示
+        // 状态栏适配：出血页把两根栏涂透明，其余页面维持系统避让 + 窗口染色
         setupStatusBar();
 
         // 2. 添加Activity入场动画，实现丝滑切换
@@ -65,6 +83,52 @@ public class BaseActivity extends AppCompatActivity {
         } else {
             ActivityTransition.applyFade(this);
         }
+    }
+
+    /**
+     * setContentView 之后统一接管二级页的系统栏：头部色带长到状态栏底下，内容按导航条 inset 避让，
+     * 两根栏的图标深浅按出血区实际亮度判定。
+     *
+     * <p>头部认 {@code toolbar_back}（全站 MaterialToolbar 的通用 id）、{@code layout_header}、
+     * {@code app_header} 三种；都没有时整页根布局上下一起避让。
+     */
+    @Override
+    public void onContentChanged() {
+        super.onContentChanged();
+        if (!edgeToEdge() || !autoBleedSystemBars()) {
+            return;
+        }
+        View root = contentRoot();
+        if (root == null) {
+            return;
+        }
+        View header = headerView();
+        if (header == null) {
+            SystemBarInsets.bleedVertical(root);
+        } else {
+            SystemBarInsets.extendHeader(header);
+            SystemBarInsets.bleedBottom(root);
+        }
+        int pageBg = ThemeAttrs.color(this, R.attr.appPageBg, 0);
+        applyBarIcons(SystemBarInsets.solidColor(header, pageBg),
+                SystemBarInsets.solidColor(root, pageBg));
+    }
+
+    private View contentRoot() {
+        View content = findViewById(android.R.id.content);
+        return content instanceof ViewGroup && ((ViewGroup) content).getChildCount() > 0
+                ? ((ViewGroup) content).getChildAt(0) : null;
+    }
+
+    private View headerView() {
+        int[] ids = {R.id.toolbar_back, R.id.layout_header, R.id.app_header};
+        for (int id : ids) {
+            View v = findViewById(id);
+            if (v != null) {
+                return v;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -79,22 +143,22 @@ public class BaseActivity extends AppCompatActivity {
     }
 
     /**
-     * 获取状态栏高度
-     */
-    private void getStatusBarHeight() {
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        if (resourceId > 0) {
-            statusBarHeight = getResources().getDimensionPixelSize(resourceId);
-        }
-    }
-
-    /**
-     * 设置状态栏与导航栏颜色
-     * 使用 setDecorFitsSystemWindows(true) 让系统自动避让状态栏和导航栏
-     * 默认状态栏用白色 ios_bg（匹配二级 Activity 白色 Toolbar）
-     * MainActivity Fragment 和特殊 Activity 在各自的 updateStatusBarColor() 里覆盖
+     * 设置状态栏与导航栏
+     *
+     * <p>接入系统栏出血的页面（{@link #edgeToEdge()}）把状态栏涂透明，颜色由页面背景自己铺过去，
+     * 图标深浅交给 {@link #applyBarIcons} 按实际底色判定；导航栏另走显式染色，理由见下。
+     * 其余页面维持「系统避让 + 窗口染色」的老逻辑。
      */
     protected void setupStatusBar() {
+        if (edgeToEdge()) {
+            SystemBarInsets.enableEdgeToEdge(getWindow());
+            // 导航条不能只涂透明：三键导航的机型会替应用兜一层近白（夜间近灰）的条，把页面底盖掉，
+            // 于是底部永远差一档色。这里主动报一个和页面底相同的值——内容本就按 inset 避让过，
+            // 导航条底下没有东西被遮，染完与真出血逐像素一致。
+            getWindow().setNavigationBarColor(ThemeAttrs.color(this, R.attr.appPageBg, 0));
+            return;
+        }
+
         // 恢复系统默认避让：内容不延伸到状态栏/导航栏后面
         WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
 
@@ -115,27 +179,6 @@ public class BaseActivity extends AppCompatActivity {
     }
 
     /**
-     * 为顶部导航栏设置延伸效果（与阅读器类似）
-     * 导航栏高度增加，背景延伸到状态栏区域，内容保持在状态栏下方
-     */
-    protected void extendToolbarToStatusBar(View toolbar) {
-        if (toolbar == null || statusBarHeight == 0) return;
-        
-        int toolbarHeight = toolbar.getLayoutParams().height;
-        if (toolbarHeight <= 0) {
-            // 如果高度未设置，使用默认56dp
-            toolbarHeight = (int) (56 * getResources().getDisplayMetrics().density);
-        }
-        toolbar.getLayoutParams().height = statusBarHeight + toolbarHeight;
-        
-        // 设置paddingTop让内容显示在状态栏下方
-        toolbar.setPadding(toolbar.getPaddingLeft(), 
-                statusBarHeight, 
-                toolbar.getPaddingRight(), 
-                toolbar.getPaddingBottom());
-    }
-
-    /**
      * 设置状态栏图标颜色
      * @param light true=深色图标（浅色背景），false=浅色/白色图标（深色背景）
      */
@@ -150,31 +193,18 @@ public class BaseActivity extends AppCompatActivity {
     }
 
     /**
-     * 按当前日夜配置复位状态栏图标：日间深色图标、夜间浅色图标。
-     * 供 Fragment（书架/书城/分类）在覆盖状态栏背景色之后调用；
-     * 页面顶部是彩色块（如「我的」蓝色英雄区）时不要用它，需自行指定。
+     * 按系统栏背后那块出血区的实际底色，自动决定两根栏的图标深浅：亮底配深色图标、暗底配浅色图标。
+     * 供接入 {@link SystemBarInsets} 的页面在每次可见时调用，取代按日夜档位写死。
      */
-    public void applyStatusBarIcons() {
-        setLightStatusBar(!ThemeManager.isNight(this));
-    }
-
-    /**
-     * 为根视图添加状态栏padding，避免内容被遮挡
-     */
-    protected void applyStatusBarPadding(View rootView) {
-        if (rootView == null) return;
-        
-        // 直接设置padding，让内容避开状态栏区域
-        rootView.setPadding(rootView.getPaddingLeft(), 
-                statusBarHeight, 
-                rootView.getPaddingRight(), 
-                rootView.getPaddingBottom());
+    public void applyBarIcons(int topColor, int bottomColor) {
+        SystemBarInsets.setLightStatusIcons(getWindow(), !SystemBarInsets.isDark(topColor));
+        SystemBarInsets.setLightNavigationIcons(getWindow(), !SystemBarInsets.isDark(bottomColor));
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // 配色风格变了不在这里 setTheme()（会覆盖 Fragment 设置的状态栏颜色），而是整页重建：
+        // 配色风格变了不在这里 setTheme()（主题已经参与过一轮布局解析，改不干净），而是整页重建：
         // 栈里其余页面各自在回到前台时这样补一次，用户不需要重启 App 就能看到全站换肤。
         if (followSkin() && ThemeManager.getSkin(this) != appliedSkin) {
             recreate();

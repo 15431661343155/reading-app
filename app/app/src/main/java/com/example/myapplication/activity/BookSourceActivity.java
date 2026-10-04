@@ -40,7 +40,6 @@ public class BookSourceActivity extends BaseActivity {
         setContentView(R.layout.activity_book_source);
 
         Toolbar toolbar = findViewById(R.id.toolbar_back);
-        // extendToolbarToStatusBar removed: setDecorFits(true) handles system bar spacing
 
         toolbar.setNavigationOnClickListener(v -> finish());
 
