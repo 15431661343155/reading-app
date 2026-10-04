@@ -227,26 +227,30 @@ public class MainActivity extends BaseActivity {
             switchFragment(initFrag, initTag, initIndex);
         }
 
-        // 进入APP后后台检查更新（延迟2秒，不影响其他功能）
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            UpdateManager.checkUpdate(MainActivity.this, new UpdateManager.UpdateCheckCallback() {
-                @Override
-                public void onUpdateAvailable(ApkPush apkPush) {
-                    // 有新版本，弹出更新选择弹窗
-                    UpdateManager.showUpdateDialog(MainActivity.this, apkPush);
-                }
+        // 进入APP后后台检查更新（延迟2秒，不影响其他功能）。
+        // 只在冷启动排队：换肤/日夜会在后台重建主页，每次重建都排一遍就会凭空多弹一次更新框；
+        // 走 mUiHandler 而不是临时 new，销毁时才能一起掐掉。
+        if (savedInstanceState == null) {
+            mUiHandler.postDelayed(() -> {
+                UpdateManager.checkUpdate(MainActivity.this, new UpdateManager.UpdateCheckCallback() {
+                    @Override
+                    public void onUpdateAvailable(ApkPush apkPush) {
+                        // 有新版本，弹出更新选择弹窗
+                        UpdateManager.showUpdateDialog(MainActivity.this, apkPush);
+                    }
 
-                @Override
-                public void onNoUpdate() {
-                    // 已是最新版本，静默不提示（避免打扰）
-                }
+                    @Override
+                    public void onNoUpdate() {
+                        // 已是最新版本，静默不提示（避免打扰）
+                    }
 
-                @Override
-                public void onError(String message) {
-                    // 网络错误静默处理，不影响用户使用
-                }
-            });
-        }, 2000);
+                    @Override
+                    public void onError(String message) {
+                        // 网络错误静默处理，不影响用户使用
+                    }
+                });
+            }, 2000);
+        }
     }
 
     private BookShelfFragment getBookShelfFragment() {
@@ -368,6 +372,9 @@ public class MainActivity extends BaseActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // 主页现在会被换肤/日夜在后台重建：挂着的开屏轮询和延迟检查更新必须掐掉，
+        // 否则回调打在已销毁实例上（漏窗口、凭空弹窗）。
+        mUiHandler.removeCallbacksAndMessages(null);
         instance = null;
     }
 

@@ -570,10 +570,13 @@ public class BookStoreFragment extends Fragment {
      */
     private void loadLocalPages() {
         RetrofitClient.getApiService().getCategoryTree()
+                // 与 CategoryFragment 同一陷阱：回调落到主线程时，换肤/日夜重建可能已把本页换掉线，
+                // 再往下 applyLocalPages 会踩 requireContext() 抛 IllegalStateException。
                 .enqueue(new Callback<ApiResponse<CategoryTree>>() {
                     @Override
                     public void onResponse(Call<ApiResponse<CategoryTree>> c,
                                            Response<ApiResponse<CategoryTree>> r) {
+                        if (!isAdded()) return;
                         List<LocalStorePageAdapter.PageSpec> specs = new ArrayList<>();
                         specs.add(new LocalStorePageAdapter.PageSpec("新书", null, null));
                         if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
@@ -589,6 +592,7 @@ public class BookStoreFragment extends Fragment {
 
                     @Override
                     public void onFailure(Call<ApiResponse<CategoryTree>> c, Throwable t) {
+                        if (!isAdded()) return;
                         // 分类树拿不到时，至少保证「新书」页可用
                         List<LocalStorePageAdapter.PageSpec> specs = new ArrayList<>();
                         specs.add(new LocalStorePageAdapter.PageSpec("新书", null, null));
@@ -651,6 +655,7 @@ public class BookStoreFragment extends Fragment {
                     @Override
                     public void onResponse(Call<ApiResponse<List<String[]>>> c,
                                            Response<ApiResponse<List<String[]>>> r) {
+                        if (!isAdded()) return;
                         swipeRefresh.setRefreshing(false);
                         subCategoryList.clear();
                         if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
@@ -690,6 +695,7 @@ public class BookStoreFragment extends Fragment {
                     }
                     @Override
                     public void onFailure(Call<ApiResponse<List<String[]>>> c, Throwable t) {
+                        if (!isAdded()) return;
                         swipeRefresh.setRefreshing(false);
                         // 网络失败：隐藏分类 Tab，直接加载 explore 数据
                         subCategoryList.clear();
@@ -738,10 +744,50 @@ public class BookStoreFragment extends Fragment {
                 // 记住该书源下停留的二级分类，重进/换肤后恢复
                 prefState().edit().putString(extSubKey(), category).apply();
                 refreshSubCategoryViews();
-                loadDataForCurrentMode();
+                loadExternalBooks();
             });
             layoutSubCategory.addView(tv);
         }
+        scrollSelectedCategoryIntoView();
+    }
+
+    /**
+     * 分类条只在选中项落在可视区外时挪动的「最小滚动」：
+     * 点靠边的分类、或换书源后分类表重建（选中回到首个）都能看见选中圈，
+     * 又不会每次刷新都把条子甩到中间。
+     */
+    private void scrollSelectedCategoryIntoView() {
+        final int index = subCategoryList.indexOf(currentSubCategory);
+        if (index < 0) return;
+        hsvSubCategory.post(() -> {
+            View sel = index < layoutSubCategory.getChildCount()
+                    ? layoutSubCategory.getChildAt(index) : null;
+            if (sel == null || hsvSubCategory.getWidth() == 0) return;
+            int vx = hsvSubCategory.getScrollX();
+            int vr = vx + hsvSubCategory.getWidth();
+            int left = sel.getLeft();
+            int right = left + sel.getWidth();
+            float d = getResources().getDisplayMetrics().density;
+            int margin = Math.round(16 * d);
+            if (left - margin < vx) {
+                hsvSubCategory.scrollTo(Math.max(0, left - margin), 0);
+            } else if (right + margin > vr) {
+                hsvSubCategory.scrollTo(right + margin - hsvSubCategory.getWidth(), 0);
+            }
+        });
+    }
+
+    /**
+     * 换分类 / 换书源后列表回顶。
+     * 外站只有一个 RecyclerView 承载所有分类的数据，不清滚动位置就会停在上一分类的偏移上，
+     * 新榜单首屏只剩半截。放在数据落地、notifyDataSetChanged 之前，
+     * 新列表的第一帧就在顶部，不会先看见旧列表回滚。
+     */
+    private void resetListToTop() {
+        if (rvBookstore == null || !(rvBookstore.getLayoutManager()
+                instanceof LinearLayoutManager)) return;
+        ((LinearLayoutManager) rvBookstore.getLayoutManager())
+                .scrollToPositionWithOffset(0, 0);
     }
 
     /* ================= 数据加载入口（按模式分发） ================= */
@@ -794,6 +840,7 @@ public class BookStoreFragment extends Fragment {
                     @Override
                     public void onResponse(Call<ApiResponse<List<Book>>> c,
                                            Response<ApiResponse<List<Book>>> r) {
+                        if (!isAdded()) return;
                         swipeRefresh.setRefreshing(false);
                         storeBookList.clear();
                         if (r.isSuccessful() && r.body() != null && r.body().isSuccess()
@@ -803,10 +850,12 @@ public class BookStoreFragment extends Fragment {
                         } else {
                             loadFailView.show("加载榜单失败，请确认书源可用");
                         }
+                        resetListToTop();
                         adapter.notifyDataSetChanged();
                     }
                     @Override
                     public void onFailure(Call<ApiResponse<List<Book>>> c, Throwable t) {
+                        if (!isAdded()) return;
                         swipeRefresh.setRefreshing(false);
                         loadFailView.show("网络异常，请检查网络后重试");
                     }

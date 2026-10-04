@@ -520,6 +520,10 @@ public class BookShelfFragment extends Fragment {
         super.onDestroyView();
         cancelMorph();
         if (shelfMenuPopup != null && shelfMenuPopup.isShowing()) shelfMenuPopup.dismiss();
+        // 编辑栏是两扇独立窗口，宿主视图没了必须一起收掉，否则换肤/日夜重建时漏窗口（WindowLeaked）。
+        // 编辑态本来就不跨重建（没有写进 onSaveInstanceState），这里只管关窗、不必走 hideEditMode。
+        if (topDialog != null && topDialog.isShowing()) topDialog.dismiss();
+        if (bottomDialog != null && bottomDialog.isShowing()) bottomDialog.dismiss();
     }
 
     // ==================================================================

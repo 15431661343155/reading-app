@@ -15,7 +15,8 @@ import com.example.myapplication.utils.ThemeManager;
  *   <li>外观模式（跟随系统 / 日间 / 夜间）：选中项写入偏好后调用 AppCompatDelegate 全局切换，
  *       所有在册页面由 AppCompat 自动重建生效；</li>
  *   <li>配色风格（素白 / 宣纸）：换的是主题而不是日夜配置，AppCompat 不会替我们重建，
- *       所以本页 recreate() 自换，栈里其余页面由 BaseActivity 在回到前台时补一次重建。</li>
+ *       所以写入偏好后由 {@link BaseActivity#reskinAll} 把全站在册页面当场重建，
+ *       本页也在其中（按下发顺序排在最后一步）。</li>
  * </ul>
  */
 public class ThemeSettingActivity extends BaseActivity {
@@ -57,7 +58,12 @@ public class ThemeSettingActivity extends BaseActivity {
                 return;
             }
             ThemeManager.saveSkin(this, skin);
-            recreate();
+            // 全站（含本页）当场重建：此刻其余页面都压在下面，用户看不到重建，
+            // 回退到「我的」页时新皮肤已经就位，不会先看到旧风格再跳一次。
+            BaseActivity.reskinAll(this);
+            // 本页压掉转场：换配色风格是「就地变色」，不该演一次推开新页面。
+            // 只压调用方这一个，后台页重建本来就无窗口动画可言。
+            overridePendingTransition(0, 0);
         });
     }
 }

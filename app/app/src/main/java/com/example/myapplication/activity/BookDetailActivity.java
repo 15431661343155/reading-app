@@ -1826,6 +1826,7 @@ public class BookDetailActivity extends BaseActivity{
         final Runnable timeoutTask = () -> {
             if (!completed[0]) {
                 runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
                     btnRead.setEnabled(true);
                     btnRead.setText(hasRead ? "继续阅读" : "在线阅读");
                     Hint.show(BookDetailActivity.this, "加载超时，请检查网络后重试");
@@ -1839,6 +1840,7 @@ public class BookDetailActivity extends BaseActivity{
             public void onSuccess(List<String[]> chapters) {
                 completed[0] = true;
                 runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
                     btnRead.setEnabled(true);
                     btnRead.setText(hasRead ? "继续阅读" : "在线阅读");
                     Intent intent = new Intent(BookDetailActivity.this, ReadActivity.class);
@@ -1864,6 +1866,8 @@ public class BookDetailActivity extends BaseActivity{
             public void onFail(String msg, boolean sourceMayDown) {
                 completed[0] = true;
                 runOnUiThread(() -> {
+                    // 拉取期间本页可能已被退出/换肤重建销毁，销毁后 show() 对话框会崩。
+                    if (isFinishing() || isDestroyed()) return;
                     btnRead.setEnabled(true);
                     btnRead.setText(hasRead ? "继续阅读" : "在线阅读");
                     if (sourceMayDown) {

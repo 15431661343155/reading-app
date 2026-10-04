@@ -1,5 +1,6 @@
 package com.example.myapplication.activity;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
@@ -7,6 +8,10 @@ import android.view.animation.AnimationUtils;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
+
+import java.lang.ref.WeakReference;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.example.myapplication.R;
 import com.example.myapplication.utils.ActivityTransition;
@@ -49,8 +54,15 @@ public class BaseActivity extends AppCompatActivity {
         return true;
     }
 
-    /** onCreate 时生效的风格，onResume 用它判断是否需要重建 */
+    /** onCreate 时生效的风格，换肤广播与 {@link #onResume()} 兜底都用它判断是否需要重建 */
     private int appliedSkin = ThemeManager.SKIN_CLASSIC;
+
+    /**
+     * 在册、跟随配色风格的页面。换肤时由 {@link #reskinAll} 逐个当场重建，
+     * 免得页面只能等回到前台（旧皮肤已经画了一帧）才补重建。
+     * 弱引用 + onCreate 登记 / onDestroy 摘除，重写 followSkin() 为 false 的页面不入册。
+     */
+    private static final List<WeakReference<BaseActivity>> sSkinFollowers = new CopyOnWriteArrayList<>();
 
     /**
      * 当前页面是否使用「从右向左滑入」转场。
@@ -67,6 +79,7 @@ public class BaseActivity extends AppCompatActivity {
         if (followSkin()) {
             appliedSkin = ThemeManager.getSkin(this);
             setTheme(ThemeManager.themeResId(this, usesMainTheme()));
+            sSkinFollowers.add(new WeakReference<>(this));
         }
         if (getResources() == null) {
             return;
@@ -204,10 +217,41 @@ public class BaseActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // 配色风格变了不在这里 setTheme()（主题已经参与过一轮布局解析，改不干净），而是整页重建：
-        // 栈里其余页面各自在回到前台时这样补一次，用户不需要重启 App 就能看到全站换肤。
+        // 兜底：换肤广播（{@link #reskinAll}）漏掉的页面——例如广播途中刚建好的实例——
+        // 回到前台时补一次。配色风格变了不能在这里 setTheme()（主题已参与过一轮布局解析，改不干净），
+        // 只能整页重建。
         if (followSkin() && ThemeManager.getSkin(this) != appliedSkin) {
             recreate();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // 重建会走一遍 onDestroy：把本页的在册引用摘掉，换肤广播才不会碰到已销毁的实例，
+        // 也避免新旧两个实例同时在册导致重复重建。
+        for (WeakReference<BaseActivity> ref : sSkinFollowers) {
+            BaseActivity page = ref.get();
+            if (page == null || page == this) {
+                sSkinFollowers.remove(ref);
+            }
+        }
+    }
+
+    /**
+     * 配色风格变更后立刻重建全站在册页面。
+     *
+     * <p>调用方是当时唯一可见的页面（外观设置），其余在册页面都压在它下面、用户看不到重建过程，
+     * 等回退到任意页面时新皮肤已经画好——而不是先露一帧旧皮肤再当场跳变。
+     * 只重建风格确实对不上的页面；按下发顺序重建，调用方自己在最后一步换肤。
+     */
+    public static void reskinAll(Context context) {
+        int skin = ThemeManager.getSkin(context);
+        for (WeakReference<BaseActivity> ref : sSkinFollowers) {
+            BaseActivity page = ref.get();
+            if (page != null && page.appliedSkin != skin && !page.isFinishing()) {
+                page.recreate();
+            }
         }
     }
 }

@@ -1218,7 +1218,12 @@ public class ReadActivity extends BaseActivity {
             // 启动章节列表加载超时保护（覆盖后台磁盘读 + 网络拉取全程）
             final Runnable timeoutTask = () -> {
                 if (externalChapters == null || externalChapters.length == 0) {
-                    runOnUiThread(() -> showExternalLoadErrorDialog("加载超时，请检查网络后重试", false));
+                    runOnUiThread(() -> {
+                        // 后台拉取期间用户退出/换肤重建了本页：定时任务照样会到点触发，
+                        // 在已销毁的 Activity 上 show() 对话框会抛 BadTokenException。
+                        if (isFinishing() || isDestroyed()) return;
+                        showExternalLoadErrorDialog("加载超时，请检查网络后重试", false);
+                    });
                 }
             };
             mainHandler.postDelayed(timeoutTask, 20000);

@@ -678,6 +678,19 @@ public class MineFragment extends Fragment {
         }
     }
 
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // 缓存抽屉是独立窗口：主页换肤/日夜重建会先拆掉本页视图，
+        // 抽屉还开着就必须直接收掉（不走滑出动画），否则漏窗口（WindowLeaked）。
+        if (cacheSheet != null && cacheSheet.isShowing()) cacheSheet.dismiss();
+        cacheSheet = null;
+        cacheSheetRoot = null;
+        cacheSheetDim = null;
+        cacheSheetPanel = null;
+        cacheSheetPanelH = 0;
+    }
+
     /** 执行清理 → 刷新显示 → 弹出居中完成卡片。 */
     private void doClearCache(List<CacheManager.Item> picked) {
         final Context ctx = getActivity();
