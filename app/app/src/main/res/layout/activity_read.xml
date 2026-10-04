@@ -187,7 +187,8 @@
                     android:textColor="@color/black" />
             </LinearLayout>
 
-            <!-- 进度条区域：滑轨居中与按钮文字同线，章节名小字叠放在滑轨下缘空白处 -->
+            <!-- 进度条区域：滑轨居中与按钮文字同线，章节名小字叠放在滑轨下缘空白处。
+                 章节名必须锁单行：这行只有 52dp 高，标题一长就折第二行、正好糊在滑轨下缘 -->
             <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -202,10 +203,14 @@
 
                 <TextView
                     android:id="@+id/tv_progress_text"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|center_horizontal"
+                    android:layout_gravity="bottom"
                     android:layout_marginBottom="1dp"
+                    android:paddingHorizontal="8dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:textSize="11sp"
                     android:textColor="?attr/appTextSecondary" />
             </FrameLayout>
