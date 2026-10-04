@@ -251,7 +251,7 @@ public class ReadActivity extends BaseActivity {
      */
     final List<LocalBookParser.VolumeInfo> localVolumes = new ArrayList<>();
     /**
-     * 服务器书的分卷表（后台导入 EPUB 时写入 major_chapter）。仅在服务器书加载链路拉取； 
+     * 服务器书的分卷表（后台导入 EPUB 时写入 major_chapter）。仅在服务器书加载链路拉取；
      */
     final List<MajorChapter> serverMajorChapters = new ArrayList<>();
 
