@@ -19,6 +19,7 @@ import com.example.myapplication.adapter.TocTreeAdapter;
 import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.utils.TocOrder;
 import com.example.myapplication.utils.Hint;
+import com.example.myapplication.view.TocScrollThumbView;
 import com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView;
 
 import java.util.ArrayList;
@@ -78,6 +79,8 @@ public class PopupChapterFragment extends Fragment {
             ((TextView) view.findViewById(R.id.tv_chapter_count)).setText("共 " + chapterList.size() + " 章");
 
             FastScrollRecyclerView rv = view.findViewById(R.id.rv_fastscroll);
+            // 滑块换成自绘的磨砂胶囊把手；库没有替换滑块绘制的钩子，这里把整个 fast-scroll 关掉
+            rv.setThumbEnabled(false);
             final LinearLayoutManager lm = new LinearLayoutManager(getContext());
             rv.setLayoutManager(lm);
 
@@ -107,6 +110,10 @@ public class PopupChapterFragment extends Fragment {
             // 打开抽屉即把当前章钉在首行。必须在 setAdapter 之后、首帧布局之前挂上：
             // 布局器尚未测量时挂的锚点会在真正布局后被沿用，比 post 到布局后再滚更稳。
             anchorCurrentChapter(lm, adapter, currentChapterIndex);
+
+            // 自绘把手跟随列表滚动现身/定位，拖它即滚列表
+            TocScrollThumbView thumb = view.findViewById(R.id.toc_scroll_thumb);
+            thumb.attachTo(rv);
 
             // 正序/倒序切换：按钮标签显示「当前顺序」，点击后顺序与标签一起翻转，
             // 并把列表滚回新顺序的第一行（正序=第一章那端、倒序=最后一章那端）。

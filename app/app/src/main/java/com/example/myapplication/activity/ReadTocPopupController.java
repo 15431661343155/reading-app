@@ -12,7 +12,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.animation.AccelerateDecelerateInterpolator;
-import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -45,12 +44,6 @@ class ReadTocPopupController {
     private static final float PANEL_HEIGHT_RATIO = 0.85f;
     /** 遮罩颜色，与「我的」页清理缓存抽屉的 v_cache_dim 取同一个值 */
     private static final int TOC_DIM_COLOR = 0x73000000;
-    /**
-     * 入场弹起的越程高度（dp）：面板升起时越过终点这么多再回落。
-     * 面板底部会同步多伸出窗口下沿同样的量（见 onPreDraw 里的 bottomMargin），
-     * 否则上弹那一瞬底部会露出一条缝。
-     */
-    private static final float TOC_BOUNCE_DP = 18f;
 
     private final ReadActivity activity;
     /** 抽屉面板本身，收起动画要移动它 */
@@ -61,8 +54,6 @@ class ReadTocPopupController {
     private float tocDimP;
     /** 收起动画已在进行中，避免重复触发 */
     private boolean tocDismissing;
-    /** 入场弹起第二段（回落归位）是否还该播：中途被手按住下拉就不播，免得跟手时把面板拽回去 */
-    private boolean tocBouncePending;
 
     ReadTocPopupController(ReadActivity activity) { this.activity = activity; }
 
@@ -150,7 +141,11 @@ class ReadTocPopupController {
             dim.setBackgroundColor(TOC_DIM_COLOR);
             dim.setAlpha(0f);
             dim.setTag(R.id.tag_keep_own_color, Boolean.TRUE);
-            dim.setOnClickListener(v -> dismissChapterPopup());
+            dim.setOnClickListener(v -> {
+                // 点的是正文那侧的空白：抽屉收回之后连上下导航栏一起收起
+                activity.requestHideNavWithSheet();
+                dismissChapterPopup();
+            });
             host.addView(dim, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             // 面板真实高度要等窗口收缩到该行上沿才知道，先给 MATCH_PARENT 兜底，
@@ -193,9 +188,8 @@ class ReadTocPopupController {
                 tocPanel = null;
                 tocDim = null;
                 tocDismissing = false;
-                tocBouncePending = false;
                 activity.setCatalogNavActive(false);
-                activity.resetAutoHideTimer();
+                activity.finishSheetDismiss();
                 activity.runPendingNavAction();
             });
             activity.chapterPopupWindow.showAtLocation(activity.layoutBottomNav, Gravity.TOP, 0, 0);
@@ -221,13 +215,7 @@ class ReadTocPopupController {
                                 int targetH = activity.measureBottomRowTopInRoot(host);
                                 if (targetH <= 0) return true;
                                 ViewGroup.LayoutParams lp = popupView.getLayoutParams();
-                                // 多给一个越程高度并让底部探出窗口下沿同样的量：
-                                // 弹起（面板越过终点）时底部仍被窗口裁住，不会露出底缝
-                                int bounce = bouncePx();
-                                lp.height = (int) (targetH * PANEL_HEIGHT_RATIO) + bounce;
-                                if (lp instanceof FrameLayout.LayoutParams) {
-                                    ((FrameLayout.LayoutParams) lp).bottomMargin = -bounce;
-                                }
+                                lp.height = (int) (targetH * PANEL_HEIGHT_RATIO);
                                 popupView.setLayoutParams(lp);
                                 try {
                                     activity.chapterPopupWindow.update(0, 0,
@@ -290,7 +278,6 @@ class ReadTocPopupController {
                 switch (ev.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
                         downRawY = ev.getRawY();
-                        tocBouncePending = false;   // 入场弹起还没落定就被按住：放弃回落段，交还给手
                         if (popupView.animate() != null) popupView.animate().cancel();
                         return true;
                     case MotionEvent.ACTION_MOVE: {
@@ -345,13 +332,9 @@ class ReadTocPopupController {
         va.start();
     }
 
-    private int bouncePx() {
-        return (int) (TOC_BOUNCE_DP * activity.getResources().getDisplayMetrics().density);
-    }
-
     /**
-     * 抽屉入场：先慢后快地升起（Accelerate），越过终点一小段后再减速回落归位（弹一下），
-     * 遮罩淡入铺满整段时长。
+     * 抽屉入场：面板从窗口下沿滑到贴住该行上沿，遮罩同步淡入。
+     * 时长与缓动跟设置面板的入场（{@code startSettingsPanelEnter}）取同一套，两者才顶替得自然。
      */
     private void startTocEnter() {
         View panel = tocPanel;
@@ -359,20 +342,12 @@ class ReadTocPopupController {
         panel.setVisibility(View.VISIBLE);
         int h = panel.getHeight();
         if (h > 0) {
-            float bounce = bouncePx();
-            tocBouncePending = true;
             panel.setTranslationY(h);
-            panel.animate().translationY(-bounce).setDuration(260)
-                    .setInterpolator(new AccelerateInterpolator())
-                    .withEndAction(() -> {
-                        if (!tocBouncePending) return;
-                        panel.animate().translationY(0f).setDuration(180)
-                                .setInterpolator(new DecelerateInterpolator())
-                                .withEndAction(() -> tocBouncePending = false).start();
-                    }).start();
+            panel.animate().translationY(0f).setDuration(240)
+                    .setInterpolator(new DecelerateInterpolator()).start();
         }
         applyTocDim(1f);
-        animateTocDim(1f, 0f, 440);
+        animateTocDim(1f, 0f, 240);
     }
 
     private boolean isChapterPopupShowing() {

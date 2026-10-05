@@ -3743,7 +3743,10 @@ public class ReadActivity extends BaseActivity {
         View scrim = new View(this);
         scrim.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        scrim.setOnClickListener(v -> dismissSettingsAnimated());
+        scrim.setOnClickListener(v -> {
+            requestHideNavWithSheet();
+            dismissSettingsAnimated();
+        });
 
         FrameLayout panelHost = new FrameLayout(this);
         FrameLayout.LayoutParams hostLp = new FrameLayout.LayoutParams(
@@ -3830,7 +3833,7 @@ public class ReadActivity extends BaseActivity {
         mainHandler.removeCallbacks(hideNavRunnable);
         settingsPopupWindow.setOnDismissListener(() -> {
             settingsPanelDismissing = false;
-            resetAutoHideTimer();
+            finishSheetDismiss();
             resumeAutoPageIfSuspended();
             setSettingsNavActive(false);
             settingsPanelView = null;
@@ -3953,6 +3956,32 @@ public class ReadActivity extends BaseActivity {
         Runnable action = pendingNavActionAfterDismiss;
         pendingNavActionAfterDismiss = null;
         if (action != null) action.run();
+    }
+
+    /** 本次关闭是否由「点正文空白」发起 —— 是则浮窗收起后把上下导航栏一并滑走。 */
+    private boolean hideNavWithSheet;
+
+    /**
+     * 「点正文/遮罩空白处关闭浮窗」登记：用户点的是正文，说明要回到阅读本身，
+     * 于是浮窗收回动画结束后连上下导航栏一起收起，一帧回到纯净阅读态。
+     * 底栏按钮的转发点击不调这里（那一类是换浮窗，导航栏必须留着）。
+     */
+    void requestHideNavWithSheet() {
+        hideNavWithSheet = true;
+    }
+
+    /**
+     * 浮窗（目录抽屉 / 设置面板）收起后的统一收尾：按需收起导航栏，否则维持原有的
+     * 5 秒自动收起计时。仍要补发底栏点击时不收 —— 收了就等于把紧接着要打开的浮窗的入口抽走。
+     */
+    void finishSheetDismiss() {
+        boolean hide = hideNavWithSheet;
+        hideNavWithSheet = false;
+        if (hide && pendingNavActionAfterDismiss == null) {
+            hideNavigation();
+        } else {
+            resetAutoHideTimer();
+        }
     }
 
     /**

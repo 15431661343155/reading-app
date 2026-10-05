@@ -47,14 +47,25 @@
             android:alpha="0.6"
             android:background="?attr/appSeparator" />
 
-        <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
-            android:id="@+id/rv_fastscroll"
+        <!-- 列表 + 自绘的快速滑动把手。库自带滑块在 PopupChapterFragment 里已关掉
+             （它没有替换滑块绘制的钩子），所以这里不再声明任何 fastScroll* 属性。 -->
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            app:fastScrollAutoHide="true"
-            app:fastScrollAutoHideDelay="2000"
-            app:fastScrollThumbColor="?attr/appAccent"
-            app:fastScrollTrackColor="@android:color/transparent" />
+            android:layout_height="match_parent">
+
+            <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
+                android:id="@+id/rv_fastscroll"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <com.example.myapplication.view.TocScrollThumbView
+                android:id="@+id/toc_scroll_thumb"
+                android:layout_width="24dp"
+                android:layout_height="38dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="8dp" />
+        </FrameLayout>
     </LinearLayout>
 
     <!-- 定位当前章节：半透明圆盘 + 主文字色图标（颜色在 ReadActivity 主题染色里统一设置） -->
