@@ -262,6 +262,8 @@ class ReadThemeController {
         ((TextView) activity.findViewById(R.id.tv_settings_text)).setTextColor(textColor);
         // 主题切换会重置图标 tint；若此时设置浮窗仍开着，需把「设置」图标的选中态补回来
         if (activity.settingsPopupWindow != null && activity.settingsPopupWindow.isShowing()) activity.setSettingsNavActive(true);
+        // 同理补回「目录」图标的实心选中态（上面刚无条件设成描边版）
+        if (activity.chapterPopupWindow != null && activity.chapterPopupWindow.isShowing()) activity.setCatalogNavActive(true);
     }
 
     // ==================== 日间 ⇄ 夜间 平滑过渡（平滑色彩渐变） ====================
@@ -465,6 +467,14 @@ class ReadThemeController {
             return;
         }
 
+        // 0b) 目录抽屉顶部的「目录 / 书签」分段控件：轨道用二级底，选中项画成主文字色胶囊 +
+        //     面板色文字。胶囊底与文字都是派生色现画的，不在「已知色 → 派生色」映射表里，
+        //     所以整棵子树在这里着色完就返回，不再往下递归。
+        if (view.getId() == R.id.seg_toc_tabs && view instanceof ViewGroup) {
+            themeSegTabs((ViewGroup) view);
+            return;
+        }
+
         // 1) 背景：纯色 / shape / selector / layer-list 递归重着色
         //    本项目的夜间模式是「手动」的（未调用 AppCompatDelegate），
         //    因此 res/drawable-night 资源限定符不会生效；胶囊这类 <selector> 必须在代码里
@@ -501,6 +511,40 @@ class ReadThemeController {
                 applyThemeRecursive(vg.getChildAt(i));
             }
         }
+    }
+
+    /** 记下目录抽屉当前选中的分段页签，并立即按当前派生配色重画一次。 */
+    static void selectSegTab(@Nullable View popupRoot, int index) {
+        if (popupRoot == null) return;
+        View seg = popupRoot.findViewById(R.id.seg_toc_tabs);
+        if (!(seg instanceof ViewGroup)) return;
+        seg.setTag(R.id.tag_seg_selected, index);
+        themeSegTabs((ViewGroup) seg);
+    }
+
+    /** 分段控件着色，见 {@link #applyThemeRecursive} 的 0b) 分支。 */
+    private static void themeSegTabs(ViewGroup seg) {
+        Object sel = seg.getTag(R.id.tag_seg_selected);
+        int selected = sel instanceof Integer ? (Integer) sel : 0;
+        float density = seg.getResources().getDisplayMetrics().density;
+        seg.setBackground(roundedRect(sChrome2, 22f * density));
+        for (int i = 0; i < seg.getChildCount(); i++) {
+            View child = seg.getChildAt(i);
+            boolean on = i == selected;
+            int h = child.getHeight() > 0 ? child.getHeight() : (int) (38 * density);
+            child.setBackground(on ? roundedRect(sText1, h / 2f) : null);
+            if (child instanceof TextView) {
+                ((TextView) child).setTextColor(on ? sChrome1 : sText1);
+            }
+        }
+    }
+
+    private static GradientDrawable roundedRect(int color, float radius) {
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.RECTANGLE);
+        d.setCornerRadius(radius);
+        d.setColor(color);
+        return d;
     }
 
     /**

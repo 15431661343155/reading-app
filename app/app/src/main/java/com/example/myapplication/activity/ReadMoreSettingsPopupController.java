@@ -275,7 +275,7 @@ class ReadMoreSettingsPopupController {
         popupView.findViewById(R.id.tv_more_settings_done).setOnClickListener(v -> {
             SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
             if (h != null) h.dismissAnimated();
-            else if (activity.moreSettingsPopupWindow != null) activity.moreSettingsPopupWindow.dismiss();
+            else SlideOutPopupWindow.dismissImmediate(activity.moreSettingsPopupWindow);
         });
 
         activity.themeViewTree(popupView);

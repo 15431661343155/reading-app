@@ -263,7 +263,7 @@ class ReadBackgroundPopupController {
         popupView.findViewById(R.id.iv_bg_popup_close).setOnClickListener(v -> {
             SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
             if (h != null) h.dismissAnimated();
-            else if (activity.bgColorsPopupWindow != null) activity.bgColorsPopupWindow.dismiss();
+            else SlideOutPopupWindow.dismissImmediate(activity.bgColorsPopupWindow);
         });
 
         // 背景色选择浮窗外壳跟随主题（色块本身为实际背景色，不在映射表内故不会被改）

@@ -1,10 +1,13 @@
 package com.example.myapplication.adapter;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -35,10 +38,12 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
     private static final int TYPE_VOLUME = 0;
     private static final int TYPE_CHAPTER = 1;
 
-    /** 卷行左侧内边距（dp） */
+    /** 卷行左侧内边距（dp）：卷标题再往右让出 20dp 箭头位，实际落在 36dp */
     private static final int PAD_VOLUME_DP = 16;
-    /** 章行左侧内边距（dp）：比卷行再缩进一层，形成层级感 */
-    private static final int PAD_CHAPTER_DP = 36;
+    /** 章行左侧内边距（dp）：行内边距是章行唯一的缩进（不放箭头占位），比卷标题再进一层 */
+    private static final int PAD_CHAPTER_DP = 44;
+    /** 平铺（无分卷）时的章行内边距：与浮窗顶部「共 N 章」的左缘齐平 */
+    private static final int PAD_FLAT_CHAPTER_DP = 16;
 
     private final List<ReadActivity.Chapter> chapters;
     private final List<LocalBookParser.VolumeInfo> volumes;
@@ -231,27 +236,38 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
             LocalBookParser.VolumeInfo vol = volumes.get(row.volumePos);
             boolean isOpen = row.volumePos < expanded.length && expanded[row.volumePos];
             holder.tvArrow.setText(isOpen ? "▾" : "▸");
+            holder.tvArrow.setVisibility(View.VISIBLE);
             holder.tvTitle.setText(vol.title == null || vol.title.isEmpty()
                     ? ("第" + (row.volumePos + 1) + "卷") : vol.title);
             holder.tvTitle.setTextSize(16f);
-            // 卷内包含当前阅读章节时，卷标题也用强调色，收起状态下也能一眼定位
+            // 卷内包含当前阅读章节时把卷标题加粗：收起状态下也能一眼定位。
+            // 不再用强调色——目录抽屉里文字统一走墨色，靠字重区分当前项。
             boolean holdsCurrent = containsChapter(vol, currentChapterIndex);
             Context itemCtx = holder.itemView.getContext();
-            holder.tvTitle.setTextColor(holdsCurrent ? accentColor(itemCtx) : textPrimaryColor(itemCtx));
+            holder.tvTitle.setTextColor(textPrimaryColor(itemCtx));
+            holder.tvTitle.setTypeface(null, holdsCurrent ? Typeface.BOLD : Typeface.NORMAL);
+            holder.ivCurrentMark.setVisibility(View.GONE);
             holder.rowContent.setPaddingRelative(dp(PAD_VOLUME_DP, density), 0,
                     dp(PAD_VOLUME_DP, density), 0);
             holder.itemView.setOnClickListener(v -> toggleVolume(row.volumePos));
         } else {
             if (row.chapterPos < 0 || row.chapterPos >= chapters.size()) return;
             ReadActivity.Chapter chapter = chapters.get(row.chapterPos);
-            holder.tvArrow.setText("");   // 章行不显示箭头，但保留占位以对齐卷标题
+            holder.tvArrow.setVisibility(View.GONE);   // 章行不放箭头，缩进只由行内边距决定
             holder.tvTitle.setText(chapter.getTitle());
             holder.tvTitle.setTextSize(15f);
             boolean isCurrent = chapter.getIndex() == currentChapterIndex;
             Context itemCtx = holder.itemView.getContext();
-            holder.tvTitle.setTextColor(isCurrent ? accentColor(itemCtx) : textPrimaryColor(itemCtx));
-            // 只有分卷书才把章行缩进一层（表示从属关系）；无分卷的平铺列表保持常规边距
-            int chapterPad = volumes.isEmpty() ? PAD_VOLUME_DP : PAD_CHAPTER_DP;
+            holder.tvTitle.setTextColor(textPrimaryColor(itemCtx));
+            holder.tvTitle.setTypeface(null, isCurrent ? Typeface.BOLD : Typeface.NORMAL);
+            // 当前章在加粗之外再加一枚定位标识，图标占位把章名往右挤（其余行 GONE 不留空位）
+            holder.ivCurrentMark.setVisibility(isCurrent ? View.VISIBLE : View.GONE);
+            if (isCurrent) {
+                holder.ivCurrentMark.setImageTintList(
+                        ColorStateList.valueOf(textPrimaryColor(itemCtx)));
+            }
+            // 只有分卷书才把章行缩进一层（表示从属关系）；平铺列表与「共 N 章」齐平
+            int chapterPad = volumes.isEmpty() ? PAD_FLAT_CHAPTER_DP : PAD_CHAPTER_DP;
             holder.rowContent.setPaddingRelative(dp(chapterPad, density), 0,
                     dp(PAD_VOLUME_DP, density), 0);
             holder.itemView.setOnClickListener(v -> {
@@ -264,12 +280,6 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
         if (followReaderTheme) {
             ReadActivity.themeViewTree(holder.itemView);
         }
-    }
-
-    /** 当前章节强调色：阅读器目录跟随背景派生色，其它页面走宿主主题的 appAccent */
-    private int accentColor(Context context) {
-        return followReaderTheme ? ReadActivity.getAccentColor()
-                : ThemeAttrs.color(context, R.attr.appAccent, 0xFF007AFF);
     }
 
     /** 普通章节文字色：阅读器目录跟随背景派生色，其它页面走宿主主题的 appTextPrimary */
@@ -291,12 +301,14 @@ public class TocTreeAdapter extends RecyclerView.Adapter<TocTreeAdapter.TocHolde
         final LinearLayout rowContent;
         final TextView tvArrow;
         final TextView tvTitle;
+        final ImageView ivCurrentMark;
 
         TocHolder(@NonNull View itemView) {
             super(itemView);
             rowContent = itemView.findViewById(R.id.row_toc_content);
             tvArrow = itemView.findViewById(R.id.tv_toc_arrow);
             tvTitle = itemView.findViewById(R.id.tv_toc_title);
+            ivCurrentMark = itemView.findViewById(R.id.iv_toc_current_mark);
         }
     }
 }

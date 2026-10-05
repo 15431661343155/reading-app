@@ -150,7 +150,7 @@ class ReadFontPopupController {
         popupView.findViewById(R.id.iv_font_popup_close).setOnClickListener(v -> {
             SwipeDismissLayout h = SwipeDismissLayout.findHost(v);
             if (h != null) h.dismissAnimated();
-            else if (activity.fontsPopupWindow != null) activity.fontsPopupWindow.dismiss();
+            else SlideOutPopupWindow.dismissImmediate(activity.fontsPopupWindow);
         });
 
         activity.themeViewTree(popupView);

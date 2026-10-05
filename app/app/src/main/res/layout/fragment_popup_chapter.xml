@@ -17,8 +17,7 @@
             android:layout_width="match_parent"
             android:layout_height="36dp"
             android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="?attr/appPageBg">
+            android:gravity="center_vertical">
 
             <TextView
                 android:id="@+id/tv_chapter_count"
@@ -28,7 +27,7 @@
                 android:text="共 0 章"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:textColor="?attr/appTextSecondary"
+                android:textColor="?attr/appTextPrimary"
                 android:gravity="center_vertical"
                 android:paddingStart="16dp"
                 android:paddingEnd="8dp" />
@@ -38,12 +37,14 @@
                 style="@style/TocSortButton"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
+                android:textColor="?attr/appTextPrimary"
                 android:text="正序" />
         </LinearLayout>
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="0.5dp"
+            android:layout_height="0.4dp"
+            android:alpha="0.6"
             android:background="?attr/appSeparator" />
 
         <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView

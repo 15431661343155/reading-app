@@ -5,6 +5,8 @@
     <item name="tag_keep_own_color" type="id" />
     <!-- 文字在派生配色中的角色（1=主文字 2=次文字 0=不归管）；逐帧渐变时按角色取色，避免中间灰阶被误判 -->
     <item name="tag_theme_text_role" type="id" />
+    <!-- 目录抽屉顶部分段控件当前选中的页签序号；派生配色按它给胶囊与文字取色 -->
+    <item name="tag_seg_selected" type="id" />
     <!-- 系统栏出血：inset 叠加前的原始 padding / 高度，保证重复注册监听不会累加 -->
     <item name="tag_bar_base_top" type="id" />
     <item name="tag_bar_base_bottom" type="id" />

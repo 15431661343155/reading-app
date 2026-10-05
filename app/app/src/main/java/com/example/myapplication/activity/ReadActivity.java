@@ -843,6 +843,7 @@ public class ReadActivity extends BaseActivity {
                     activity.currentPageInChapter = page;
                     activity.totalPagesInChapter = totalPages;
                     activity.updateProgressDisplay();
+                    activity.hideNavOnPageTurn();
                 } catch (Throwable t) {
                     android.util.Log.w("ReadActivity", "onPageChanged 异常", t);
                 }
@@ -3099,21 +3100,35 @@ public class ReadActivity extends BaseActivity {
             resetAutoHideTimer();
             if (currentChapterIndex < chapterList.size() - 1) loadChapterContent(currentChapterIndex + 1);
         });
-        // 设置浮窗的窗口下沿收缩到本行上沿后，本行已不被浮窗遮罩覆盖（保持可见、可点）。
-        // 此时点本行按钮的语义与「点浮窗外部」一致：先收起设置浮窗，不再触发各自功能。
+        // 设置浮窗的窗口下沿收缩到本行上沿后，本行已不被浮窗遮罩覆盖（保持可见、可点），
+        // 正常点击根本到不了这里——由浮窗的窗口外触摸拦截转成按钮点击（见
+        // forwardOutsideTouchToNavButton）。下面两处兜底只覆盖窗口尚未收缩到位那一帧的直达点击，
+        // 语义与之一致：先收起当前浮窗，其 onDismiss 里再补发这次点击。
         btnCatalog.setOnClickListener(v -> {
             resetAutoHideTimer();
-            if (isSettingsPopupShowing()) { dismissSettingsAnimated(); return; }
+            if (isSettingsPopupShowing()) {
+                pendingNavActionAfterDismiss = v::performClick;
+                dismissSettingsAnimated();
+                return;
+            }
             showChapterPopup();
         });
         btnNightMode.setOnClickListener(v -> {
             resetAutoHideTimer();
-            if (isSettingsPopupShowing()) { dismissSettingsAnimated(); return; }
+            if (isSettingsPopupShowing()) {
+                pendingNavActionAfterDismiss = v::performClick;
+                dismissSettingsAnimated();
+                return;
+            }
             animateNightModeToggle();
         });
         btnSettings.setOnClickListener(v -> {
             resetAutoHideTimer();
-            if (isSettingsPopupShowing()) { dismissSettingsAnimated(); return; }
+            if (isSettingsPopupShowing()) {
+                pendingNavActionAfterDismiss = v::performClick;
+                dismissSettingsAnimated();
+                return;
+            }
             showSettingsDialog();
         });
 
@@ -3196,8 +3211,7 @@ public class ReadActivity extends BaseActivity {
      * 缓存底部导航栏高度，仅在首次滑入前测量一次。
      * 用屏幕宽度（match_parent）做精确约束，避免每次滑动都 measure 造成起手掉帧。
      */
-    private void ensureBottomNavHeight() {
-        if (bottomNavHeight <= 0) {
+    private void ensureBottomNavHeight() {        if (bottomNavHeight <= 0) {
             // 先按导航条 inset 让位，再量高度：滑距用的是量出来的自身高度，
             // 顺序反了「目录/夜间/设置」那行会整条停在导航键底下。
             applyBottomNavInset();
@@ -3336,13 +3350,39 @@ public class ReadActivity extends BaseActivity {
         mainHandler.postDelayed(hideNavRunnable, 5000);
     }
 
+    /**
+     * 翻过一页即收起导航栏：底栏是按需唤出的浮层，用户回到翻页就说明不需要它了。
+     *
+     * <p>两种情况不收：自动翻页进行中（否则每 N 秒把用户刚唤出的底栏抽走）；
+     * 任一浮窗开着（浮窗窗口下沿按底栏上沿算，底栏滑走会让浮窗悬空）。</p>
+     */
+    void hideNavOnPageTurn() {
+        if (autoPageEnabled || isAnyReaderPopupShowing()) return;
+        if (layoutTopNav.getVisibility() != View.VISIBLE
+                && layoutBottomNav.getVisibility() != View.VISIBLE) return;
+        mainHandler.removeCallbacks(hideNavRunnable);
+        hideNavigation();
+    }
+
+    /** 阅读器当前是否有浮窗（目录/设置/二级抽屉/更多菜单）在显示 */
+    private boolean isAnyReaderPopupShowing() {
+        return (chapterPopupWindow != null && chapterPopupWindow.isShowing())
+                || (settingsPopupWindow != null && settingsPopupWindow.isShowing())
+                || (moreSettingsPopupWindow != null && moreSettingsPopupWindow.isShowing())
+                || (bgColorsPopupWindow != null && bgColorsPopupWindow.isShowing())
+                || (fontsPopupWindow != null && fontsPopupWindow.isShowing())
+                || (moreMenuPopupWindow != null && moreMenuPopupWindow.isShowing())
+                || (spacingPopup != null && spacingPopup.isShowing());
+    }
+
     private void dismissPopups() {
-        if (chapterPopupWindow != null && chapterPopupWindow.isShowing()) chapterPopupWindow.dismiss();
-        if (moreMenuPopupWindow != null && moreMenuPopupWindow.isShowing()) moreMenuPopupWindow.dismiss();
-        if (settingsPopupWindow != null && settingsPopupWindow.isShowing()) settingsPopupWindow.dismiss();
-        if (moreSettingsPopupWindow != null && moreSettingsPopupWindow.isShowing()) moreSettingsPopupWindow.dismiss();
-        if (bgColorsPopupWindow != null && bgColorsPopupWindow.isShowing()) bgColorsPopupWindow.dismiss();
-        if (fontsPopupWindow != null && fontsPopupWindow.isShowing()) fontsPopupWindow.dismiss();
+        // 页面切换/销毁时的统一关闭：跳过各浮窗的退场动画，动画也没时间播
+        SlideOutPopupWindow.dismissImmediate(chapterPopupWindow);
+        SlideOutPopupWindow.dismissImmediate(moreMenuPopupWindow);
+        SlideOutPopupWindow.dismissImmediate(settingsPopupWindow);
+        SlideOutPopupWindow.dismissImmediate(moreSettingsPopupWindow);
+        SlideOutPopupWindow.dismissImmediate(bgColorsPopupWindow);
+        SlideOutPopupWindow.dismissImmediate(fontsPopupWindow);
     }
 
     // ==================== 目录 / 书签弹窗（实现见 ReadTocPopupController） ====================
@@ -3678,6 +3718,18 @@ public class ReadActivity extends BaseActivity {
         // active 时文字颜色保持不变（不改成蓝色）
     }
 
+    /**
+     * 目录抽屉开启时：「目录」图标由描边列表切换为<b>实心列表</b>（与设置图标同一套路，不加圆底）。
+     * 实心版把外框填实、原线条与圆点挖空，于是挖空处露出底栏底色；图标颜色本身不变。
+     */
+    void setCatalogNavActive(boolean active) {
+        ImageView iv = findViewById(R.id.iv_catalog_icon);
+        if (iv == null) return;
+        iv.setImageResource(active ? R.drawable.ic_list_filled
+                : (isChromeDark() ? R.drawable.ic_list_white : R.drawable.ic_list_black));
+        iv.setImageTintList(ColorStateList.valueOf(getTextPrimaryColor()));
+    }
+
     @SuppressLint("InflateParams")
     private void showSettingsDialog() {
         // 全屏透明根布局：scrim 负责点击上方区域关闭；面板贴在窗口下沿并贴着
@@ -3742,14 +3794,13 @@ public class ReadActivity extends BaseActivity {
         root.setRetractView(popupView);
 
         // 跟手下滑关闭（面板整体可拖拽；已滑出后直接 dismiss，不再叠加收回动画）
-        root.setDismissAction(() -> {
-            if (settingsPopupWindow != null && settingsPopupWindow.isShowing()) settingsPopupWindow.dismiss();
-        });
+        root.setDismissAction(() -> SlideOutPopupWindow.dismissImmediate(settingsPopupWindow));
 
-        settingsPopupWindow = new PopupWindow(root,
+        SlideOutPopupWindow settingsPopup = new SlideOutPopupWindow(root,
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, true);
-        settingsPopupWindow.setAnimationStyle(0); // 取消整窗位移动画
-        settingsPopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        settingsPopupWindow = settingsPopup;
+        settingsPopup.setAnimationStyle(0); // 取消整窗位移动画
+        settingsPopup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         // 关键：弹窗是 focusable（模态）的，窗口高度又被收缩到「目录/夜间/设置」行上沿，
         // 于是这一整行都落在弹窗窗口「之外」。点这一行（含设置按钮）时事件根本到不了 Activity
         // 的按钮，而是被 PopupViewContainer 当成「点击弹窗外部」直接 dismiss() —— 无任何动画，
@@ -3763,25 +3814,16 @@ public class ReadActivity extends BaseActivity {
                 outside = x < 0 || y < 0 || x >= v.getWidth() || y >= v.getHeight();
             }
             if (outside) {
-                dismissSettingsAnimated();
+                forwardOutsideTouchToNavButton(v, event, this::dismissSettingsAnimated);
                 return true; // 吃掉事件，阻止 PopupWindow 自行 dismiss（那是不带动画的）
             }
             return false;
         });
+        // 返回键：PopupWindow 的 DecorView 会自己消费 BACK 并 dismiss()，内容视图上的按键监听
+        // 收不到，所以接管 dismiss() 本身，让它走与点面板外同一条收回动画。
+        settingsPopup.setSlideOut(this::dismissSettingsAnimated);
         // 先按全屏显示（保证能拿到稳定坐标系测量），首帧 pre-draw 里再把高度收缩到该行上沿
         settingsPopupWindow.showAtLocation(layoutBottomNav, Gravity.TOP, 0, 0);
-
-        // 返回键：先播放收回动画再关闭
-        root.setFocusableInTouchMode(true);
-        root.requestFocus();
-        root.setOnKeyListener((v, keyCode, event) -> {
-            if (keyCode == android.view.KeyEvent.KEYCODE_BACK
-                    && event.getAction() == android.view.KeyEvent.ACTION_UP) {
-                dismissSettingsAnimated();
-                return true;
-            }
-            return false;
-        });
 
         setSettingsNavActive(true);
         suspendAutoPage();
@@ -3792,6 +3834,7 @@ public class ReadActivity extends BaseActivity {
             resumeAutoPageIfSuspended();
             setSettingsNavActive(false);
             settingsPanelView = null;
+            runPendingNavAction();
         });
 
         // 入场：① 把弹窗窗口下沿收缩到「目录/夜间/设置」行上沿（窗口边界即裁剪线）；
@@ -3839,8 +3882,9 @@ public class ReadActivity extends BaseActivity {
      * 计算「目录/夜间/设置」行上沿在弹窗坐标系中的位置，即弹窗窗口应有的高度
      * （窗口下沿将落在该行上沿）。用两个 View 的屏幕坐标差换算，与状态栏 inset、
      * 是否存在系统导航栏全部无关；该行不可见/未测量到时退回「窗口高 - 60dp」。
+     * 设置浮窗与目录抽屉共用，保证两者出现/消失的位置完全一致。
      */
-    private int measureBottomRowTopInRoot(View root) {
+    int measureBottomRowTopInRoot(View root) {
         int[] rootLoc = new int[2];
         root.getLocationOnScreen(rootLoc);
         View bottomRow = findViewById(R.id.layout_bottom_row);
@@ -3873,6 +3917,63 @@ public class ReadActivity extends BaseActivity {
         return settingsPopupWindow != null && settingsPopupWindow.isShowing();
     }
 
+    boolean isChapterPopupShowing() {
+        return chapterPopupWindow != null && chapterPopupWindow.isShowing();
+    }
+
+    /**
+     * 被浮窗窗口「吃掉」、等收起动画结束后要补发的底栏点击。
+     * 一次手势里 DOWN/MOVE/UP 都会进拦截器，只认第一次，避免后到的事件把动作覆盖掉。
+     */
+    private Runnable pendingNavActionAfterDismiss;
+
+    /**
+     * 底栏「目录 / 夜间 / 设置」这一行落在浮窗窗口之外（窗口下沿被收缩到该行上沿），
+     * 点它时事件只会以「点浮窗外部」的形式到达弹窗窗口，根本到不了 Activity 的按钮。
+     * 这里把越界坐标换算回屏幕坐标、命中该行按钮：先播当前浮窗的收回动画，
+     * 动画结束（onDismiss）后补发该按钮的点击，目录浮窗与设置浮窗因此能互相顶替。
+     *
+     * <p>命中的按钮若正是当前浮窗自己的入口（开着目录再点目录），只收起、不再打开，
+     * 保住「再点一次即关闭」的开关语义。
+     */
+    void forwardOutsideTouchToNavButton(View popupRoot, MotionEvent ev, Runnable dismissAction) {
+        if (pendingNavActionAfterDismiss == null) {
+            View hit = navButtonAtWindowPoint(popupRoot, ev);
+            if (hit != null) {
+                boolean ownEntry = (hit == btnSettings && isSettingsPopupShowing())
+                        || (hit == btnCatalog && isChapterPopupShowing());
+                if (!ownEntry) pendingNavActionAfterDismiss = hit::performClick;
+            }
+        }
+        dismissAction.run();
+    }
+
+    /** 收起动画跑完后补发被窗口吃掉的底栏点击（设置浮窗与目录抽屉的 onDismiss 共用）。 */
+    void runPendingNavAction() {
+        Runnable action = pendingNavActionAfterDismiss;
+        pendingNavActionAfterDismiss = null;
+        if (action != null) action.run();
+    }
+
+    /**
+     * 命中底栏按钮。ACTION_OUTSIDE 的 getX/getY 是相对弹窗窗口左上角的（框架自身的
+     * 「是否在窗内」判定也用它），窗口左上角即该 decor 视图的屏幕位置，故直接相加还原。
+     */
+    private View navButtonAtWindowPoint(View popupRoot, MotionEvent ev) {
+        int[] windowLoc = new int[2];
+        popupRoot.getLocationOnScreen(windowLoc);
+        int x = windowLoc[0] + (int) ev.getX();
+        int y = windowLoc[1] + (int) ev.getY();
+        int[] loc = new int[2];
+        for (View button : new View[] { btnCatalog, btnNightMode, btnSettings }) {
+            if (button == null) continue;
+            button.getLocationOnScreen(loc);
+            if (x >= loc[0] && x < loc[0] + button.getWidth()
+                    && y >= loc[1] && y < loc[1] + button.getHeight()) return button;
+        }
+        return null;
+    }
+
     /** 收回动画是否已在播放中：避免重复触发把动画 cancel 成「瞬间消失」 */
     private boolean settingsPanelDismissing = false;
 
@@ -3883,7 +3984,7 @@ public class ReadActivity extends BaseActivity {
         final View panel = settingsPanelView;
         int h = panel != null ? panel.getHeight() : 0;
         if (panel == null || h <= 0) {
-            settingsPopupWindow.dismiss();
+            SlideOutPopupWindow.dismissImmediate(settingsPopupWindow);
             return;
         }
         settingsPanelDismissing = true;
@@ -3894,9 +3995,7 @@ public class ReadActivity extends BaseActivity {
                 .setInterpolator(new android.view.animation.AccelerateInterpolator())
                 .withEndAction(() -> {
                     settingsPanelDismissing = false;
-                    if (settingsPopupWindow != null && settingsPopupWindow.isShowing()) {
-                        settingsPopupWindow.dismiss();
-                    }
+                    SlideOutPopupWindow.dismissImmediate(settingsPopupWindow);
                 })
                 .start();
     }
@@ -3958,8 +4057,11 @@ public class ReadActivity extends BaseActivity {
     private void addBookmark() {
         if (currentBook == null) return;
         
-        // 修正：本地书籍使用本地存储，网络书籍使用服务器
-        if (isLocalBook) {
+        // 修正：本地书籍使用本地存储，网络书籍使用服务器。
+        // 外站书必须跟本地书同一条路：saveBookmark 里按 sourceType+sourceUrl 写 SP 再交给
+        // ExternalSyncManager 同步。外站书 currentBook.getId() 是 null，走服务器那条
+        // （addNetworkBookmark）会被后端以空 bookId 拒掉，表现为「添加失败」。
+        if (isLocalBook || isExternalBook) {
             addLocalBookmark();
         } else {
             addNetworkBookmark();
@@ -4493,8 +4595,10 @@ public class ReadActivity extends BaseActivity {
             sliderA.setTipFormatter(v -> String.valueOf(v - 1 + offA));
             sliderB.setTipFormatter(v -> String.valueOf(v - 1 + offB));
         }
-        sliderA.setProgressInfo(Math.round(lineSpacingRatio * 10) - offA + 1, totalA);
-        sliderB.setProgressInfo(Math.round(paraGapRatio * 20) - offB + 1, totalB);
+        // 滑块初值必须按抽屉类型取各自的量：边距抽屉用 padLR/padTB，
+        // 早先无脑用行段距两个值换算，边距抽屉每次重开滑块都跳回「看起来是默认」的位置。
+        sliderA.setProgressInfo((isLine ? Math.round(lineSpacingRatio * 10) : padLR) - offA + 1, totalA);
+        sliderB.setProgressInfo((isLine ? Math.round(paraGapRatio * 20) : (padTB < 0 ? 22 : padTB)) - offB + 1, totalB);
 
         Runnable syncVals = () -> {
             if (isLine) {
@@ -4582,7 +4686,7 @@ public class ReadActivity extends BaseActivity {
         // 面板滑出（跟手超阈值 / 收起按钮）后：scrim 淡出再关窗；scrim 点击关闭走 dismissSpacingDrawer 自己的动画
         host.setDismissAction(() -> {
             scrim.animate().alpha(0f).setDuration(120).withEndAction(() -> {
-                if (spacingPopup != null) { spacingPopup.dismiss(); spacingPopup = null; }
+                if (spacingPopup != null) { SlideOutPopupWindow.dismissImmediate(spacingPopup); spacingPopup = null; }
             }).start();
         });
 
@@ -4593,18 +4697,22 @@ public class ReadActivity extends BaseActivity {
             else dismissSpacingDrawer();
         });
 
-        spacingPopup = new PopupWindow(host,
+        SlideOutPopupWindow spacing = new SlideOutPopupWindow(host,
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, true);
-        spacingPopup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        spacingPopup.setAnimationStyle(0);
-        spacingPopup.setOutsideTouchable(true);
-        spacingPopup.setTouchInterceptor((v, event) -> {
+        spacingPopup = spacing;
+        spacing.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        spacing.setAnimationStyle(0);
+        spacing.setOutsideTouchable(true);
+        spacing.setTouchInterceptor((v, event) -> {
             if (event.getAction() == android.view.MotionEvent.ACTION_OUTSIDE) {
                 dismissSpacingDrawer();
                 return true;
             }
             return false;
         });
+        // 返回键：PopupWindow 的 DecorView 会自己消费 BACK 并 dismiss()，这里接管 dismiss()，
+        // 让它走与点 scrim 同一条滑回路径
+        spacing.setSlideOut(this::dismissSpacingDrawer);
         spacingPopup.showAtLocation(layoutBottomNav, Gravity.NO_GRAVITY, 0, 0);
         // 联动：抽屉滑出时设置面板收回；抽屉收起（scrim/返回键/跟手下滑/按钮任一路径 dismiss）时面板重新滑出
         retractSettingsPanelForSub();
@@ -4630,7 +4738,7 @@ public class ReadActivity extends BaseActivity {
                 .start();
         scrim.animate().alpha(0f).setDuration(200).start();
         panel.postDelayed(() -> {
-            try { pw.dismiss(); } catch (Exception ignore) { }
+            try { SlideOutPopupWindow.dismissImmediate(pw); } catch (Exception ignore) { }
         }, 230);
     }
 
@@ -5215,7 +5323,8 @@ public class ReadActivity extends BaseActivity {
     @SuppressWarnings("deprecation")
     @Override public void onBackPressed() {
         if (chapterPopupWindow != null && chapterPopupWindow.isShowing()) {
-            chapterPopupWindow.dismiss();
+            // 走抽屉自己的滑回动画，与点遮罩/再点目录按钮同一收起路径（直接 dismiss 会瞬间消失）
+            tocController.dismissChapterPopup();
         } else if (moreMenuPopupWindow != null && moreMenuPopupWindow.isShowing()) {
             moreMenuPopupWindow.dismiss();
         } else {

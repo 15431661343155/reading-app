@@ -214,14 +214,18 @@ static PopupWindow showPopup(Activity act, View popupView, int panelHeight, Stri
     View sc = popupView.findViewById(R.id.popup_scroll);
     if (sc != null) host.setScrollable(sc);
 
-    PopupWindow popup = new PopupWindow(host,
+    SlideOutPopupWindow popup = new SlideOutPopupWindow(host,
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, true);
     // 不能用整窗位移动画：slide_in_bottom 的 100% 是相对「窗口高度」，
     // 窗口改成全屏后位移 = 整屏高，面板前一半路程都在屏幕外，看上去就是「从屏幕底部飞入」。
     // 改为取消整窗动画，只对面板本身做入场位移（仅在其最终位置范围内滑出）。
     popup.setAnimationStyle(0);
     popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-    host.setDismissAction(() -> popup.dismiss());
+    // 动画播完后的收尾：直接关窗，别再走一遍退场动画
+    host.setDismissAction(popup::dismissNow);
+    // 返回键：PopupWindow 的 DecorView 会自己吃掉 BACK 并 dismiss()，内容视图上的
+    // OnKeyListener 收不到，只能接管 dismiss()，让它走与点面板外同一条收回动画。
+    popup.setSlideOut(() -> host.dismissAnimated());
     popup.showAtLocation(act.findViewById(android.R.id.content), Gravity.BOTTOM, 0, 0);
 
     // 入场：必须在首帧绘制「之前」把面板移到容器下沿之外。

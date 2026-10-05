@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--阅读器目录：分卷折叠树的一行。卷行显示 ▸/▾ 箭头，章行为缩进子项（箭头留空占位保持对齐）-->
+<!--阅读器目录：分卷折叠树的一行。卷行显示 ▸/▾ 箭头，章行不放箭头，缩进全由行内边距决定
+    （平铺时 16dp 与浮窗顶部「共 N 章」齐平，分卷时 44dp 落在卷标题右侧）-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -15,7 +16,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:minHeight="48dp"
-        android:paddingStart="16dp"
+        android:paddingStart="8dp"
         android:paddingEnd="16dp">
 
         <TextView
@@ -24,15 +25,26 @@
             android:layout_height="wrap_content"
             android:text="▸"
             android:textSize="12sp"
-            android:textColor="?attr/appTextSecondary"
+            android:textColor="?attr/appTextPrimary"
             android:gravity="center" />
+
+        <!--当前章节的定位标识：复用「定位」图标，只在当前章那一行出现，
+            靠自身宽度把章名往右挤（让位），其余行 GONE 不留空位-->
+        <ImageView
+            android:id="@+id/iv_toc_current_mark"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
+            android:src="@drawable/ic_toc_locate"
+            android:visibility="gone"
+            android:contentDescription="当前章节" />
 
         <TextView
             android:id="@+id/tv_toc_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
             android:paddingTop="13dp"
             android:paddingBottom="13dp"
             android:text="第一章"
@@ -41,10 +53,13 @@
             android:lineSpacingExtra="2dp" />
     </LinearLayout>
 
+    <!-- 行分割线：起点与平铺章名的左缘（16dp）对齐；0.4dp 在 3x 屏上正好落到 1px，
+         再叠 alpha 才够淡；阅读器换肤只改背景色不改 alpha，所以这里的透明度不会被派生配色冲掉 -->
     <View
         android:layout_width="match_parent"
-        android:layout_height="0.5dp"
+        android:layout_height="0.4dp"
         android:layout_marginStart="16dp"
+        android:alpha="0.6"
         android:background="?attr/appSeparator" />
 
 </LinearLayout>

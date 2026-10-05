@@ -70,8 +70,14 @@ public class PopupBookmarkFragment extends Fragment {
     public void setSourceType(String sourceType) { this.sourceType = sourceType; }
     public void setSourceBookId(String sourceBookId) { this.sourceBookId = sourceBookId; }
 
+    /**
+     * 外站书：没有服务端书 ID，书签只存在按用户隔离的外站 SP 里。
+     * 必须带 {@code bookId == 0} 这层判定——本站书籍的 JSON 也可能带 sourceType/sourceUrl，
+     * 只按书源字段判断会把有服务端书签的书错领到外站命名空间。
+     */
     private boolean isExternal() {
-        return sourceType != null && !sourceType.isEmpty()
+        return bookId == 0
+                && sourceType != null && !sourceType.isEmpty()
                 && sourceBookId != null && !sourceBookId.isEmpty();
     }
 
@@ -138,7 +144,9 @@ public class PopupBookmarkFragment extends Fragment {
 
     private void loadBookmarks() {
         try {
-            if (isLocalBook) {
+            if (isExternal()) {
+                loadExternalBookmarks();
+            } else if (isLocalBook) {
                 loadLocalBookmarks();
             } else {
                 loadNetworkBookmarks();
@@ -235,6 +243,13 @@ public class PopupBookmarkFragment extends Fragment {
                 });
     }
 
+    /** 外站书签文件按登录用户共用一份，因此逐条比对书源，只留当前这本。 */
+    private boolean matchesSource(SharedPreferences sp, int i) {
+        String p = "bm_" + i + "_";
+        return sourceType.equals(sp.getString(p + "sourceType", ""))
+                && sourceBookId.equals(sp.getString(p + "sourceBookId", ""));
+    }
+
     private void loadExternalBookmarks() {
         if (getActivity() == null) return;
         SharedPreferences sp = getActivity().getSharedPreferences(
@@ -242,6 +257,7 @@ public class PopupBookmarkFragment extends Fragment {
         int count = sp.getInt("bookmark_count", 0);
         bookmarkList.clear();
         for (int i = 0; i < count; i++) {
+            if (!matchesSource(sp, i)) continue;
             String p = "bm_" + i + "_";
             Bookmark bookmark = new Bookmark();
             bookmark.setChapterIndex(sp.getInt(p + "chapterIndex", 0));
@@ -325,7 +341,9 @@ public class PopupBookmarkFragment extends Fragment {
     }
 
     private void deleteBookmark(Bookmark bookmark) {
-        if (isLocalBook) {
+        if (isExternal()) {
+            deleteExternalBookmark(bookmark);
+        } else if (isLocalBook) {
             deleteLocalBookmark(bookmark);
         } else {
             deleteNetworkBookmark(bookmark);
@@ -373,6 +391,55 @@ public class PopupBookmarkFragment extends Fragment {
 
         bookmarkList.remove(bookmark);
         adapter.notifyDataSetChanged();
+        Hint.show(getContext(), "书签已删除");
+    }
+
+    /**
+     * 删除外站书签。文件里所有外站书共用一套 {@code bm_<i>_} 下标，所以定位到全局下标后要
+     * 把后续条目整体前移一格，不能只清当前这本的键。
+     */
+    private void deleteExternalBookmark(Bookmark bookmark) {
+        if (getActivity() == null || bookmark == null) return;
+        SharedPreferences sp = getActivity().getSharedPreferences(
+                ExternalPrefs.bookmarkName(getActivity()), Context.MODE_PRIVATE);
+        int count = sp.getInt("bookmark_count", 0);
+        long targetTime = bookmark.getId() == null ? 0L : bookmark.getId();
+        int at = -1;
+        for (int i = 0; i < count; i++) {
+            if (matchesSource(sp, i) && sp.getLong("bm_" + i + "_time", 0) == targetTime) {
+                at = i;
+                break;
+            }
+        }
+        if (at < 0) return;
+
+        SharedPreferences.Editor e = sp.edit();
+        for (int i = at; i < count - 1; i++) {
+            String dst = "bm_" + i + "_";
+            String src = "bm_" + (i + 1) + "_";
+            e.putString(dst + "sourceType", sp.getString(src + "sourceType", ""));
+            e.putString(dst + "sourceBookId", sp.getString(src + "sourceBookId", ""));
+            e.putInt(dst + "chapterIndex", sp.getInt(src + "chapterIndex", 0));
+            e.putString(dst + "chapterTitle", sp.getString(src + "chapterTitle", ""));
+            e.putInt(dst + "scrollPosition", sp.getInt(src + "scrollPosition", 1));
+            e.putString(dst + "preview", sp.getString(src + "preview", ""));
+            e.putString(dst + "note", sp.getString(src + "note", ""));
+            e.putLong(dst + "time", sp.getLong(src + "time", 0));
+        }
+        String last = "bm_" + (count - 1) + "_";
+        for (String k : new String[]{"sourceType", "sourceBookId", "chapterIndex", "chapterTitle",
+                "scrollPosition", "preview", "note", "time"}) {
+            e.remove(last + k);
+        }
+        e.putInt("bookmark_count", count - 1);
+        e.apply();
+
+        bookmarkList.remove(bookmark);
+        adapter.notifyDataSetChanged();
+        if (bookmarkList.isEmpty()) {
+            tvEmpty.setVisibility(View.VISIBLE);
+            rvBookmarks.setVisibility(View.GONE);
+        }
         Hint.show(getContext(), "书签已删除");
     }
 

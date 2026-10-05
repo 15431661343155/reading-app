@@ -78,7 +78,8 @@ public class PopupChapterFragment extends Fragment {
             ((TextView) view.findViewById(R.id.tv_chapter_count)).setText("共 " + chapterList.size() + " 章");
 
             FastScrollRecyclerView rv = view.findViewById(R.id.rv_fastscroll);
-            rv.setLayoutManager(new LinearLayoutManager(getContext()));
+            final LinearLayoutManager lm = new LinearLayoutManager(getContext());
+            rv.setLayoutManager(lm);
 
             // 分卷折叠树（无分卷信息时自动退化为平铺列表，行为与改造前一致）
             // 排序偏好（正序/倒序）在 setAdapter 之前应用，避免打开时先正序渲染再翻转。
@@ -103,6 +104,9 @@ public class PopupChapterFragment extends Fragment {
                 }
             });
             rv.setAdapter(adapter);
+            // 打开抽屉即把当前章钉在首行。必须在 setAdapter 之后、首帧布局之前挂上：
+            // 布局器尚未测量时挂的锚点会在真正布局后被沿用，比 post 到布局后再滚更稳。
+            anchorCurrentChapter(lm, adapter, currentChapterIndex);
 
             // 正序/倒序切换：按钮标签显示「当前顺序」，点击后顺序与标签一起翻转，
             // 并把列表滚回新顺序的第一行（正序=第一章那端、倒序=最后一章那端）。
@@ -126,19 +130,15 @@ public class PopupChapterFragment extends Fragment {
 
             // 「定位当前章节」悬浮按钮：滑动目录后一键回到当前章。
             // 当前章若被折叠在别的卷里，先展开该卷再定位（见 TocTreeAdapter.locateCurrentChapter）。
-            // 注意用 scrollToPosition 而非 smoothScrollToPosition：跨度可能有上千行，
-            // 平滑滚动会肉眼可见地滚很久（用户体感像卡住）。
+            // 用即时定位而非 smoothScroll：跨度可能有上千行，平滑滚动会肉眼可见地滚很久（用户体感像卡住）。
             View locateBtn = view.findViewById(R.id.btn_toc_locate);
             if (locateBtn != null) {
                 locateBtn.setOnClickListener(v -> {
                     try {
                         int pos = adapter.locateCurrentChapter();
-                        if (pos >= 0) {
-                            rv.scrollToPosition(pos);
-                        } else if (currentChapterIndex >= 0 && currentChapterIndex < chapterList.size()) {
-                            // 兜底：不在任何卷的展示范围内（异常数据）时按原始章号定位
-                            rv.scrollToPosition(currentChapterIndex);
-                        }
+                        // 与打开抽屉时同一落点：当前章钉在首行（scrollToPosition 只保证可见，会落到可视区末尾）
+                        lm.scrollToPositionWithOffset(
+                                pos >= 0 ? pos : currentChapterIndex, 0);
                     } catch (Throwable t) {
                         android.util.Log.e("PopupChapter", "定位当前章节失败", t);
                     }
@@ -149,9 +149,7 @@ public class PopupChapterFragment extends Fragment {
             if (scrollTarget >= 0 && scrollTarget < chapterList.size()) {
                 rv.post(() -> {
                     try {
-                        // 当前章默认所在卷已展开，按其在可见行里的实际位置定位
-                        int visiblePos = adapter.visiblePositionOfChapter(scrollTarget);
-                        rv.scrollToPosition(visiblePos >= 0 ? visiblePos : scrollTarget);
+                        anchorCurrentChapter(lm, adapter, scrollTarget);
                     } catch (Throwable ignored) {}
                 });
             }
@@ -169,5 +167,17 @@ public class PopupChapterFragment extends Fragment {
             } catch (Throwable ignored) {}
             return fallback;
         }
+    }
+
+    /**
+     * 把当前章钉成列表首行。
+     *
+     * <p>不用 {@code rv.scrollToPosition}：它只保证「目标可见」，本浮窗里实测会把当前章落到可视区
+     * 末尾。带 0 偏移的锚定才等价于「作为第一个可见项」。</p>
+     */
+    private static void anchorCurrentChapter(LinearLayoutManager lm, TocTreeAdapter adapter,
+                                             int chapterIndex) {
+        int pos = adapter.visiblePositionOfChapter(chapterIndex);
+        lm.scrollToPositionWithOffset(pos >= 0 ? pos : chapterIndex, 0);
     }
 }
