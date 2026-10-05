@@ -214,7 +214,7 @@ public class ReadActivity extends BaseActivity {
                                                     //    这里按时间窗去重（见 onChapterEnd/onChapterStart）
     /** 服务端进度比本地新时，允许越过 positionRestored 守卫重渲染一次（同一本书只保留最新那条记录） */
     private boolean forceRestorePosition = false;
-    float currentFontSize = 28f;   // px
+    float currentFontSize = 22f;   // WebView CSS px；viewport width=device-width 下 1px == 1dp
     float headerFooterFontSize = 12f; // 初始字号改为12
     boolean showHeaderFooter = true;
     boolean showBatteryTime = false;
@@ -491,7 +491,7 @@ public class ReadActivity extends BaseActivity {
 
         currentChapterIndex = getIntent().getIntExtra("chapterIndex", 0);
         explicitChapterJump = getIntent().getBooleanExtra("chapterExplicit", false);
-        currentFontSize = getIntent().getFloatExtra("fontSize", 28f);
+        currentFontSize = getIntent().getFloatExtra("fontSize", 22f);
         isNightMode = getIntent().getBooleanExtra("nightMode", false);
         isLocalBook = getIntent().getBooleanExtra("isLocal", false);
         isExternalBook = getIntent().getBooleanExtra("isExternal", false);
@@ -3583,7 +3583,7 @@ public class ReadActivity extends BaseActivity {
 
     private void loadReadingPreferencesNoApply() {
         SharedPreferences sp = getSharedPreferences("read_settings", MODE_PRIVATE);
-        currentFontSize = sp.getFloat("font_size", 28f);
+        currentFontSize = sp.getFloat("font_size", 22f);
         isNightMode = sp.getBoolean("night_mode", false);
         currentBgColor = sp.getInt("bg_color", 0);
         // 黑色背景(#1A1A1A)≡夜间模式，两者统一为一个状态：

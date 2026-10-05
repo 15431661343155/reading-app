@@ -48,10 +48,12 @@ class ReadLayoutCache {
         int chc = (content != null) ? content.hashCode() : 0;
         // 间距参数参与签名：行距/段距/左右/上下任一变动都会自然错开缓存 → 自动失效并重排
         // （padTB=-1 表示默认公式，与显式值天然不同串，不会误命中）
+        // 末尾 tl2 = 排版格式版本号：正文已改为两端对齐（行对象新增 justLast 字段），
+        // 旧格式缓存里没有该字段，必须换版让存量缓存自然失效，否则末行会被误判为可拉伸行。
         return bookPart + "_" + chIndex + "_" + ((int) activity.currentFontSize) + "_" + w + "_" + h
                 + "_" + (activity.showHeaderFooter ? 1 : 0) + "_" + fh + "_" + chc
                 + "_" + Math.round(activity.lineSpacingRatio * 10) + "_" + Math.round(activity.paraGapRatio * 100)
-                + "_" + activity.padLR + "_" + activity.padTB;
+                + "_" + activity.padLR + "_" + activity.padTB + "_tl2";
     }
 
     String readLayoutCache(String key) {

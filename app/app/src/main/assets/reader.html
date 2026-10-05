@@ -86,6 +86,19 @@
     #htmlContent pre, #htmlContent table, #htmlContent blockquote, #htmlContent figure {
         break-inside: avoid; -webkit-column-break-inside: avoid;
     }
+    /* 正文两端对齐：与 Canvas 模式（fillLineText）同一口径，让每行填满列宽、左右边距严格相等。
+       书籍自带 text-align 会盖过默认继承的 left，故用 !important 锁住。
+       只作用于正文块级元素，标题的原有对齐（常见居中）保持不动。 */
+    #htmlColumns p, #htmlColumns div, #htmlColumns li, #htmlColumns dd,
+    #htmlColumns blockquote, #htmlColumns figcaption {
+        text-align: justify !important;
+        text-justify: inter-ideograph;
+    }
+    /* 依赖空白与边框的排版不参与两端对齐，否则代码/表格会被拉变形 */
+    #htmlColumns pre, #htmlColumns code, #htmlColumns kbd, #htmlColumns samp,
+    #htmlColumns table, #htmlColumns th, #htmlColumns td {
+        text-align: left !important;
+    }
     /* ===== HTML 模式的页眉页脚覆盖层（Canvas 模式由 canvas 自带绘制，这里仅补 HTML 模式）=====
        用 position:fixed 钉在视口上/下边缘，不随 #htmlColumns 的 translateX 平移，
        也不随上下滚动模式的内容滚动；pointer-events:none 让点击穿透到正文用于翻页。 */
@@ -500,7 +513,8 @@ function paginate(text, title) {
                 currentPageLines = [];
                 currentPageHeight = 0;
             }
-            currentPageLines.push({text: line, fontSize: titleFontSize, bold: true, color: textColor});
+            currentPageLines.push({text: line, fontSize: titleFontSize, bold: true, color: textColor,
+                justLast: true});   // 标题不参与两端对齐，保持左对齐
             currentPageHeight += h;
         });
         // 标题后空行：必须生成占位行（blank），否则 drawPage 的 y 不会推进这段高度，
@@ -555,7 +569,7 @@ function paginate(text, title) {
         var trimmed = para.replace(/^[\s\u3000]+/, '');
         var indentedPara = indent + trimmed;
         var lines = splitTextToLines(indentedPara, maxWidth);
-        lines.forEach(function(line) {
+        lines.forEach(function(line, li) {
             var h = fontSize * lineHeightRatio;
             if (currentPageHeight + h > maxHeight) {
                 pages.push(currentPageLines.slice());
@@ -563,7 +577,10 @@ function paginate(text, title) {
                 currentPageLines = [];
                 currentPageHeight = 0;
             }
-            currentPageLines.push({text: line, fontSize: fontSize, bold: false, color: textColor});
+            // justLast：段落末行保持左对齐，其余行拉伸到满宽（两端对齐），
+            // 让左右边距严格相等，而不是右端随机留下 0~1 个字宽
+            currentPageLines.push({text: line, fontSize: fontSize, bold: false, color: textColor,
+                justLast: li === lines.length - 1});
             currentPageHeight += h;
         });
         globalOffset += para.length + 1;
@@ -600,6 +617,35 @@ function splitTextToLines(text, maxWidth) {
         lines.push(currentLine);
     }
     return lines;
+}
+
+/**
+ * 两端对齐绘制一行正文（justify）。
+ *
+ * 为什么需要它：正文原先是「左对齐 + 行宽只受上限约束」——splitTextToLines 里
+ * `currentWidth + chWidth > maxWidth` 才换行。中文等宽，行宽必然取整到「整数个字宽」，
+ * 而 maxWidth = innerWidth - padding*2 通常不是整数倍，于是每行右端恒定剩下
+ * `maxWidth mod 字宽` 的空白（0 ~ 1 个字宽）。
+ * 结果：左边距恒为 padding，右边距 = padding + 这段剩余，恒 ≥ 左边距、平均大半个字宽，
+ * 也就是「正文右边空白总比左边宽」——分页 / 滚动 / HTML 三条路径同一策略，故三处都可见。
+ *
+ * 做法：把剩余宽度均摊到字间隙，逐字绘制，使行总宽精确等于 maxWidth，左右边距因此严格相等。
+ * 段落末行（justLast）与章节标题不拉伸，保持左对齐（常规排版如此）。
+ */
+function fillLineText(text, x, y, maxWidth, justLast) {
+    if (!text) return;
+    if (justLast || maxWidth <= 0) { ctx.fillText(text, x, y); return; }
+    var w = ctx.measureText(text).width;
+    var slots = text.length - 1;
+    // 剩余不足半像素或已是单字符行：逐字画没有收益，直接整行绘制省开销
+    if (slots <= 0 || w >= maxWidth - 0.5) { ctx.fillText(text, x, y); return; }
+    var extra = (maxWidth - w) / slots;
+    var cx = x;
+    for (var i = 0; i < text.length; i++) {
+        var ch = text.charAt(i);
+        ctx.fillText(ch, cx, y);
+        cx += ctx.measureText(ch).width + extra;
+    }
 }
 
 // ============ 绘制指定页 ============
@@ -654,7 +700,8 @@ function drawPage(pageIndex) {
             ctx.font = line.fontSize + 'px ' + fontFamily;
         }
         ctx.fillStyle = line.color || textColor;
-        ctx.fillText(line.text, padding, y + line.fontSize);
+        // maxWidth 必须与 paginate 断行时同源，否则拉伸目标宽度会与实际排版宽度错位
+        fillLineText(line.text, padding, y + line.fontSize, window.innerWidth - padding * 2, line.justLast);
         y += lineH;
     });
     
@@ -1987,7 +2034,8 @@ function layoutScroll(text, title) {
         ctx.font = 'bold ' + titleFontSize + 'px ' + fontFamily;
         var titleLines = splitTextToLines(title, maxWidth);
         titleLines.forEach(function (line) {
-            scrollLines.push({ text: line, fontSize: titleFontSize, bold: true, color: textColor, y: y });
+            scrollLines.push({ text: line, fontSize: titleFontSize, bold: true, color: textColor, y: y,
+                justLast: true });   // 标题不参与两端对齐
             y += titleFontSize * 1.6;
         });
         y += titleFontSize * 0.8; // 标题后空行
@@ -2004,8 +2052,9 @@ function layoutScroll(text, title) {
         var trimmed = para.replace(/^[\s\u3000]+/, '');
         var indentedPara = indent + trimmed;
         var lines = splitTextToLines(indentedPara, maxWidth);
-        lines.forEach(function (line) {
-            scrollLines.push({ text: line, fontSize: fontSize, bold: false, color: textColor, y: y });
+        lines.forEach(function (line, li) {
+            scrollLines.push({ text: line, fontSize: fontSize, bold: false, color: textColor, y: y,
+                justLast: li === lines.length - 1 });   // 段落末行不拉伸，其余行两端对齐
             y += fontSize * lineHeightRatio;
         });
     });
@@ -2081,7 +2130,8 @@ function drawScroll() {
         if (screenY > H2) break;              // 在视口下方（行已按 y 升序）
         ctx.font = (line.bold ? 'bold ' : '') + line.fontSize + 'px ' + fontFamily;
         ctx.fillStyle = line.color || textColor;
-        ctx.fillText(line.text, padding, screenY + line.fontSize);
+        // maxWidth 与 layoutScroll 的断行宽度同源（W - padding*2），保证拉伸目标与排版基准一致
+        fillLineText(line.text, padding, screenY + line.fontSize, W - padding * 2, line.justLast);
     }
     ctx.restore();
 
