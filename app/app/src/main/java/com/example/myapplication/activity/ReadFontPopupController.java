@@ -275,18 +275,14 @@ class ReadFontPopupController {
             if (activity.downloadingFonts.contains(item.cssName)) return; // 已在下载中
             activity.downloadingFonts.add(item.cssName);
 
-            // 切换到下载进度 UI
-            TextView tvName = card.findViewWithTag("font_name");
+            // 切换到下载进度 UI：卡片背景开始按宽度填充，底部出现百分比小字
             TextView tvProgress = card.findViewWithTag("font_progress_text");
-            android.widget.ProgressBar pb = card.findViewWithTag("font_progress_bar");
-            if (tvName != null) tvName.setAlpha(0.6f);
+            if (card.getBackground() instanceof FontCardDrawable) {
+                ((FontCardDrawable) card.getBackground()).setProgress(0);
+            }
             if (tvProgress != null) {
                 tvProgress.setVisibility(View.VISIBLE);
                 tvProgress.setText("0%");
-            }
-            if (pb != null) {
-                pb.setVisibility(View.VISIBLE);
-                pb.setProgress(0);
             }
 
             downloadFontFromUrl(item.backendFont.getId(), item.cssName, item.displayName,
@@ -365,7 +361,7 @@ class ReadFontPopupController {
      * 构建 3 列网格中的单个字体卡片
      */
     @SuppressLint("SetTextI18n")
-    private View buildFontCard(FontCardItem item, float density, int cardHeight, boolean downloaded) {
+    private View buildFontCard(FontCardItem item, float density, boolean downloaded) {
         boolean isCurrent = item.cssName.equals(activity.currentFontFamily);
         boolean isDownloading = item.isBackend && !downloaded && activity.downloadingFonts.contains(item.cssName);
 
@@ -382,38 +378,30 @@ class ReadFontPopupController {
             }
         }
 
-        // 卡片配色跟随「当前阅读调色板」，而非写死日/夜两套值：
-        // 这样更换阅读背景/夜间后，卡片与字体弹窗背景同色系，永不脱节、始终协调。
-        // 选中态用 sAccent（默认墨韵主题即朱印红）表达；描边进一步弱化（1dp + 向底色混 50%）以显高级。
+        // 卡片配色全部由「当前阅读调色板」派生，换阅读背景/夜间后自动跟随，不写死日/夜两套值。
+        // 分层靠明度：卡片底比弹窗底浅一档（米白压牛皮纸），因此不再画描边——
+        // 浅底压深底已经分得开，再加描边就成了一圈白框。
         boolean isDark = ReadThemeController.isChromeDark();
-        int chrome  = ReadThemeController.getChromeBgColor();            // 字体弹窗主底，卡片与之同色系
-        int textPri = ReadThemeController.getTextPrimaryColor();              // 卡片主文字（随主题取深/浅）
-        int accent  = ReadThemeController.getAccentColor();             // 当前主题强调色（朱印红系）
-        // 普通卡片：在弹窗底色上做「顶受光、底背光」的细微明度偏移，浮出层次
-        int cardTop = ReadThemeController.mixColors(chrome, 0xFFFFFF, isDark ? 0.05f : 0.07f);
-        int cardMid = chrome;
-        int cardBot = ReadThemeController.mixColors(chrome, 0x000000, isDark ? 0.06f : 0.04f);
-        int strokeN = ReadThemeController.mixColors(chrome, 0x000000, isDark ? 0.18f : 0.12f);
-        // 选中卡片：底色向强调色轻微晕染（克制、不突兀）；描边用弱化后的强调色（宽度仅 1dp）
-        int washTop = ReadThemeController.mixColors(chrome, accent, isDark ? 0.14f : 0.10f);
-        int washMid = ReadThemeController.mixColors(chrome, accent, isDark ? 0.10f : 0.07f);
-        int washBot = ReadThemeController.mixColors(chrome, accent, isDark ? 0.07f : 0.05f);
-        int selStroke = ReadThemeController.mixColors(accent, chrome, 0.50f);
+        int chrome  = ReadThemeController.getChromeBgColor();            // 字体弹窗主底
+        int textPri = ReadThemeController.getTextPrimaryColor();         // 卡片主文字
+        int textSec = ReadThemeController.getTextSecondaryColor();       // 未下载的下载箭头（灰）
+        int accent  = ReadThemeController.getAccentColor();              // 无彩底时的回落色
+        int selInk  = selectedInkColor(chrome, accent, isDark);          // 选中字色 + 同色小勾
+        int cardTop = ReadThemeController.mixColors(chrome, 0xFFFFFF, isDark ? 0.13f : 0.42f);
+        int cardBot = ReadThemeController.mixColors(chrome, 0xFFFFFF, isDark ? 0.07f : 0.28f);
 
         // 卡片容器
         android.widget.FrameLayout card = new android.widget.FrameLayout(activity);
-        int radius = (int) (12 * density);
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        bg.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM);
-        if (isCurrent) {
-            bg.setColors(new int[]{ washTop, washMid, washBot });
-            bg.setStroke((int) (1 * density), selStroke);
-        } else {
-            bg.setColors(new int[]{ cardTop, cardMid, cardBot });
-            bg.setStroke((int) (1 * density), strokeN);
-        }
-        bg.setCornerRadius(radius);
+        FontCardDrawable bg = new FontCardDrawable(density);
+        bg.setColors(cardTop, cardBot);
+        bg.setFillColors(ReadThemeController.mixColors(cardTop, selInk, 0.40f),
+                ReadThemeController.mixColors(cardBot, selInk, 0.30f));
+        bg.setArrowColor(textSec);
+        bg.setTickColor(selInk);
+        bg.setRadius(12 * density);
+        bg.setShowArrow(!downloaded);        // 未下载：右侧灰色下载箭头
+        bg.setShowTick(isCurrent);           // 选中：右上角与字体名同色的小勾
+        if (isDownloading) bg.setProgress(0);
         card.setBackground(bg);
         // 字体卡片是「可选项 + 选中态」的功能性组件：底色必须表达自身状态，
         // 不能被浮窗重着色（否则白色底色会被映射成阅读器派生底色，切换字体重建卡片时
@@ -423,59 +411,45 @@ class ReadFontPopupController {
         card.setFocusable(true);
         card.setForeground(getRippleOrNull());
 
-        // 字体名（居中）
+        // 字体名（居中；未下载时给右侧下载箭头让位）
         TextView tvName = new TextView(activity);
         tvName.setTag("font_name");
         tvName.setText(item.displayName);
-        tvName.setTextSize(16);
-        tvName.setTextColor(isCurrent ? accent : textPri);
+        // 卡片只有约 98dp 宽，五字以上的字体名按 16sp 会撞到下载箭头，先降字号保住全名
+        tvName.setTextSize(item.displayName.length() >= 5 ? 13 : 16);
+        tvName.setTextColor(isCurrent ? selInk : textPri);
         tvName.setGravity(android.view.Gravity.CENTER);
+        tvName.setMaxLines(1);
+        tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
         if (preview != null) tvName.setTypeface(preview);
-        if (isDownloading) tvName.setAlpha(0.6f);
         android.widget.FrameLayout.LayoutParams nameLp = new android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
                 android.view.Gravity.CENTER);
         tvName.setLayoutParams(nameLp);
+        if (!downloaded) tvName.setPadding(0, 0, (int) (18 * density), 0);
         card.addView(tvName);
 
-        // 下载进度：百分比文字 + 水平进度条（未下载时默认隐藏，点击后显示）
+        // 下载进度：卡片背景按完成宽度填充（见 FontCardDrawable），这里只留一行百分比小字
         TextView tvProgress = new TextView(activity);
         tvProgress.setTag("font_progress_text");
         tvProgress.setText("0%");
         tvProgress.setTextSize(10);
-        tvProgress.setTextColor(accent);
+        tvProgress.setTextColor(selInk);
         tvProgress.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
         android.widget.FrameLayout.LayoutParams pctLp = new android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
                 android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        pctLp.bottomMargin = (int) (10 * density);
+        pctLp.bottomMargin = (int) (7 * density);
         tvProgress.setLayoutParams(pctLp);
         card.addView(tvProgress);
 
-        android.widget.ProgressBar pb = new android.widget.ProgressBar(activity, null,
-                android.R.attr.progressBarStyleHorizontal);
-        pb.setTag("font_progress_bar");
-        pb.setIndeterminate(false);
-        pb.setProgressDrawable(activity.getResources().getDrawable(android.R.drawable.progress_horizontal, activity.getTheme()));
-        pb.getProgressDrawable().mutate().setColorFilter(accent, android.graphics.PorterDuff.Mode.SRC_IN);
-        pb.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
-        pb.setProgress(0);
-        pb.setMax(100);
-        int pbWidth = (int) (cardHeight * 1.2f);
-        android.widget.FrameLayout.LayoutParams pbLp = new android.widget.FrameLayout.LayoutParams(
-                pbWidth, (int) (3 * density),
-                android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        pbLp.bottomMargin = (int) (5 * density);
-        pb.setLayoutParams(pbLp);
-        card.addView(pb);
-
-        // 立体感：悬浮阴影（近淡远深；选中态用强调色投影，更突出「抬起」）
+        // 立体感：悬浮阴影（近淡远深）
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            card.setOutlineSpotShadowColor(isCurrent ? accent : ReadThemeController.mixColors(chrome, 0x000000, 0.20f));
+            card.setOutlineSpotShadowColor(ReadThemeController.mixColors(chrome, 0x000000, 0.20f));
         }
-        card.setElevation(isCurrent ? 8f * density : 3f * density);
+        card.setElevation(isCurrent ? 6f * density : 3f * density);
 
         return card;
     }
@@ -493,6 +467,126 @@ class ReadFontPopupController {
             }
         }
         return null;
+    }
+
+    /** 夜间选中态墨色：墨玉鎏金的「鎏金」 */
+    private static final int NIGHT_SELECTED_INK = Color.rgb(216, 176, 104);
+
+    /**
+     * 选中态字色：日间取弹窗底色的色相并加深加饱和，保证「比抽屉底更深一档」且与纸色同系
+     * （牛皮纸 → 赭橙）。夜间是墨玉无彩底，从底色推色相推不出东西，直接用固定鎏金。
+     */
+    private static int selectedInkColor(int chrome, int accent, boolean isDark) {
+        if (isDark) return NIGHT_SELECTED_INK;
+        float[] hsv = new float[3];
+        Color.colorToHSV(chrome, hsv);
+        if (hsv[1] < 0.08f) return accent;
+        hsv[1] = Math.max(0.62f, Math.min(1f, hsv[1] * 2.3f));
+        hsv[2] = Math.min(hsv[2], 0.80f);
+        return Color.HSVToColor(hsv);
+    }
+
+    /**
+     * 字体卡片背景：米白渐变底 + 未下载箭头 / 选中勾 / 按完成宽度填充的下载进度 / 完成提亮。
+     *
+     * 不用 GradientDrawable 是它画不了「按百分比宽度的圆角填充」；箭头与小勾都用直线段现画，
+     * 因此也不引入矢量资源（矢量 path 少一个浮点参数会编译安装全过、运行时才炸）。
+     */
+    private static class FontCardDrawable extends Drawable {
+        private final android.graphics.Paint base =
+                new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        // 提亮必须用自己的 Paint：base 一旦 setColor 过半透明白，它的 alpha 就留下来了，
+        // 而硬件渲染会把 shader 的 alpha 乘上 Paint 的 alpha（SkiaShader::getSkShader(alpha)），
+        // 之后每一帧渐变都会按 alpha≈1 画出来 = 卡片底直接消失。
+        private final android.graphics.Paint flash =
+                new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Paint glyph =
+                new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Path path = new android.graphics.Path();
+        private final float density;
+
+        private int topColor, botColor, fillTopColor, fillBotColor, arrowColor, tickColor;
+        private float radius;
+        private int progress = -1;      // -1：不画进度填充
+        private float brighten;         // 0..1：完成瞬间向白提亮
+        private boolean showArrow, showTick;
+
+        FontCardDrawable(float density) {
+            this.density = density;
+            glyph.setStyle(android.graphics.Paint.Style.STROKE);
+            glyph.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            glyph.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+        }
+
+        void setColors(int top, int bot) { topColor = top; botColor = bot; }
+        void setFillColors(int top, int bot) { fillTopColor = top; fillBotColor = bot; }
+        void setArrowColor(int c) { arrowColor = c; }
+        void setTickColor(int c) { tickColor = c; }
+        void setRadius(float r) { radius = r; }
+        void setProgress(int p) { progress = p; invalidateSelf(); }
+        void setShowArrow(boolean b) { showArrow = b; }
+        void setShowTick(boolean b) { showTick = b; }
+        void setBrighten(float b) { brighten = b; invalidateSelf(); }
+
+        @Override
+        public void draw(@NonNull android.graphics.Canvas c) {
+            android.graphics.Rect b = getBounds();
+            float l = b.left, t = b.top, r = b.right, bot = b.bottom;
+            if (r - l <= 0f || bot - t <= 0f) return;
+
+            // 渐变每次现建，不缓存：卡片可能在布局完成前就被画一帧（bounds 还是 0），
+            // 缓存会把那份空渐变一直用下去。
+            base.setShader(new android.graphics.LinearGradient(0, t, 0, bot, topColor, botColor,
+                    android.graphics.Shader.TileMode.CLAMP));
+            c.drawRoundRect(l, t, r, bot, radius, radius, base);
+
+            if (progress > 0) {
+                float inset = 3 * density;
+                float w = (r - l - inset * 2) * progress / 100f;
+                base.setShader(new android.graphics.LinearGradient(0, t + inset, 0, bot - inset,
+                        fillTopColor, fillBotColor, android.graphics.Shader.TileMode.CLAMP));
+                float rr = Math.max(1f, Math.min(radius - inset, w / 2f));
+                c.drawRoundRect(l + inset, t + inset, l + inset + w, bot - inset, rr, rr, base);
+            }
+            base.setShader(null);
+
+            if (brighten > 0f) {
+                flash.setColor(Color.argb((int) (42 * brighten), 255, 255, 255));
+                c.drawRoundRect(l, t, r, bot, radius, radius, flash);
+            }
+            if (showArrow) drawArrow(c, r, (t + bot) / 2f, arrowColor);
+            if (showTick) drawTick(c, r - 8 * density, t + 8 * density, tickColor);
+        }
+
+        /** 下载箭头：竖杆 + 箭头 + 托盘，约 13dp 高，贴在卡片右侧（未下载时才有） */
+        private void drawArrow(android.graphics.Canvas c, float right, float cy, int color) {
+            float cx = right - 16 * density;
+            glyph.setColor(color);
+            glyph.setStrokeWidth(1.7f * density);
+            c.drawLine(cx, cy - 6.5f * density, cx, cy + 2 * density, glyph);
+            path.reset();
+            path.moveTo(cx - 4.2f * density, cy - 1.6f * density);
+            path.lineTo(cx, cy + 2.6f * density);
+            path.lineTo(cx + 4.2f * density, cy - 1.6f * density);
+            c.drawPath(path, glyph);
+            c.drawLine(cx - 5.6f * density, cy + 6.4f * density,
+                    cx + 5.6f * density, cy + 6.4f * density, glyph);
+        }
+
+        /** 右上角小勾（仅选中态），与字体名同色 */
+        private void drawTick(android.graphics.Canvas c, float right, float top, int color) {
+            glyph.setColor(color);
+            glyph.setStrokeWidth(1.8f * density);
+            path.reset();
+            path.moveTo(right - 8.5f * density, top + 2 * density);
+            path.lineTo(right - 4.5f * density, top + 6 * density);
+            path.lineTo(right, top);
+            c.drawPath(path, glyph);
+        }
+
+        @Override public void setAlpha(int alpha) { }
+        @Override public void setColorFilter(@Nullable android.graphics.ColorFilter cf) { }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
     /**
@@ -544,8 +638,11 @@ class ReadFontPopupController {
                 container.addView(currentRow);
             }
             FontCardItem item = items.get(i);
-            View card = buildFontCard(item, density, cardHeight,
-                    item.isBackend && activity.downloadedFonts.contains(item.cssName));
+            // 内置字体（系统/默认）无需下载，永远算「已具备」——否则卡片会挂上下载箭头
+            View card = buildFontCard(item, density,
+                    !item.isBackend || activity.downloadedFonts.contains(item.cssName));
+            // 普通 tag 存 cssName：下载完成后要按它找回这张卡片做提亮回落
+            card.setTag(item.cssName);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, cardHeight, 1);
             lp.setMargins(margin, margin, margin, margin);
             card.setLayoutParams(lp);
@@ -629,6 +726,7 @@ class ReadFontPopupController {
                     activity.applyFontFamilyToWebView();
                     activity.saveReadingPreferences();
                     refreshFontSelection(container);
+                    flashCardDownloaded(container, cssName);
                     applyCurrentFontToSwitchButton();
                 });
             } catch (Exception e) {
@@ -642,12 +740,28 @@ class ReadFontPopupController {
     }
 
     /**
-     * 更新卡片下载进度 UI
+     * 更新卡片下载进度 UI：填充宽度画在卡片背景里，这里同步百分比小字
      */
     private void updateFontCardProgress(View card, int pct) {
+        if (card.getBackground() instanceof FontCardDrawable) {
+            ((FontCardDrawable) card.getBackground()).setProgress(pct);
+        }
         TextView tvProgress = card.findViewWithTag("font_progress_text");
-        android.widget.ProgressBar pb = card.findViewWithTag("font_progress_bar");
         if (tvProgress != null) tvProgress.setText(pct + "%");
-        if (pb != null) pb.setProgress(pct);
+    }
+
+    /**
+     * 下载完成：整卡轻微提亮后自行回落。
+     * 提亮不属于任何常驻状态，所以勾与字色都不动——它们只表达「当前字体」。
+     */
+    private void flashCardDownloaded(LinearLayout container, String cssName) {
+        View card = container.findViewWithTag(cssName);
+        if (!(card instanceof FrameLayout) || !(card.getBackground() instanceof FontCardDrawable)) return;
+        FontCardDrawable bg = (FontCardDrawable) card.getBackground();
+        ValueAnimator va = ValueAnimator.ofFloat(0f, 1f, 1f, 0f);
+        va.setDuration(1250);
+        va.setInterpolator(new android.view.animation.LinearInterpolator());
+        va.addUpdateListener(a -> bg.setBrighten((float) a.getAnimatedValue()));
+        va.start();
     }
 }
