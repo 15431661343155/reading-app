@@ -3826,9 +3826,9 @@ function htmlSimGoTo(p) {
     }
 }
 
-/** 仿真模式下的章界越界滑动：turn.js 在首页/末页卷不动也没有越界回调，这里补一次换章。
- *  与 canvas 路径共用 _boundaryPending 守卫，防止一次手势连跳两章。 */
-function htmlSimBoundary(dir) {
+/** htmlMode 下「没有越界回调」的档位补一次换章：仿真档 turn.js 在首页/末页卷不动也不回调，
+ *  上下档滚到顶/底后原生滚动吃住。与 canvas 路径共用 _boundaryPending 守卫，防一次手势连跳两章。 */
+function htmlBoundarySwap(dir) {
     if (_boundaryPending) return;
     _boundaryPending = true;
     setTimeout(function () { _boundaryPending = false; }, 1500);
@@ -3852,9 +3852,9 @@ document.addEventListener('touchend', function (e) {
     var dx = ct.clientX - s.x;
     if (Math.abs(dx) < 30 || Math.abs(dx) <= Math.abs(ct.clientY - s.y)) return;
     if (dx < 0) {
-        if (htmlPage >= htmlPageCount - 1) htmlSimBoundary(1);
+        if (htmlPage >= htmlPageCount - 1) htmlBoundarySwap(1);
     } else if (htmlPage <= 0) {
-        htmlSimBoundary(-1);
+        htmlBoundarySwap(-1);
     }
 }, true);
 document.addEventListener('touchcancel', function () { _htmlSimSwipe = null; }, true);
