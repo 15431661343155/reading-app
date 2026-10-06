@@ -3635,6 +3635,46 @@ document.addEventListener('scroll', function () {
     });
 }, { passive: true, capture: true });
 
+// 「上下」档滚到顶/底后原生滚动就吃住，再拽不出任何动作，换章只能靠目录/音量键。
+// canvas 的上下档是自绘滚动，越界阻尼后在 touchend 换章；这里在原生滚动上补同一判据：
+// 只在「贴边 + 同向继续拖」时累计越界量，阈值与 canvas 取齐（12% 视口高，或越界段速度 0.5px/ms）。
+// 挂捕获阶段：#htmlContent 自身要消费这些触摸做原生滚动，冒泡阶段不保证能收到。
+var _htmlEdgeDrag = null;
+document.addEventListener('touchstart', function (e) {
+    var c = document.getElementById('htmlContent');
+    var t = e.touches && e.touches[0];
+    if (!htmlMode || htmlFlow !== 'scrolled' || !c || !t) { _htmlEdgeDrag = null; return; }
+    _htmlEdgeDrag = { c: c, y: t.clientY, ts: Date.now(), over: 0, v: 0, dir: 0 };
+}, { passive: true, capture: true });
+
+document.addEventListener('touchmove', function (e) {
+    var st = _htmlEdgeDrag;
+    if (!st) return;
+    var t = e.touches && e.touches[0];
+    if (!t) return;
+    var c = st.c;
+    var dy = st.y - t.clientY;          // >0 = 手指上滑，即往下读
+    st.y = t.clientY;
+    var atTop = c.scrollTop <= 0;
+    var atBottom = c.scrollTop + c.clientHeight >= c.scrollHeight - 1;
+    var over = (dy > 0 && atBottom) ? dy : (dy < 0 && atTop ? -dy : 0);
+    if (over === 0) return;             // 还在正常滚动区间，整套交给原生滚动
+    st.dir = dy > 0 ? 1 : -1;           // over 取的是绝对值，方向只能看手指本身
+    st.over += over;
+    var now = Date.now(), dt = now - st.ts;
+    if (dt > 0) st.v = st.v * 0.7 + (Math.abs(over) / dt) * 0.3;
+    st.ts = now;
+}, { passive: true, capture: true });
+
+document.addEventListener('touchend', function () {
+    var st = _htmlEdgeDrag;
+    _htmlEdgeDrag = null;
+    if (!st || !st.dir) return;
+    if (st.over > htmlClientHeight() * 0.12 || st.v > 0.5) htmlBoundarySwap(st.dir);
+}, { passive: true, capture: true });
+
+document.addEventListener('touchcancel', function () { _htmlEdgeDrag = null; }, { passive: true, capture: true });
+
 /**
  * 带翻页动画地切到指定页。覆盖 / 平移 / 淡入各按自己的动效演；
  * 仿真由 turn.js 卷页（见 htmlSimTurn），上下滚动模式退化为纵向滚动。
