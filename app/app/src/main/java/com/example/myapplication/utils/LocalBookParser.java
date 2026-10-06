@@ -55,12 +55,16 @@ public class LocalBookParser {
     /** 选择器上附带的 class / id / 属性 / 伪类修饰（如 body.dark、:root:first-child） */
     private static final String SCOPE_MOD =
             "(?:\\.[\\w-]+|#[\\w-]+|\\[[^\\]]*\\]|:{1,2}[\\w-]+(?:\\([^)]*\\))?)*";
-    /** 等价于原 "(?i)^(html|body|:root)(?![\\w-])" + mod */
+    /**
+     * 根标记本身。<b>不能</b>把 SCOPE_MOD 并进这条正则：{@code replaceFirst} 会连修饰一起替换掉，
+     *    {@code body.qmp000} 塌成 {@code .epub-chapter}，《乱世书》12 个「全面屏」页的背景规则
+     *    就会互相覆盖、并污染所有普通正文页。
+     */
     private static final Pattern RE_SCOPE_ROOT =
-            Pattern.compile("(?i)^(html|body|:root)(?![\\w-])" + SCOPE_MOD);
-    /** 等价于原 "(?i)^\\.epub-chapter\\s+body(?![\\w-])" + mod + "(?=[\\s>+~]|$)" */
+            Pattern.compile("(?i)^(html|body|:root)(?![\\w-])");
+    /** {@code html body.foo} 经上一步变 {@code .epub-chapter body.foo}；摘掉 body 层，修饰并入前缀 */
     private static final Pattern RE_SCOPE_EPUB_BODY =
-            Pattern.compile("(?i)^\\.epub-chapter\\s+body(?![\\w-])" + SCOPE_MOD + "(?=[\\s>+~]|$)");
+            Pattern.compile("(?i)^\\.epub-chapter\\s+body(?![\\w-])(" + SCOPE_MOD + ")(?=[\\s>+~]|$)");
 
     private static final Pattern RE_STYLE_BLOCK =
             Pattern.compile("<style[^>]*>([\\s\\S]*?)</style>", Pattern.CASE_INSENSITIVE);
@@ -83,6 +87,21 @@ public class LocalBookParser {
             Pattern.compile("<image\\b([\\s\\S]*?)/>", Pattern.CASE_INSENSITIVE);
     private static final Pattern RE_HREF_OR_XLINK =
             Pattern.compile("(xlink:href|href)=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * 样式表里的 {@code url(...)}：组 1 是可选引号、组 2 是引用串。
+     * 书中背景图/内嵌字体全靠它，改写前整本书一个都不落地（实测《乱世书》36 个引用零命中）。
+     */
+    private static final Pattern RE_CSS_URL =
+            Pattern.compile("url\\(([\"']?)([^\"')]+)\\1\\)", Pattern.CASE_INSENSITIVE);
+    /** {@code <body ...>} 开标签：全面屏页的版式全挂在 body 的 class 上 */
+    private static final Pattern RE_BODY_OPEN =
+            Pattern.compile("<body\\b([^>]*)>", Pattern.CASE_INSENSITIVE);
+    private static final Pattern RE_CLASS_ATTR =
+            Pattern.compile("class=\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
+    /** 作用域化之后的一条普通规则：选择器组 + 声明块（注释里的花括号可能误配，仅用于启发式判断） */
+    private static final Pattern RE_CSS_RULE =
+            Pattern.compile("([^{}]*)\\{([^{}]*)\\}");
 
     private static final Pattern RE_HEADING =
             Pattern.compile("<h([1-6])[^>]*>(.*?)</h\\1>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
@@ -2252,9 +2271,11 @@ public class LocalBookParser {
                 
                 // 兜底：没有任何有效来源，或选出来的仍是生成器占位标题（"chapter 3 - 0" 之类）
                 // 时，用「第N章」这个位置化标题，至少不会把占位词当成章节名显示给用户。
+                boolean titleIsFallback = false;
                 if (chapterTitle == null || chapterTitle.isEmpty()
                         || RE_PLACEHOLDER_TITLE.matcher(chapterTitle.trim().toLowerCase()).matches()) {
                     chapterTitle = "第" + (chapterIndex + 1) + "章";
+                    titleIsFallback = true;
                 }
                 
                 // 简介提取（来源2：EPUB 里的「内容简介」章）
@@ -2274,11 +2295,12 @@ public class LocalBookParser {
                     continue;
                 }
 
-                // 空章闸门：只有「清理后确实没正文」的章才不进目录。
+                // 空章闸门：只有「清理后确实没正文、且整页也没有图」的章才不进目录。
                 //    整篇正文过去也在导入时逐章构建，但物化删掉之后它只剩「判空」一个用途，
                 //    读时按定位串会原样重现（见 EpubLazyStore.chapter），所以先用探针确证「肯定有正文」；
                 //    探针下不了结论的（短文、纯标记页）才回退完整清理链，判定与过去逐字一致。
                 long tq = System.currentTimeMillis();
+                String chapterDir = dirOf(resolveInZip(href, basePath));
                 int probed = probeBodyChars(html);
                 int bodyChars;
                 boolean keep;
@@ -2289,17 +2311,27 @@ public class LocalBookParser {
                     String content = stripLeadingDuplicateTitle(cleanChapterContent(html), chapterTitle);
                     bodyChars = Math.min(content.length(), BODY_CHARS_CONFIRMED);
                     keep = !content.isEmpty();
+                    if (!keep) keep = hasVisualContent(html, chapterDir, zipEntries, cssCache);
                 }
                 tClean += System.currentTimeMillis() - tq;
 
                 if (keep) {
+                    // 纯图页没有标题可用：它既不在 NCX 里也没标题标签，退回「第N章」读起来像坏数据。
+                    //    这类页通常是卷首插画或扉页，用所属卷名兜底，其次用书名。
+                    if (titleIsFallback && bodyChars == 0) {
+                        String vol = chapterVolumeMap.get(fileName);
+                        if (vol != null && !vol.isEmpty()) {
+                            chapterTitle = vol;
+                        } else if (!"未命名".equals(info.title)) {
+                            chapterTitle = info.title;
+                        }
+                    }
                     Chapter ch = new Chapter(chapterIndex, chapterTitle);
                     ch.bodyChars = bodyChars;
                     ch.locator = entryKey;
                     // 预热全书样式缓存（css_chunks.bin 的来源）。整章 HTML 不在这里拼——
                     //    它过去拼完就丢，读时同一套 buildEpubHtmlContent 会再拼一遍。
                     try {
-                        String chapterDir = dirOf(resolveInZip(href, basePath));
                         ch.locatorDir = chapterDir;
                         long th = System.currentTimeMillis();
                         warmEpubCaches(html, chapterDir, zipEntries, cssCache);
@@ -2431,13 +2463,143 @@ public class LocalBookParser {
         // 4. 图片引用改写为 epubres:// 协议串（纯字符串拼接，见 imageUri）
         body = processEpubImages(body, chapterDir);
 
-        // 5. 组装（此处不包裹 epub-chapter：由 reader.html 的 loadHtmlContent 统一包裹，避免重复嵌套）
+        // 5. 包装层：把源 <body> 的 class 带上来，作用域化后的 .epub-chapter.<class> 才可能命中。
+        //    多看/张越那类「全面屏」页整页版式都挂在 body.qmpNN 的 background-image 上，
+        //    过去这里丢掉 class，书里的背景图就永远匹配不到容器（实测《乱世书》12 页全丢）。
+        java.util.List<String> bodyCls = bodyClassTokens(xhtml);
+        boolean fullscreen = hasBackgroundImage(scopedCss, bodyCls);
+        if (fullscreen) {
+            // 全面屏页的自带对齐（竖排卷名靠右/居中）必须能盖过 reader.html 的正文两端对齐，
+            // 否则题诗会被拉回左边缘。只给这类页的 text-align 声明提一级特异性。
+            scopedCss = boostTextAlignSpecificity(scopedCss);
+        }
+        StringBuilder cls = new StringBuilder("epub-chapter");
+        for (String c : bodyCls) cls.append(' ').append(c);
+        if (fullscreen) cls.append(" epub-fs");
+
+        // 6. 组装（包装层在此产出，reader.html 不再二次包裹）
         StringBuilder sb = new StringBuilder();
         if (scopedCss.length() > 0) {
             sb.append("<style>").append(scopedCss).append("</style>");
         }
-        sb.append(body);
+        sb.append("<div class=\"").append(cls).append("\">").append(body).append("</div>");
         return sb.toString();
+    }
+
+    /**
+     * 源 {@code <body>} 上的 class 令牌，已过滤成能安全写进 HTML 属性的字符。
+     *
+     * <p>只取 class 不取 id：作用域化把 {@code body}/{@code html} 一律换成 {@code .epub-chapter}
+     *    （见 {@link #scopeOneSelector}），书里若写 {@code body#foo} 也已被改写成类选择器形式，
+     *    再搬 id 上来只会多一个能被书中 CSS 命中的锚点。
+     */
+    private static java.util.List<String> bodyClassTokens(String xhtml) {
+        java.util.List<String> out = new java.util.ArrayList<>(2);
+        if (xhtml == null) return out;
+        Matcher open = RE_BODY_OPEN.matcher(xhtml);
+        if (!open.find()) return out;
+        Matcher cls = RE_CLASS_ATTR.matcher(open.group(1));
+        if (!cls.find()) return out;
+        for (String raw : cls.group(1).trim().split("\\s+")) {
+            if (out.size() >= 8) break;
+            if (raw.isEmpty()) continue;
+            StringBuilder safe = new StringBuilder(raw.length());
+            for (int i = 0; i < raw.length() && safe.length() < 64; i++) {
+                char ch = raw.charAt(i);
+                // 类名合法字符 + CJK；引号/尖括号/斜杠等一律丢弃，杜绝拼进属性后越界
+                if (Character.isLetterOrDigit(ch) || ch == '_' || ch == '-' || ch >= 0x80) safe.append(ch);
+            }
+            if (safe.length() > 0) out.add(safe.toString());
+        }
+        return out;
+    }
+
+    /**
+     * 这一页「整页就是图」吗：{@code <img>} / SVG {@code <image>}，或 body class 在样式表里带背景图。
+     *
+     * <p>只在空章闸门的「没正文」分支上调用，所以那趟 CSS 扫描每本书只发生几次（真机《乱世书》
+     *    942 章里只有 3 页走到这里）。背景图那一路必须查 CSS：多看导出的纯图页 body 里一个标签都没有，
+     *    图全在 {@code body.qmpNNN{background-image:url(...)}} 上。
+     */
+    private static boolean hasVisualContent(String xhtml, String chapterDir,
+                                            Map<String, byte[]> zipEntries, Map<String, String> cssCache) {
+        if (xhtml == null) return false;
+        if (xhtml.indexOf("<img") >= 0 || xhtml.indexOf("<image") >= 0) return true;
+        java.util.List<String> cls = bodyClassTokens(xhtml);
+        if (cls.isEmpty()) return false;
+        return hasBackgroundImage(collectEpubCss(xhtml, chapterDir, zipEntries, cssCache), cls);
+    }
+
+    /**
+     * 这些 class 里是否有任何一条规则给它声明了背景图——即「整页就是一张画」的全面屏页。
+     *
+     * <p>判据落在 {@code url(} 上而不是 {@code background-image} 上：书中也常用
+     *    {@code background: #fff url(..) no-repeat} 简写。没有 class 的普通章直接返回 false，
+     *    因此整趟扫描只发生在带 body class 的少数页面上。
+     */
+    private static boolean hasBackgroundImage(String scopedCss, java.util.List<String> bodyCls) {
+        if (bodyCls.isEmpty() || scopedCss == null || !scopedCss.contains("url(")) return false;
+        Matcher m = RE_CSS_RULE.matcher(scopedCss);
+        while (m.find()) {
+            String block = m.group(2);
+            if (!block.contains("url(") || !block.toLowerCase().contains("background")) continue;
+            String selectors = m.group(1);
+            for (String cls : bodyCls) {
+                if (selectorTargetsClass(selectors, cls)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** 选择器组（逗号分隔）里是否有「.epub-chapter.&lt;cls&gt;」这一项，且 cls 后面不是类名字符 */
+    private static boolean selectorTargetsClass(String selectors, String cls) {
+        String needle = ".epub-chapter." + cls;
+        int i = 0;
+        while ((i = selectors.indexOf(needle, i)) >= 0) {
+            int j = i + needle.length();
+            if (j >= selectors.length() || !isClassNameChar(selectors.charAt(j))) return true;
+            i = j;
+        }
+        return false;
+    }
+
+    private static boolean isClassNameChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '_' || c == '-';
+    }
+
+    /** reader.html 两端对齐用的容器前缀，见 {@link #boostTextAlignSpecificity} */
+    private static final String CSS_ALIGN_BOOST_PREFIX = "#htmlContent ";
+
+    /**
+     * 把声明了 {@code text-align} / {@code text-indent} 的规则整体提一级特异性（选择器前补 {@code #htmlContent}）。
+     *
+     * <p>reader.html 用 {@code #htmlColumns p { text-align: justify !important }} 统一正文两端对齐、
+     *    用 {@code #htmlContent p { text-indent: 2em }} 统一首行缩进，书中自带的对齐同为 {@code !important}
+     *    时按特异性比较：它的 ID 只算一个，而我们的选择器是类级——补上同一个 ID 即可反超。
+     *    只对全面屏页做，普通章一字不改。
+     */
+    private static String boostTextAlignSpecificity(String scopedCss) {
+        String lower = scopedCss.toLowerCase();
+        if (scopedCss.isEmpty() || (!lower.contains("text-align") && !lower.contains("text-indent"))) {
+            return scopedCss;
+        }
+        Matcher m = RE_CSS_RULE.matcher(scopedCss);
+        StringBuilder out = new StringBuilder(scopedCss.length() + 64);
+        int last = 0;
+        while (m.find()) {
+            String selectors = m.group(1);
+            String block = m.group(2);
+            out.append(scopedCss, last, m.start());
+            String b = block.toLowerCase();
+            if ((b.contains("text-align") || b.contains("text-indent")) && !selectors.contains("#htmlContent")) {
+                out.append(CSS_ALIGN_BOOST_PREFIX).append(selectors).append('{').append(block).append('}');
+            } else {
+                out.append(m.group(0));
+            }
+            last = m.end();
+        }
+        out.append(scopedCss, last, scopedCss.length());
+        return out.toString();
     }
 
     /**
@@ -2468,14 +2630,15 @@ public class LocalBookParser {
         StringBuilder css = new StringBuilder();
 
         // 1. <style> 标签内联 CSS
-        //    按「样式内容」缓存**作用域化之后**的结果：同一段内联样式在多章重复出现时只处理一次
+        //    按「样式内容」缓存**作用域化之后**的结果：同一段内联样式在多章重复出现时只处理一次。
+        //    键里带上章节目录：内联样式的 url() 相对章节目录解析，同一段样式出现在不同目录时结果不同。
         Matcher styleM = RE_STYLE_BLOCK.matcher(xhtml);
         while (styleM.find()) {
             String block = styleM.group(1);
-            String key = INLINE_KEY_PREFIX + block;
+            String key = INLINE_KEY_PREFIX + chapterDir + '\u0000' + block;
             String scopedInline = cssCache.get(key);
             if (scopedInline == null) {
-                scopedInline = scopeEpubCss(block);
+                scopedInline = scopeEpubCss(block, chapterDir);
                 cssCache.put(key, scopedInline);
             }
             css.append(scopedInline).append("\n");
@@ -2504,7 +2667,8 @@ public class LocalBookParser {
                     try {
                         decoded = new String(data, detectCharset(data));
                     } catch (Exception ignore) { /* 编码失败不影响主流程 */ }
-                    String scoped = scopeEpubCss(decoded);
+                    // url() 按「样式表自身所在目录」解析，不是章节目录：书里 ../Images/x.jpg 是相对样式表的
+                    String scoped = scopeEpubCss(decoded, dirOf(cssPath));
                     cssCache.put(cacheKey, scoped);
                     css.append(scoped);
                 } else {
@@ -2516,17 +2680,29 @@ public class LocalBookParser {
         return css.toString();
     }
 
-    /** cssCache 的键前缀：区分「外链样式表(按 zip 路径)」与「内联 <style>(按内容)」 */
-    private static final String LINKED_KEY_PREFIX = "L\u0000";
-    private static final String INLINE_KEY_PREFIX = "S\u0000";
+    /**
+     * cssCache 的键前缀：区分「外链样式表(按 zip 路径)」与「内联 &lt;style&gt;(按内容)」，
+     * 再带上样式管道版本号。
+     *
+     * <p>版本号的用处：键本身就是「重算这份样式所需的全部输入」，所以管道一改
+     * （CSS 的 {@code url()} 开始改写成 epubres://、选择器作用域不再吞掉 class 后缀……），
+     * 旧 {@code css_chunks.bin} 的键就对不上号，打开时可当场识别并重算，见 {@link #healCssChunkCache}。
+     */
+    private static final String CSS_KEY_VERSION = "v2\u0000";
+    private static final String LINKED_KEY_PREFIX = "L\u0000" + CSS_KEY_VERSION;
+    private static final String INLINE_KEY_PREFIX = "S\u0000" + CSS_KEY_VERSION;
 
     /**
      * 给 EPUB 自带 CSS 加作用域（思路同 Zotero reader 的 CSSRewriter），避免污染 reader.html 自身。
      * 规则：html / body / :root 视作包裹正文的 .epub-chapter；其余选择器一律加后代前缀。
      * 说明：这是「选择器限定」级别的处理，不做完整 CSS 语法解析；
      * 无选择器的规则（@font-face / @keyframes / @page）与以 ';' 结尾的语句（@import / @charset）原样保留。
+     *
+     * <p>声明块里的 {@code url()} 顺手改写成 {@code epubres://}，基准目录是 {@code baseDir}
+     *    （外链样式表传样式表自己的目录，内联样式传章节目录）。@import 不在这里改：
+     *    它是以 ';' 结束的独立语句，本方法从不解析其内容，书中被 @import 的样式表过去也不会被加载。
      */
-    private static String scopeEpubCss(String css) {
+    private static String scopeEpubCss(String css, String baseDir) {
         if (css == null || css.isEmpty()) return "";
         StringBuilder out = new StringBuilder(css.length() + 256);
         int i = 0;
@@ -2554,23 +2730,59 @@ public class LocalBookParser {
                 head = head.substring(semi + 1);
             }
             String trimmed = head.trim();
+            if (trimmed.startsWith("/*")) {
+                // 串首注释会让下面的 @ 判定和选择器改写同时判错（书里就是 /*全面屏*/ body.qmp000{…}）
+                head = stripCssComments(head);
+                trimmed = head.trim();
+            }
             if (trimmed.isEmpty()) {
-                out.append(head).append(block);
+                out.append(head).append(rewriteCssUrls(block, baseDir));
             } else if (trimmed.charAt(0) == '@') {
                 String lower = trimmed.toLowerCase();
                 if (lower.startsWith("@media") || lower.startsWith("@supports") || lower.startsWith("@document")) {
                     // 条件规则：保留条件头，递归处理内部规则
                     int innerOpen = block.indexOf('{');
                     String inner = block.substring(innerOpen + 1, block.length() - 1);
-                    out.append(head).append('{').append(scopeEpubCss(inner)).append('}');
+                    out.append(head).append('{').append(scopeEpubCss(inner, baseDir)).append('}');
                 } else {
-                    out.append(head).append(block);
+                    // @font-face / @page / @keyframes 等：选择器不动，只改写块内引用
+                    out.append(head).append(rewriteCssUrls(block, baseDir));
                 }
             } else {
-                out.append(scopeSelectors(head)).append(block);
+                out.append(scopeSelectors(head)).append(rewriteCssUrls(block, baseDir));
             }
             i = close + 1;
         }
+        return out.toString();
+    }
+
+    /**
+     * 把声明块里的 {@code url(相对引用)} 改写成 {@code url("epubres://<zip 条目>")}。
+     *
+     * <p>书中「全面屏」页的背景图、@font-face 的内嵌字体全靠这一条：过去只有 {@code <img>} 会被改写，
+     *    CSS 里的引用原样进 WebView，相对路径对着 reader.html 的资产根目录解析，必然 404
+     *    （实测《乱世书》36 个背景图引用零命中，12 个整页画的页面只剩白底）。
+     *
+     * <p>data:/http(s):/epubres: 与纯锚点引用原样保留。
+     */
+    private static String rewriteCssUrls(String block, String baseDir) {
+        if (block == null || block.indexOf("url(") < 0) return block;
+        Matcher m = RE_CSS_URL.matcher(block);
+        StringBuffer out = new StringBuffer(block.length() + 64);
+        while (m.find()) {
+            String ref = m.group(2).trim();
+            String lower = ref.toLowerCase();
+            String repl = m.group(0);
+            if (!lower.startsWith("data:") && !lower.startsWith("http:") && !lower.startsWith("https:")
+                    && !lower.startsWith("epubres:") && !ref.startsWith("#")) {
+                String resolved = resolveInZip(ref, baseDir);
+                if (resolved != null && !resolved.isEmpty()) {
+                    repl = "url(\"epubres://" + resolved + "\")";
+                }
+            }
+            m.appendReplacement(out, Matcher.quoteReplacement(repl));
+        }
+        m.appendTail(out);
         return out.toString();
     }
 
@@ -2590,15 +2802,39 @@ public class LocalBookParser {
 
     /** 按逗号切分选择器组，逐个加作用域前缀 */
     private static String scopeSelectors(String selectorGroup) {
-        StringBuilder sb = new StringBuilder(selectorGroup.length() + 32);
+        String cleaned = stripCssComments(selectorGroup);
+        StringBuilder sb = new StringBuilder(cleaned.length() + 32);
         int start = 0;
-        for (int i = 0; i <= selectorGroup.length(); i++) {
-            if (i < selectorGroup.length() && selectorGroup.charAt(i) != ',') continue;
-            String sel = selectorGroup.substring(start, i).trim();
+        for (int i = 0; i <= cleaned.length(); i++) {
+            if (i < cleaned.length() && cleaned.charAt(i) != ',') continue;
+            String sel = cleaned.substring(start, i).trim();
             start = i + 1;
             if (!sel.isEmpty()) sb.append(scopeOneSelector(sel));
-            if (i < selectorGroup.length()) sb.append(',');
+            if (i < cleaned.length()) sb.append(',');
         }
+        return sb.toString();
+    }
+
+    /**
+     * 删掉一段文本里的 CSS 注释。只用于「选择器」这一段：声明块里的 url() 可能指向
+     *    书名里带 {@code *} 的混淆条目名（{@code Images/*:...jpg} 含 {@code /*}），那里不能这样切。
+     *
+     * <p>必须删：书里写成 {@code /*全面屏*\/ body.qmp000 {…}}，注释把根标记挤离串首，
+     *    {@code RE_SCOPE_ROOT} 的 {@code ^} 就匹配不到，整条背景规则会原样留着永不生效。
+     */
+    private static String stripCssComments(String s) {
+        int a = s.indexOf("/*");
+        if (a < 0) return s;
+        StringBuilder sb = new StringBuilder(s.length());
+        int i = 0;
+        while (a >= 0) {
+            sb.append(s, i, a);
+            int b = s.indexOf("*/", a + 2);
+            if (b < 0) return sb.toString();   // 注释未闭合：丢掉剩余，交给上层按空选择器处理
+            i = b + 2;
+            a = s.indexOf("/*", i);
+        }
+        sb.append(s, i, s.length());
         return sb.toString();
     }
 
@@ -2611,9 +2847,9 @@ public class LocalBookParser {
         //    改为预编译 Pattern + Matcher.replaceFirst（编译一次，全书复用）。
         Matcher m1 = RE_SCOPE_ROOT.matcher(s);
         if (m1.find()) s = m1.replaceFirst(".epub-chapter");
-        // "html body p" 已被上一步换成 ".epub-chapter body p"，多余的 body 层再去掉
+        // "html body p" 已被上一步换成 ".epub-chapter body p"，多余的 body 层再去掉（修饰保留）
         Matcher m2 = RE_SCOPE_EPUB_BODY.matcher(s);
-        if (m2.find()) s = m2.replaceFirst(".epub-chapter");
+        if (m2.find()) s = m2.replaceFirst(".epub-chapter$1");
         if (s.startsWith(".epub-chapter")) return s;
         return ".epub-chapter " + s;
     }
@@ -3112,6 +3348,91 @@ public class LocalBookParser {
         return readPairContainer(new File(getHtmlCacheDir(context, bookId), CSS_CHUNKS_CONTAINER_NAME));
     }
 
+    /**
+     * 把旧版样式管道算出的缓存在开书时重算并落回磁盘（自愈）。
+     *
+     * <p>为什么必须自愈：{@code css_chunks.bin} 存的是作用域化**之后**的结果，不是样式原文，
+     *    所以管道后来修的每一处对旧文件都不生效。实测《我的模拟长生路》那份旧缓存里
+     *    321 个 {@code url()} 全是相对引用（对着 reader.html 的资产根解析，必然 404），
+     *    卷首整页画的规则还被改成一个只剩注释、丢了 class 后缀的选择器
+     *    —— 书里的插图与整页画因此整片不见，用户看到的就是「图没解析出来」。
+     *    让用户重新导入不算方案：那会在书架上多出一本重复书，还会丢掉阅读进度。
+     *
+     * <p>为什么重算便宜：键本身就带着重算所需的全部输入（外链样式表记 zip 路径，内联样式记
+     *    章节目录 + 原文），一本书通常只有 1~2 个键，成本 = 唯一样式表数 × scopeEpubCss
+     *    （真机单份 1.5~2.6 秒），且只在旧书第一次打开时付一次。
+     *
+     * @param zip 源 zip 的按需读，用来取回外链样式表的原文
+     * @return 与当前管道一致的缓存；键全是当前格式时原样返回入参
+     */
+    public static Map<String, String> healCssChunkCache(Context context, long bookId,
+                                                       Map<String, String> css,
+                                                       EpubLazyStore.ZipBytes zip) {
+        if (css == null || css.isEmpty() || zip == null) return css;
+        int legacy = 0;
+        for (String key : css.keySet()) {
+            if (!isCurrentCssKey(key)) legacy++;
+        }
+        if (legacy == 0) return css;
+        long t0 = android.os.SystemClock.elapsedRealtime();
+        Map<String, String> healed = new HashMap<>(css.size() * 2);
+        int dropped = 0;
+        for (Map.Entry<String, String> e : css.entrySet()) {
+            if (isCurrentCssKey(e.getKey())) {
+                healed.put(e.getKey(), e.getValue());
+                continue;
+            }
+            String[] redo = rescopeLegacyCss(e.getKey(), zip);
+            if (redo == null) dropped++;    // 源里已取不到原文：丢掉它，读到时按现管道现算
+            else healed.put(redo[0], redo[1]);
+        }
+        File dir = getHtmlCacheDir(context, bookId);
+        File pending = new File(dir, CSS_CHUNKS_CONTAINER_NAME + PENDING_SUFFIX);
+        writePairContainer(pending, healed);
+        replace(new File(dir, CSS_CHUNKS_CONTAINER_NAME), pending);
+        android.util.Log.d("LocalBookParser", "样式缓存自愈: bookId=" + bookId
+                + ", 重算=" + legacy + ", 源里已无原文=" + dropped + ", 耗时="
+                + (android.os.SystemClock.elapsedRealtime() - t0) + "ms");
+        return healed;
+    }
+
+    /** 键是否是当前管道版本算出来的（前缀带版本号，旧缓存一眼可辨） */
+    private static boolean isCurrentCssKey(String key) {
+        return key.startsWith(LINKED_KEY_PREFIX) || key.startsWith(INLINE_KEY_PREFIX);
+    }
+
+    /**
+     * 从旧格式的键还原样式原文并重跑当前管道。
+     * 旧键：{@code L\0<zip 路径>}（url 基准目录 = 样式表自己的目录）、
+     *       {@code S\0<章节目录>\0<style 原文>}（基准目录 = 章节目录）。
+     *
+     * @return {新键, 新值}；外链样式表在源里已取不到时返回 null
+     */
+    private static String[] rescopeLegacyCss(String key, EpubLazyStore.ZipBytes zip) {
+        char kind = key.charAt(0);
+        String rest = key.substring(1);
+        if (rest.startsWith("\u0000")) rest = rest.substring(1);
+        if (rest.startsWith(CSS_KEY_VERSION)) return null;    // 认不出的格式，别乱重算
+        if (kind == 'L') {
+            byte[] raw = zip.get(rest);
+            if (raw == null) return null;
+            String decoded;
+            try {
+                decoded = new String(raw, detectCharset(raw));
+            } catch (Exception e) {
+                return null;
+            }
+            return new String[]{LINKED_KEY_PREFIX + rest, scopeEpubCss(decoded, dirOf(rest))};
+        }
+        int sep = rest.indexOf("\u0000");
+        if (kind != 'S' || sep < 0) return null;
+        String chapterDir = rest.substring(0, sep);
+        String block = rest.substring(sep + 1);
+        return new String[]{INLINE_KEY_PREFIX + chapterDir + "\u0000" + block,
+                scopeEpubCss(block, chapterDir)};
+    }
+
+
     /** 读容器某一块并解码为 UTF-8；块缺失/损坏返回 null（区别于「块存在但为空」的空串） */
     private static String readContainerString(File container, int idx) {
         byte[] b = readContainerBlock(container, idx);
@@ -3576,6 +3897,23 @@ public class LocalBookParser {
     private static final int SKIP_TEXT_MAX_CHARS = 2000;
 
     /**
+     * 弱标记豁免所需的正文字数：标题命中弱标记、但去标签后仍有这么多字，就当成正常章节保留。
+     * 200 字约等于两三个自然段，够把「后记/序言/尾声」这类真正文与孤零零一个标记词分开。
+     */
+    private static final int SKIP_TITLE_EXEMPT_MIN_CHARS = 200;
+
+    /**
+     * 「描述这本书」而非「书里的一章」的弱标记：即便页面有字也不豁免。
+     *
+     * <p>取值是 {@link #SKIP_TITLE_KEYWORDS_SHORT} 的子集（外层已先命中弱标记，写别的到不了这里）。
+     *    简介/介绍类页面在 {@link #isIntroChapterTitle} 处已被截获成书籍简介（详情页另有展示），
+     *    再进目录就是重复；制作/声明/版权页同理。序言/后记/尾声/附录是实打实的阅读内容，不在此列。
+     */
+    private static final String[] METADATA_TITLE_MARKERS = {
+            "简介", "介绍", "说明", "制作", "声明", "版权页", "introduction"
+    };
+
+    /**
      * 判断是否应该跳过该章节（封面、目录、简介等非正文章节）
      */
     private static boolean shouldSkipChapter(String title, String html) {
@@ -3594,9 +3932,19 @@ public class LocalBookParser {
         // 弱标记：只有标题很短（≈标记本身）时才认定非正文，避免误杀"…自我介绍一下…"这类真章节
         if (lowerTitle.length() <= SKIP_TITLE_SHORT_MAX_LEN) {
             for (String keyword : SKIP_TITLE_KEYWORDS_SHORT) {
-                if (lowerTitle.contains(keyword)) {
+                if (!lowerTitle.contains(keyword)) continue;
+                boolean metadata = false;
+                for (String meta : METADATA_TITLE_MARKERS) {
+                    if (lowerTitle.contains(meta)) { metadata = true; break; }
+                }
+                if (metadata) return true;
+                // 「后记」「序言」这种标题本身就等于标记，页面却真有正文的，是书的内容收尾，
+                // 不该被删（实测《乱世书》「后记」1312 字整章消失）。字太少才继续按非正文处理。
+                if (html == null || tagStrippedTrimmedLength(html, SKIP_TITLE_EXEMPT_MIN_CHARS)
+                        < SKIP_TITLE_EXEMPT_MIN_CHARS) {
                     return true;
                 }
+                break;   // 有正文 → 不再当弱标记处理，继续走下面的结构性判据
             }
         }
         

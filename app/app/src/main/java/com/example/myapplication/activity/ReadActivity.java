@@ -706,7 +706,28 @@ public class ReadActivity extends BaseActivity {
                 onReaderWebViewReady();
             }
 
-            /** 拦截 epubres:// 协议：从源 zip 实时读图，零落盘 */
+            /**
+             * 书中链接一律不许动阅读器文档：正文里的 {@code <a href>} 原样渲染进来，之前一点就把 WebView
+             * 换成那个网页，而 BACK 是直接退出阅读器，用户没有回头路（《修仙就是这样子的》的「访问原始网站」
+             * 即此）。http(s) 交给系统浏览器，其余目标（指向包内 xhtml 的相对链接、mailto 等）原地不动。
+             * 页内 {@code #锚点} 到不了这里 —— Chromium 不为同文档跳转回调本方法，改由 reader.html 的 click
+             * 监听取消默认行为（分页是把 {@code #htmlColumns} 按页整体平移，锚点滚动会把两页错开半列）。
+             */
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, android.webkit.WebResourceRequest request) {
+                Uri target = request.getUrl();
+                String scheme = target.getScheme();
+                if ("http".equals(scheme) || "https".equals(scheme)) {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, target));
+                    } catch (Exception ignored) {
+                        // 没有能接这个链接的应用：什么都不做，阅读器留在原地
+                    }
+                }
+                return true;
+            }
+
+            /** 拦截 epubres:// 协议：从源 zip 实时读图/字体，零落盘 */
             @Override
             public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,
                     android.webkit.WebResourceRequest request) {
@@ -719,9 +740,13 @@ public class ReadActivity extends BaseActivity {
                     if (store != null) {
                         byte[] data = store.getZipEntry(entryPath);
                         if (data != null && data.length > 0) {
-                            String mime = guessImageMime(entryPath);
-                            return new android.webkit.WebResourceResponse(mime, "UTF-8",
-                                    new java.io.ByteArrayInputStream(data));
+                            android.webkit.WebResourceResponse resp = new android.webkit.WebResourceResponse(
+                                    guessEntryMime(entryPath), "UTF-8", new java.io.ByteArrayInputStream(data));
+                            // @font-face 走 CORS：reader.html 与 epubres:// 不同源，缺这个头内嵌字体会被直接拒掉
+                            java.util.Map<String, String> headers = new java.util.HashMap<>();
+                            headers.put("Access-Control-Allow-Origin", "*");
+                            resp.setResponseHeaders(headers);
+                            return resp;
                         }
                     }
                 }
@@ -729,13 +754,18 @@ public class ReadActivity extends BaseActivity {
             }
 
             /** 根据条目名后缀猜 MIME；不认识就回退 image/png（浏览器能容错） */
-            private String guessImageMime(String path) {
+            private String guessEntryMime(String path) {
                 if (path == null) return "image/png";
                 String lower = path.toLowerCase();
                 if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
                 if (lower.endsWith(".gif")) return "image/gif";
                 if (lower.endsWith(".webp")) return "image/webp";
                 if (lower.endsWith(".svg")) return "image/svg+xml";
+                if (lower.endsWith(".ttf")) return "font/ttf";
+                if (lower.endsWith(".otf")) return "font/otf";
+                if (lower.endsWith(".woff")) return "font/woff";
+                if (lower.endsWith(".woff2")) return "font/woff2";
+                if (lower.endsWith(".css")) return "text/css";
                 return "image/png";
             }
         });

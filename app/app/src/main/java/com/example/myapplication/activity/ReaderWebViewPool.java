@@ -20,6 +20,9 @@ import android.webkit.WebViewClient;
  *    Activity；上一个 Activity 的绑定随替换而失效，不会串台。
  */
 public final class ReaderWebViewPool {
+    /** 阅读器唯一的文档地址；复用时按它判断池里的 WebView 还在不在正文上。 */
+    private static final String READER_URL = "file:///android_asset/reader.html";
+
     private static WebView sWebView;
     private static boolean sLoaded; // reader.html 是否已加载完成
     private static final Object LOCK = new Object();
@@ -60,7 +63,7 @@ public final class ReaderWebViewPool {
                     }
                 });
                 try {
-                    wv.loadUrl("file:///android_asset/reader.html");
+                    wv.loadUrl(READER_URL);
                 } catch (Exception e) {
                     android.util.Log.e("ReaderWebViewPool", "preload reader.html failed", e);
                 }
@@ -73,9 +76,27 @@ public final class ReaderWebViewPool {
                     wv.addJavascriptInterface(ReadActivity.JsBridge.getInstance(), "Android");
                 } catch (Exception ignored) {}
                 sWebView = wv;
+            } else {
+                String current = sWebView.getUrl();
+                // 自愈：池里的 WebView 曾被书里的链接带去过外部页面，而 sLoaded 是进程级标志、不会随换书
+                //    复位 —— 不重新拉回 reader.html 的话，之后每一本书打开的都是那个网页。
+                //    current 为 null 只可能是「首帧预加载还没提交」，那时 sLoaded 本就是 false，别重复加载。
+                if (current != null && !isReaderDocument(current)) {
+                    sLoaded = false;
+                    try {
+                        sWebView.loadUrl(READER_URL);
+                    } catch (Exception e) {
+                        android.util.Log.e("ReaderWebViewPool", "restore reader.html failed", e);
+                    }
+                }
             }
             return sWebView;
         }
+    }
+
+    /** 这个地址是不是阅读器自己那份文档（带 #锚点也算）。 */
+    private static boolean isReaderDocument(String url) {
+        return url != null && url.startsWith(READER_URL);
     }
 
     public static boolean isLoaded() {

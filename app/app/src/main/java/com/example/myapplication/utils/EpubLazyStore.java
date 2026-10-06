@@ -81,7 +81,10 @@ public final class EpubLazyStore implements LazyStore {
         if (index == null || index.isEmpty()) return null;
         ZipBytes zip = openZip(context, sourceUri);
         if (zip == null) return null;
-        return new EpubLazyStore(zip, index, LocalBookParser.readCssChunkCache(context, bookId));
+        // 旧版管道留下的样式缓存在这里重算（一次性自愈），否则这本书的插图/整页画永远丢
+        Map<String, String> css = LocalBookParser.healCssChunkCache(context, bookId,
+                LocalBookParser.readCssChunkCache(context, bookId), zip);
+        return new EpubLazyStore(zip, index, css);
     }
 
     /** file:// 走真实路径；content:// 在 SAF 授权的 fd 上做定位读（网盘类不可 seek 的 provider 会失败） */
