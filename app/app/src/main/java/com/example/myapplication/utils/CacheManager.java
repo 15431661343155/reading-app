@@ -135,8 +135,9 @@ public final class CacheManager {
     public static long getLocalBookBytes(Context context) {
         if (context == null) return 0;
         long total = 0;
-        // 正文容器目录
+        // 正文容器目录（懒解析书只有索引+键缓存，体积从几十 MB 降到几百 KB）
         total += sizeOf(new File(context.getFilesDir(), "local_book_html"));
+        // EPUB 插图已改为 epubres:// 协议引用，零落盘，不再占用额外空间
         // 封面（cover_<bookId>.<ext> 直接躺在 filesDir 根下）
         File filesDir = context.getFilesDir();
         File[] children = filesDir == null ? null : filesDir.listFiles();

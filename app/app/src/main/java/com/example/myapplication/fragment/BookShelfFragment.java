@@ -1258,6 +1258,9 @@ public class BookShelfFragment extends Fragment {
         List<String> intros = new ArrayList<>();
         List<Integer> chapterCounts = new ArrayList<>();
         List<List<String>> allTitles = new ArrayList<>();
+        // 源文件 Uri 与指纹（懒解析必需）
+        List<String> sourceUris = new ArrayList<>();
+        List<String> sourceStamps = new ArrayList<>();
         // 分卷结构：删书重排会重写整个 local_books，必须一并搬运，
         // 否则删掉任意一本书后，其余 TXT 的分卷折叠目录会全部丢失（退化成平铺）。
         List<List<LocalBookParser.VolumeInfo>> allVolumes = new ArrayList<>();
@@ -1274,6 +1277,10 @@ public class BookShelfFragment extends Fragment {
             intros.add(sp.getString("book_intro_" + i, ""));
             int chCount = sp.getInt("chapter_count_" + i, 0);
             chapterCounts.add(chCount);
+            
+            // 搬运源文件 Uri 与指纹（懒解析必需）
+            sourceUris.add(sp.getString("book_source_uri_" + i, ""));
+            sourceStamps.add(sp.getString("book_source_stamp_" + i, ""));
 
             // 正文已改为文件缓存，这里只需搬运章节标题
             List<String> titles = new ArrayList<>();
@@ -1310,6 +1317,9 @@ public class BookShelfFragment extends Fragment {
             editor.putString("book_cover_path_" + i, coverPaths.get(i));
             editor.putString("book_intro_" + i, intros.get(i));
             editor.putInt("chapter_count_" + i, chapterCounts.get(i));
+            // 回写源文件 Uri 与指纹（懒解析必需）
+            editor.putString("book_source_uri_" + i, sourceUris.get(i));
+            editor.putString("book_source_stamp_" + i, sourceStamps.get(i));
             List<String> titles = allTitles.get(i);
             for (int j = 0; j < titles.size(); j++) {
                 editor.putString("chapter_title_" + i + "_" + j, titles.get(j));

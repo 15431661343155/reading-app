@@ -1,6 +1,9 @@
 package com.example.myapplication.activity;
 
 import android.annotation.SuppressLint;
+import com.example.myapplication.utils.EpubLazyStore;
+import com.example.myapplication.utils.LazyStore;
+import com.example.myapplication.utils.TxtLazyStore;
 import com.example.myapplication.utils.LocalBookParser;
 import com.example.myapplication.utils.LoginHelper;
 import com.example.myapplication.utils.ExternalPrefs;
@@ -18,6 +21,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -87,6 +91,7 @@ import android.webkit.WebViewClient;
 
 import org.json.JSONObject;
 
+import java.io.File;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -698,6 +703,39 @@ public class ReadActivity extends BaseActivity {
                 isWebViewReady = true;
                 ReaderWebViewPool.markLoaded();
                 onReaderWebViewReady();
+            }
+
+            /** 拦截 epubres:// 协议：从源 zip 实时读图，零落盘 */
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,
+                    android.webkit.WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (url.startsWith("epubres://")) {
+                    String entryPath = url.substring("epubres://".length());
+                    // epubres:// 供图是 EPUB 独有（回源读 zip 条目）；TXT 懒解析仓储没有此能力，故加类型守卫
+                    LazyStore ls = lazyStore();
+                    EpubLazyStore store = ls instanceof EpubLazyStore ? (EpubLazyStore) ls : null;
+                    if (store != null) {
+                        byte[] data = store.getZipEntry(entryPath);
+                        if (data != null && data.length > 0) {
+                            String mime = guessImageMime(entryPath);
+                            return new android.webkit.WebResourceResponse(mime, "UTF-8",
+                                    new java.io.ByteArrayInputStream(data));
+                        }
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            /** 根据条目名后缀猜 MIME；不认识就回退 image/png（浏览器能容错） */
+            private String guessImageMime(String path) {
+                if (path == null) return "image/png";
+                String lower = path.toLowerCase();
+                if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+                if (lower.endsWith(".gif")) return "image/gif";
+                if (lower.endsWith(".webp")) return "image/webp";
+                if (lower.endsWith(".svg")) return "image/svg+xml";
+                return "image/png";
             }
         });
 
@@ -1761,6 +1799,95 @@ public class ReadActivity extends BaseActivity {
         prefetchServerChaptersAround(chapterIndex);
     }
 
+    //===== 本地书懒解析：书不物化，按导入时记下的索引（EPUB=zip 条目名 / TXT=字节区间）回源重建 =====
+
+    private LazyStore lazyStore;
+    /** 已经为哪本书尝试过打开：失败也只试一次，别每章都去开源文件、读三份键缓存 */
+    private long lazyStoreBookId = -1L;
+
+    /**
+     * 当前本地书的懒解析仓储；返回 null 表示这本书读不出正文：
+     * 没有回源索引、懒解析上线前导入的旧书、或源文件已被删除/移动。
+     *
+     * <p>索引条数必须与目录章节数一致才采信：对不上就说明这条记录和源文件已经不是同一本书，
+     * 再按旧条目名去取，拿到的是别书的内容。
+     *
+     * <p>UI 线程与 WebView 桥线程都会进来（邻章兜底在桥线程），故整体加锁。
+     */
+    private synchronized LazyStore lazyStore() {
+        long bookId = safeBookId();
+        if (bookId <= 0) return null;
+        if (lazyStoreBookId == bookId) return lazyStore;
+        if (lazyStore != null) {
+            lazyStore.close();
+            lazyStore = null;
+        }
+        lazyStoreBookId = bookId;
+        String src = localBookSourceUri(bookId);
+        if (src.isEmpty()) {
+            android.util.Log.w("ReadActivity", "懒解析失败：未找到源文件 Uri，bookId=" + bookId
+                    + "。可能原因：1) 删除书籍时未正确搬运 book_source_uri_；2) 该书是懒解析上线前导入的旧书");
+            return null;
+        }
+        LazyStore store = null;
+        try {
+            // 两个实现各自校验自己的索引文件（index.bin / txtindex.bin）是否存在，不存在即返回 null：
+            // 先试 EPUB，不是 EPUB 懒解析书再试 TXT。都建不起来说明这本书没有回源索引，读不出正文。
+            store = EpubLazyStore.open(this, bookId, Uri.parse(src));
+            if (store == null) store = TxtLazyStore.open(this, bookId, Uri.parse(src));
+        } catch (Throwable t) {
+            android.util.Log.w("ReadActivity", "懒解析仓储打开失败: " + t.getMessage(), t);
+        }
+        if (store != null && store.chapterCount() != chapterList.size()) {
+            android.util.Log.w("ReadActivity", "懒解析索引与目录章节数不符: index="
+                    + store.chapterCount() + ", toc=" + chapterList.size()
+                    + "。可能原因：源文件被替换为另一本，但 SP 中仍保留旧指纹");
+            store.close();
+            store = null;
+        }
+        lazyStore = store;
+        if (store != null) {
+            android.util.Log.d("ReadActivity", "懒解析已接管本书，回源章数=" + store.chapterCount());
+        } else {
+            android.util.Log.w("ReadActivity", "懒解析不可用，本书正文读不出: bookId=" + bookId
+                    + ", src=" + src.substring(0, Math.min(50, src.length())));
+        }
+        return store;
+    }
+
+    /** local_books 中这本书记下的源文件 Uri；槽位下标会随删书重排，所以按 book_id_ 找 */
+    private String localBookSourceUri(long bookId) {
+        SharedPreferences sp = getSharedPreferences("local_books", MODE_PRIVATE);
+        int count = sp.getInt("count", 0);
+        for (int i = 0; i < count; i++) {
+            if (sp.getLong("book_id_" + i, 0L) == bookId) {
+                String v = sp.getString("book_source_uri_" + i, "");
+                return v == null ? "" : v;
+            }
+        }
+        return "";
+    }
+
+    /** 本地书正文：一律回源重建；建不起仓储（无索引 / 源已删）返回空串，由开书守卫提示不可读 */
+    private String localChapterText(long bookId, int chapterIndex, String title) {
+        LazyStore store = lazyStore();
+        if (store != null) {
+            String s = store.text(chapterIndex, title);
+            if (s != null) return s;
+        }
+        return "";
+    }
+
+    /** 本地书保留样式的 HTML：同上回源重建；TXT 懒解析无 HTML（store.html 返回 null）或仓储不可用时返回空串 */
+    private String localChapterHtml(long bookId, int chapterIndex) {
+        LazyStore store = lazyStore();
+        if (store != null) {
+            String s = store.html(chapterIndex);
+            if (s != null) return s;
+        }
+        return "";
+    }
+
     /**
      * 重新从本地缓存加载指定章节的内容（用于本地书）
      */
@@ -1787,7 +1914,7 @@ public class ReadActivity extends BaseActivity {
                     String title = sp.getString("chapter_title_" + i + "_" + chapterIndex, "第"
                             + (chapterIndex + 1) + "章");
                     // 正文优先读文件缓存；旧书回退读 SP
-                    String content = LocalBookParser.readChapterText(this, bookId, chapterIndex);
+                    String content = localChapterText(bookId, chapterIndex, title);
                     if (content == null || content.isEmpty()) {
                         content = sp.getString("chapter_content_" + i + "_" + chapterIndex, "");
                     }
@@ -1807,7 +1934,7 @@ public class ReadActivity extends BaseActivity {
 
                     // 同步 HTML（本地书靠它保留书内样式）。此前漏写这一步，
                     //    导致按需加载后只能退化成纯文本渲染，书里的排版/字体样式全部丢失。
-                    String html = LocalBookParser.readChapterHtml(this, bookId, chapterIndex);
+                    String html = localChapterHtml(bookId, chapterIndex);
                     setChapterHtml(chapterIndex, html != null ? html : "");
                 } else {
                     android.util.Log.e("ReadActivity", "Chapter index out of range: " + chapterIndex
@@ -2597,9 +2724,10 @@ public class ReadActivity extends BaseActivity {
             if (!isChapterContentPending(c)) content = c;
         }
         if (content == null && isLocalBook) {
-            // 本地书正文在 chapters.bin：同步按需读（与 reloadLocalChapterContent 同源，UI 线程也在用）
+            // 本地书正文：一律回源重建（与 reloadLocalChapterContent 同源）
             try {
-                String c = LocalBookParser.readChapterText(this, safeBookId(), target);
+                String t = chapterList.get(target).getTitle();
+                String c = localChapterText(safeBookId(), target, t);
                 if (c != null && !c.trim().isEmpty()) content = c;
             } catch (Throwable ignored) { }
         }
@@ -5070,6 +5198,30 @@ public class ReadActivity extends BaseActivity {
         if (!chapterList.isEmpty() && targetChapter >= 0 && targetChapter < chapterList.size()) {
             currentChapterIndex = targetChapter;
         }
+
+        // 懒解析的书源文件被删/不可读时，正文回源不到，也没有任何本地兜底。
+        //    此时不能以空章节打开（用户只会看到一片空白、误以为书坏了），而是提示后退回书架。
+        //    放在章节列表构建之后：lazyStore() 要用 chapterList.size() 校验索引条数，提前调会误判。
+        if (found && !chapterList.isEmpty() && isLocalBookUnreadable(bookId)) {
+            showLocalBookUnreadableAndFinish(bookId);
+        }
+    }
+
+    /** 本地书是否读不出正文：懒解析仓储建不起来（无索引 / 源已删 / 索引与目录不符）即为真 */
+    private boolean isLocalBookUnreadable(long bookId) {
+        return lazyStore() == null;
+    }
+
+    /** 源文件/内容不可用时提示并退出阅读器，避免以空白页打开 */
+    private void showLocalBookUnreadableAndFinish(long bookId) {
+        boolean lazyIndexed = LocalBookParser.hasTxtIndex(this, bookId)
+                || LocalBookParser.hasChapterIndex(this, bookId);
+        String msg = lazyIndexed
+                ? "本书源文件已删除或无法访问，无法打开"
+                : "本书内容缺失，无法打开";
+        android.util.Log.w("ReadActivity", msg + ": bookId=" + bookId);
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
+        finish();
     }
 
     /**
@@ -5320,6 +5472,12 @@ public class ReadActivity extends BaseActivity {
     @Override protected void onDestroy() {
         // 清理亮屏计时回调（窗口销毁后触发无意义）
         mainHandler.removeCallbacks(screenOffRunnable);
+        // 懒解析仓储持有源 epub 的 zip 句柄，必须随本 Activity 释放
+        if (lazyStore != null) {
+            try { lazyStore.close(); } catch (Throwable ignored) {}
+            lazyStore = null;
+        }
+        lazyStoreBookId = -1L;
         // 兜底：移除仍挂在复用 WebView 上的「布局就绪」监听（防止 observer 随 detach 失效后崩溃）
         if (layoutReadyListener != null) {
             try {
