@@ -14,14 +14,14 @@ import java.util.Map;
 import java.util.zip.ZipFile;
 
 /**
- * EPUB 懒解析仓储：不物化整本书，只靠「每章定位索引 + 两份键缓存 + 源 epub」现场重建任意一章。
+ * EPUB 懒解析仓储：不物化整本书，只靠「每章定位索引 + 样式键缓存 + 源 epub」现场重建任意一章。
  *
- * <p>为什么能成立：导入时已经把全书的样式作用域化结果（{@code css_chunks.bin}）与插图落盘引用
- *    （{@code img_refs.bin}）算好并缓存，章节拼装剩下的工作就是「读一个 zip 条目 + 正则切 body」，
- *    单章毫秒级。反过来，如果每章现跑 {@code scopeEpubCss}，真机单次 1.5~2.6 秒，翻页会直接卡死。
+ * <p>为什么能成立：导入时已经把全书的样式作用域化结果（{@code css_chunks.bin}）算好并缓存，
+ *    章节拼装剩下的工作就是「读一个 zip 条目 + 正则切 body」，单章毫秒级。反过来，如果每章现跑
+ *    {@code scopeEpubCss}，真机单次 1.5~2.6 秒，翻页会直接卡死。
+ *    插图引用是 {@code epubres://<zip条目>} 的纯字符串拼接，无需缓存。
  *
- * <p>产出的 HTML/正文与导入时逐章内联样式的结果逐字一致，
- *    因为两条链路调用的是同一组函数：{@link LocalBookParser#decodeXhtmlBytes}、
+ * <p>正文与导入时同一套函数产出，故与当年的物化产物逐字一致：{@link LocalBookParser#decodeXhtmlBytes}、
  *    {@link LocalBookParser#buildEpubHtmlContent}、{@link LocalBookParser#cleanChapterContent}、
  *    {@link LocalBookParser#stripLeadingDuplicateTitle}。
  *
@@ -34,6 +34,12 @@ public final class EpubLazyStore implements LazyStore {
         /** 条目不存在返回 null */
         byte[] get(String entryPath);
 
+        /**
+         * 全部条目名（不含目录项）。只列名字不解压任何条目内容，
+         * 供导入前台「按中央目录找 container/OPF/NCX/封面」时用。
+         */
+        java.util.Set<String> names();
+
         void close();
     }
 
@@ -42,8 +48,6 @@ public final class EpubLazyStore implements LazyStore {
     private final ZipBytes zip;
     private final List<String[]> index;
     private final Map<String, String> cssChunks;
-    private final Map<String, String> imgRefs;
-    private final File imgDir;
     /** 最近若干章的 {HTML, 正文}；accessOrder 淘汰，翻页来回翻不重复解 */
     private final LinkedHashMap<Integer, String[]> cache;
     /**
@@ -53,13 +57,10 @@ public final class EpubLazyStore implements LazyStore {
     private final Object lock = new Object();
     private volatile boolean closed;
 
-    private EpubLazyStore(ZipBytes zip, List<String[]> index, Map<String, String> cssChunks,
-                          Map<String, String> imgRefs, File imgDir) {
+    private EpubLazyStore(ZipBytes zip, List<String[]> index, Map<String, String> cssChunks) {
         this.zip = zip;
         this.index = index;
         this.cssChunks = cssChunks;
-        this.imgRefs = imgRefs;
-        this.imgDir = imgDir;
         this.cache = new LinkedHashMap<Integer, String[]>(4, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<Integer, String[]> eldest) {
@@ -80,11 +81,7 @@ public final class EpubLazyStore implements LazyStore {
         if (index == null || index.isEmpty()) return null;
         ZipBytes zip = openZip(context, sourceUri);
         if (zip == null) return null;
-        // EPUB 插图已改为 epubres:// 协议引用，零落盘；此处传 null
-        return new EpubLazyStore(zip, index,
-                LocalBookParser.readCssChunkCache(context, bookId),
-                LocalBookParser.readImageRefCache(context, bookId),
-                null);
+        return new EpubLazyStore(zip, index, LocalBookParser.readCssChunkCache(context, bookId));
     }
 
     /** file:// 走真实路径；content:// 在 SAF 授权的 fd 上做定位读（网盘类不可 seek 的 provider 会失败） */
@@ -111,6 +108,32 @@ public final class EpubLazyStore implements LazyStore {
         }
     }
 
+    /**
+     * 导入前台用的按需 zip 视图：只解中央目录，条目用到才解压，绝不把整本读进内存。
+     *
+     * <p>file:// 也走通道定位读而不用 {@code ZipFile}：{@code ZipFile} 打开即校验条目名唯一，
+     *    多看那类把 mimetype 写两遍的混淆 epub 会当场拒绝；而阅读器对这类书一直走的是通道视图
+     *    （content://），导入侧用同一套语义才不会「建出的索引自己读不出」。
+     *
+     * @return 源打不开或不是合法 zip 时返回 null
+     */
+    public static ZipBytes openForImport(Context context, Uri uri) {
+        if (uri == null) return null;
+        if ("file".equals(uri.getScheme())) {
+            String path = uri.getPath();
+            if (path == null) return null;
+            File f = new File(path);
+            if (!f.canRead()) return null;
+            try {
+                return new ChannelZipBytes(f);
+            } catch (Exception e) {
+                android.util.Log.w("EpubLazyStore", "源文件打不开 " + uri + ": " + e.getMessage());
+                return null;
+            }
+        }
+        return openZip(context, uri);
+    }
+
     private static final class FileZipBytes implements ZipBytes {
         private ZipFile zip;
 
@@ -123,6 +146,17 @@ public final class EpubLazyStore implements LazyStore {
             java.util.zip.ZipEntry e = zip.getEntry(entryPath);
             if (e == null) return null;
             return readAll(e);
+        }
+
+        @Override
+        public java.util.Set<String> names() {
+            java.util.Set<String> out = new java.util.LinkedHashSet<>();
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> en = zip.entries();
+            while (en.hasMoreElements()) {
+                java.util.zip.ZipEntry e = en.nextElement();
+                if (!e.isDirectory()) out.add(e.getName());
+            }
+            return out;
         }
 
         @Override
@@ -167,14 +201,29 @@ public final class EpubLazyStore implements LazyStore {
         /** 条目名 → {本地头偏移, 压缩方式, 压缩后大小, 原始大小} */
         private final Map<String, long[]> entries;
         private final java.nio.channels.FileChannel ch;
-        private final android.os.ParcelFileDescriptor pfd;
+        /** 句柄属主：SAF 传来的是 pfd，file:// 是打开文件的 RAF；close() 只关它 */
+        private final java.io.Closeable owner;
 
         ChannelZipBytes(android.os.ParcelFileDescriptor pfd) throws java.io.IOException {
-            this.pfd = pfd;
+            this.owner = pfd;
             // 不持有这个流的引用、也不单独关它：关闭通道会连带关掉 fd，与下面 pfd.close() 重复关闭。
             this.ch = new java.io.FileInputStream(pfd.getFileDescriptor()).getChannel();
             this.entries = readCentralDirectory();
             if (entries.isEmpty()) throw new java.io.IOException("zip 中央目录为空，可能不是合法 epub");
+        }
+
+        /** 本地文件路径的通道视图（导入前台用 file:// 时走这里，与 SAF 同一套条目语义） */
+        ChannelZipBytes(File f) throws java.io.IOException {
+            java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r");
+            this.owner = raf;
+            this.ch = raf.getChannel();
+            this.entries = readCentralDirectory();
+            if (entries.isEmpty()) throw new java.io.IOException("zip 中央目录为空，可能不是合法 epub");
+        }
+
+        @Override
+        public java.util.Set<String> names() {
+            return new java.util.LinkedHashSet<>(entries.keySet());
         }
 
         private Map<String, long[]> readCentralDirectory() throws java.io.IOException {
@@ -320,10 +369,10 @@ public final class EpubLazyStore implements LazyStore {
 
         @Override
         public void close() {
-            // 只关 pfd：通道与包装它的 FileInputStream 都建在同一个 fd 上，
+            // 只关属主：通道与包装它的流都建在同一个 fd 上，
             // 再关一次会重复关闭，某些实现上会波及后来复用的 fd 号。
             try {
-                pfd.close();
+                owner.close();
             } catch (Exception ignore) { /* 关闭失败不影响正确性 */ }
         }
 
@@ -388,8 +437,7 @@ public final class EpubLazyStore implements LazyStore {
             if (xhtml == null) return null;
             if (hit == null) {
                 String html = LocalBookParser.buildEpubHtmlContent(xhtml, loc[1],
-                        new ZipBytesMap(zip), new HashMap<>(cssChunks), new HashMap<>(imgRefs),
-                        imgDir, null, null);
+                        new ZipBytesMap(zip), new HashMap<>(cssChunks));
                 hit = new String[]{html, null};
                 cache.put(chapterIndex, hit);
             }

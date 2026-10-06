@@ -5,6 +5,7 @@ import com.example.myapplication.utils.EpubLazyStore;
 import com.example.myapplication.utils.LazyStore;
 import com.example.myapplication.utils.TxtLazyStore;
 import com.example.myapplication.utils.LocalBookParser;
+import com.example.myapplication.utils.LocalBookImport;
 import com.example.myapplication.utils.LoginHelper;
 import com.example.myapplication.utils.ExternalPrefs;
 import com.example.myapplication.utils.ExternalSyncManager;
@@ -792,23 +793,29 @@ public class ReadActivity extends BaseActivity {
         applyHeaderFooterSettings();
 
         // WebView 加载完成后，如果章节列表已加载但尚未恢复位置，则恢复
-        mainHandler.post(() -> {
-            if (!positionRestored && !chapterRestoredFromCache && !chapterList.isEmpty()) {
-                android.util.Log.d("ReadActivity", "WebView ready, restoring position from server...");
-                // 先应用所有设置（字体、背景等），再恢复位置，避免默认设置闪烁
-                webView.evaluateJavascript("beginSettingsBatch()", null);
-                applySettingsToWebView_inner();
-                webView.evaluateJavascript("finishSettingsBatch()", null);
-                webView.evaluateJavascript("setPageTurnMode('" + pageTurnMode + "')", null);
-                restoreReadingPosition(currentChapterIndex);
-                updateChapterButtons();
-                // 若此前开启过自动翻页，阅读器就绪后自动恢复
-                if (autoPageEnabled) {
-                    autoPageSuspended = false;
-                    startAutoPage();
-                }
-            }
-        });
+        mainHandler.post(this::restoreProgressOnceCatalogReady);
+    }
+
+    /**
+     * WebView 就绪后的「恢复阅读位置」这一步，单独抽出来是因为本地书还有一处要调它：
+     * 目录是后台构建出来的，索引就绪那一刻 WebView 早就 ready 了，不会再走
+     * {@link #onReaderWebViewReady}（那里面有一次性标志），必须能原地补发一次。
+     */
+    private void restoreProgressOnceCatalogReady() {
+        if (positionRestored || chapterRestoredFromCache || chapterList.isEmpty()) return;
+        android.util.Log.d("ReadActivity", "WebView ready, restoring position from server...");
+        // 先应用所有设置（字体、背景等），再恢复位置，避免默认设置闪烁
+        webView.evaluateJavascript("beginSettingsBatch()", null);
+        applySettingsToWebView_inner();
+        webView.evaluateJavascript("finishSettingsBatch()", null);
+        webView.evaluateJavascript("setPageTurnMode('" + pageTurnMode + "')", null);
+        restoreReadingPosition(currentChapterIndex);
+        updateChapterButtons();
+        // 若此前开启过自动翻页，阅读器就绪后自动恢复
+        if (autoPageEnabled) {
+            autoPageSuspended = false;
+            startAutoPage();
+        }
     }
 
     public static class JsBridge {
@@ -2304,6 +2311,20 @@ public class ReadActivity extends BaseActivity {
         else mainHandler.post(r);
     }
 
+    /**
+     * 本地书的回源索引是否还在后台构建（刚导入、或索引缺失后触发自愈重建）。
+     *
+     * <p>这段时间里任何一章都注定读不出正文，属于「还没好」而不是「内容缺失」：
+     * 加载动画继续转，索引发布那一刻由 {@link #onLocalCatalogReady} 重载目录并补发渲染。
+     * 就绪判据与等待路径同源（{@link #localCatalogReady}），再叠一条「后台确实在跑」，
+     * 这样真缺失（源文件没了、索引永远建不起来）仍会走原来的提示，不会被动画无限期吞掉。
+     */
+    private boolean localCatalogBuilding() {
+        if (!isLocalBook) return false;
+        long bookId = safeBookId();
+        return bookId > 0 && !localCatalogReady(bookId) && LocalBookImport.isBuilding(bookId);
+    }
+
     private void fetchChapterContent(int chapterIndex) {
         try {
         // ===== 外站书籍：走在线 API 获取章节正文 =====
@@ -2319,6 +2340,13 @@ public class ReadActivity extends BaseActivity {
         if (isLocalBook) {
             // 本地书不应该走网络请求，直接尝试从本地缓存重新加载
             if (pendingChapterIndex == chapterIndex) clearPendingChapterJump();   // 下面会同步渲染
+            // 后台目录还在建：这一章读不出正文是必然的，不是「章节内容缺失」。
+            //    加载动画继续转，索引发布那一刻 localIndexPoller 会重载精修目录并补发渲染。
+            if (localCatalogBuilding()) {
+                android.util.Log.d("ReadActivity", "后台目录构建中，本章暂不回源: chapterIndex=" + chapterIndex);
+                setChapterLoading(true);
+                return;
+            }
             reloadLocalChapterContent(chapterIndex);
             String title = chapterList.get(chapterIndex).getTitle();
             String content = chapterContents.get(chapterIndex);
@@ -2833,6 +2861,12 @@ public class ReadActivity extends BaseActivity {
         // 检查内容是否有效，如果无效则重新从本地缓存加载
         boolean isPlaceholder = isChapterContentPending(content);
         if (isLocalBook && isPlaceholder) {
+            // 后台目录还在建：这一章读不出正文是必然的，交给加载动画等索引发布，
+            //    既不能把占位串当正文画出去，也不能弹「内容加载中」的提示。
+            if (localCatalogBuilding()) {
+                setChapterLoading(true);
+                return;
+            }
             android.util.Log.d("ReadActivity", "Local book content is placeholder, reloading");
             // 本地书内容缺失，尝试重新加载
             reloadLocalChapterContent(chapterIndex);
@@ -2885,6 +2919,11 @@ public class ReadActivity extends BaseActivity {
         // 检查内容是否有效，如果无效则重新从本地缓存加载
         boolean isPlaceholder = isChapterContentPending(content);
         if (isLocalBook && isPlaceholder) {
+            // 后台目录还在建：同 loadChapterContentWithPage，交给加载动画等索引发布
+            if (localCatalogBuilding()) {
+                setChapterLoading(true);
+                return;
+            }
             // 本地书内容缺失，尝试重新加载
             reloadLocalChapterContent(chapterIndex);
             content = chapterIndex < chapterContents.size() ? chapterContents.get(chapterIndex) : "";
@@ -5135,11 +5174,29 @@ public class ReadActivity extends BaseActivity {
         chapterPrefetch.mergeServerData(serverList);
     }
     private void loadLocalBookChapters(long bookId, int targetChapter) {
+        boolean found = readLocalCatalogFromSp(bookId);
+
+        // 关键修复：用 targetChapter 更新 currentChapterIndex，保证 onPageFinished 渲染到正确章节
+        if (!chapterList.isEmpty() && targetChapter >= 0 && targetChapter < chapterList.size()) {
+            currentChapterIndex = targetChapter;
+        }
+
+        // 懒解析的书此刻可能还在后台建索引（导入页只等了卡片那几项），也可能源文件被删了。
+        //    前者显示加载动画并等索引露面，后者才提示不可读——绝不能以空章节打开，
+        //    用户只会看到一片空白、误以为书坏了。
+        //    放在章节列表构建之后：lazyStore() 要用 chapterList.size() 校验索引条数，提前调会误判。
+        if (found) awaitLocalCatalog(bookId, targetChapter);
+    }
+
+    /**
+     * 从 {@code local_books} 读出这本书的目录：卡片信息、每章标题、分卷表。
+     * 后台构建发布完会再读一次，所以这里必须每次都从零重建列表。
+     *
+     * @return 书架里是否有这本书
+     */
+    private boolean readLocalCatalogFromSp(long bookId) {
         SharedPreferences sp = getSharedPreferences("local_books", MODE_PRIVATE);
         int count = sp.getInt("count", 0);
-
-        android.util.Log.d("ReadActivity", "loadLocalBookChapters: bookId=" + bookId
-                + ", targetChapter=" + targetChapter + ", totalBooks=" + count);
 
         chapterList.clear();
         chapterContents.clear();
@@ -5190,26 +5247,121 @@ public class ReadActivity extends BaseActivity {
         }
 
         android.util.Log.d("ReadActivity", "Loaded " + chapterList.size() + " chapters" +
-                (found ? "" : " [WARNING: book not found in local_books]") +
-                ", first chapter content length: " +
-                (!chapterContents.isEmpty() && chapterContents.get(0) != null ? chapterContents.get(0).length() : 0));
-
-        // 关键修复：用 targetChapter 更新 currentChapterIndex，保证 onPageFinished 渲染到正确章节
-        if (!chapterList.isEmpty() && targetChapter >= 0 && targetChapter < chapterList.size()) {
-            currentChapterIndex = targetChapter;
-        }
-
-        // 懒解析的书源文件被删/不可读时，正文回源不到，也没有任何本地兜底。
-        //    此时不能以空章节打开（用户只会看到一片空白、误以为书坏了），而是提示后退回书架。
-        //    放在章节列表构建之后：lazyStore() 要用 chapterList.size() 校验索引条数，提前调会误判。
-        if (found && !chapterList.isEmpty() && isLocalBookUnreadable(bookId)) {
-            showLocalBookUnreadableAndFinish(bookId);
-        }
+                (found ? "" : " [WARNING: book not found in local_books]"));
+        return found;
     }
 
-    /** 本地书是否读不出正文：懒解析仓储建不起来（无索引 / 源已删 / 索引与目录不符）即为真 */
-    private boolean isLocalBookUnreadable(long bookId) {
-        return lazyStore() == null;
+    /** 回源索引（EPUB 的 index.bin / TXT 的 txtindex.bin）是否已经发布到位 */
+    private boolean localIndexPublished(long bookId) {
+        return LocalBookParser.hasChapterIndex(this, bookId)
+                || LocalBookParser.hasTxtIndex(this, bookId);
+    }
+
+    /**
+     * 本地书「内容是否已就绪」：回源索引已发布 <b>且</b>  SharedPreferences 里有章数。
+     *
+     * <p>判据取自发布态而不是内存里的 chapterList：等待期间内存里还是（可能为空着的）粗版目录，
+     * 而后台是先写目录、后让索引露面，所以「索引在 + SP 章数在」才等价于「目录与索引是同一版本」。
+     * 反过来只看到目录没看到索引（进程在两件事之间被杀）则由自愈重建补上。
+     */
+    private boolean localCatalogReady(long bookId) {
+        return localIndexPublished(bookId) && localSpChapterCount(bookId) > 0;
+    }
+
+    /** 书架记录里这本书当前发布的章数（等待期间它会被后台从粗版改成精修版） */
+    private int localSpChapterCount(long bookId) {
+        SharedPreferences sp = getSharedPreferences("local_books", MODE_PRIVATE);
+        int count = sp.getInt("count", 0);
+        for (int i = 0; i < count; i++) {
+            if (sp.getLong("book_id_" + i, 0L) == bookId) return sp.getInt("chapter_count_" + i, 0);
+        }
+        return 0;
+    }
+
+    /** 等待/发起本地书索引；就绪（或判定彻底读不出）前不渲染任何正文 */
+    private void awaitLocalCatalog(long bookId, int targetChapter) {
+        if (!foundBookHasSourcePointer(bookId)) {
+            showLocalBookUnreadableAndFinish(bookId);
+            return;
+        }
+        if (localCatalogReady(bookId)) return;
+        // 没索引：要么后台还在跑，要么这本书从没建成过（进程被杀 / 老数据）——后者在这里补发一次
+        LocalBookImport.enqueueByBookId(this, bookId);
+        if (!LocalBookImport.isBuilding(bookId)) {
+            // 入队没接上、后台也没在跑（源文件此刻打不开，重建注定失败）：直接按不可读处理
+            showLocalBookUnreadableAndFinish(bookId);
+            return;
+        }
+        android.util.Log.d("ReadActivity", "等待后台建目录 bookId=" + bookId);
+        // 等待期间章数还是 0（TXT 前台不读文件），所以目标章先记着，就绪那一刻再套上去
+        pendingLocalTargetChapter = targetChapter;
+        setChapterLoading(true);
+        localIndexDeadline = System.currentTimeMillis() + LOCAL_INDEX_WAIT_MS;
+        mainHandler.removeCallbacks(localIndexPoller);
+        mainHandler.postDelayed(localIndexPoller, LOCAL_INDEX_POLL_MS);
+    }
+
+    /** 轮询「索引是否已发布」：就绪就按精修目录重建章节列表并补发恢复位置，超时才提示不可读 */
+    private final Runnable localIndexPoller = new Runnable() {
+        @Override
+        public void run() {
+            if (isFinishing() || isDestroyed()) return;
+            long bookId = safeBookId();
+            if (localCatalogReady(bookId)) {
+                mainHandler.removeCallbacks(this);
+                onLocalCatalogReady(bookId);
+                return;
+            }
+            // 队列里没有这本书了 = 后台已跑完却没产出索引（或压根没建成），再等也不会有
+            if (!LocalBookImport.isBuilding(bookId)) {
+                mainHandler.removeCallbacks(this);
+                showLocalBookUnreadableAndFinish(bookId);
+                return;
+            }
+            if (System.currentTimeMillis() > localIndexDeadline) {
+                mainHandler.removeCallbacks(this);
+                showLocalBookUnreadableAndFinish(bookId);
+                return;
+            }
+            mainHandler.postDelayed(this, LOCAL_INDEX_POLL_MS);
+        }
+    };
+
+    private static final long LOCAL_INDEX_POLL_MS = 400L;
+    /** 上限按最坏情况给：千章 TXT 整本扫描 + 逐章判定，真机冷启动在秒级，留足余量不误判成不可读 */
+    private static final long LOCAL_INDEX_WAIT_MS = 120000L;
+    private long localIndexDeadline;
+    /** 等待期间记下的目标章（那时章数可能还是 0，阅读记录没法当场套上） */
+    private int pendingLocalTargetChapter = -1;
+
+    /**
+     * 索引到位：重新读一遍目录（章数与标题此刻都换成了精修版），再补发恢复位置。
+     *
+     * <p>{@code lazyStoreBookId} 是「只为这本书试过打开仓储」的缓存位，等待期间它记着 null 结果，
+     * 必须清掉，否则索引已发布却永远不去开仓储。
+     */
+    private void onLocalCatalogReady(long bookId) {
+        android.util.Log.d("ReadActivity", "后台目录已就绪，重载 bookId=" + bookId);
+        lazyStoreBookId = -1L;
+        lazyStore = null;
+        int targetChapter = pendingLocalTargetChapter >= 0 ? pendingLocalTargetChapter : currentChapterIndex;
+        pendingLocalTargetChapter = -1;
+        // 不能再走 awaitLocalCatalog：这次索引已在，直接读目录并恢复
+        boolean found = readLocalCatalogFromSp(bookId);
+        setChapterLoading(false);
+        if (!found || chapterList.isEmpty()) {
+            showLocalBookUnreadableAndFinish(bookId);
+            return;
+        }
+        if (targetChapter >= chapterList.size()) targetChapter = chapterList.size() - 1;
+        currentChapterIndex = Math.max(0, targetChapter);
+        updateChapterButtons();
+        if (isWebViewReady) restoreProgressOnceCatalogReady();
+    }
+
+    /** 书架记录里这本书是否留有源文件指针；没有就无从重建，直接判不可读 */
+    private boolean foundBookHasSourcePointer(long bookId) {
+        return !localBookSourceUri(bookId).isEmpty();
     }
 
     /** 源文件/内容不可用时提示并退出阅读器，避免以空白页打开 */
@@ -5472,6 +5624,9 @@ public class ReadActivity extends BaseActivity {
     @Override protected void onDestroy() {
         // 清理亮屏计时回调（窗口销毁后触发无意义）
         mainHandler.removeCallbacks(screenOffRunnable);
+        // 等后台建目录的轮询同理：本页都没了，继续轮询只会拖住 Activity
+        mainHandler.removeCallbacks(localIndexPoller);
+        pendingLocalTargetChapter = -1;
         // 懒解析仓储持有源 epub 的 zip 句柄，必须随本 Activity 释放
         if (lazyStore != null) {
             try { lazyStore.close(); } catch (Throwable ignored) {}

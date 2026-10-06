@@ -484,6 +484,72 @@ public class BookShelfFragment extends Fragment {
     private void deleteSelectedBooks() {
         List<Book> selected = adapter.getSelectedBooks();
         if (selected.isEmpty()) { Hint.show(getActivity(), "请选择要删除的书籍"); return; }
+        showDeleteConfirmDialog(selected);
+    }
+
+    /**
+     * 删除确认弹窗（国风探出版，与登录/注销弹窗同一套卡片）。
+     *
+     * <p>「清除书籍缓存」默认勾上＝原有行为；取消勾选只把书移出书架、留着派生数据。
+     * 书城书的 bookId 是服务器稳定 id，重新加入书架能直接命中缓存；本地书重新导入会分配
+     * 新 bookId，留下的索引最终仍会被孤儿清扫回收，所以对本地书这一项只影响「何时释放」。
+     */
+    private void showDeleteConfirmDialog(List<Book> books) {
+        Context ctx = getActivity();
+        if (ctx == null || books.isEmpty()) return;
+        View root = LayoutInflater.from(ctx).inflate(R.layout.dialog_delete_book, null);
+
+        final android.app.Dialog dialog = new android.app.Dialog(ctx, R.style.LoginPromptDialogStyle);
+        dialog.setContentView(root);
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setGravity(Gravity.CENTER);
+            // inflate(layout, null) 丢根布局 layout_*，窗口宽度必须显式给：312 = 卡片 280 + 左右各 16dp 投影留白
+            float density = ctx.getResources().getDisplayMetrics().density;
+            window.setLayout((int) (312 * density), android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+            window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        }
+        dialog.setCanceledOnTouchOutside(true);
+
+        TextView line1 = root.findViewById(R.id.tv_delete_book_line1);
+        String target;
+        if (books.size() == 1) {
+            String n = books.get(0).getBookName();
+            target = "《" + (n == null || n.isEmpty() ? "这本书" : n) + "》";
+        } else {
+            target = "选中的 " + books.size() + " 本书";
+        }
+        String full = "确定要删除" + target + "吗？";
+        android.text.SpannableString span = new android.text.SpannableString(full);
+        int start = full.indexOf(target);
+        span.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                start, start + target.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        // 书名用危险色而非主色：素白档主色是 iOS 蓝，删除这种不可逆操作要跟「确认删除」同色
+        span.setSpan(new android.text.style.ForegroundColorSpan(
+                        ThemeAttrs.color(ctx, R.attr.appDangerTop, 0)),
+                start, start + target.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        line1.setText(span);
+
+        // 勾选态：ImageView + state_selected（CheckBox 会被 Material 的 buttonTint 重涂成色块）
+        final ImageView cb = root.findViewById(R.id.iv_delete_clear_cache);
+        cb.setSelected(true);
+        final boolean[] clearCache = {true};
+        View row = root.findViewById(R.id.row_delete_clear_cache);
+        row.setOnClickListener(v -> {
+            clearCache[0] = !clearCache[0];
+            cb.setSelected(clearCache[0]);
+        });
+
+        root.findViewById(R.id.btn_delete_book_cancel).setOnClickListener(v -> dialog.dismiss());
+        final List<Book> targets = new ArrayList<>(books);
+        root.findViewById(R.id.btn_delete_book_confirm).setOnClickListener(v -> {
+            dialog.dismiss();
+            doDeleteSelectedBooks(targets, clearCache[0]);
+        });
+        dialog.show();
+    }
+
+    private void doDeleteSelectedBooks(List<Book> selected, boolean clearCache) {
         long userId = getUserId();
         for (Book book : selected) {
             if (book.getStatus() == -2) {
@@ -501,6 +567,7 @@ public class BookShelfFragment extends Fragment {
             if (book.getStatus() == -1) {
                 removeLocalBook(book.getId());
             }
+            if (clearCache) clearBookCache(book);
             allBooks.remove(book);
             shelfBookList.remove(book);
         }
@@ -513,6 +580,27 @@ public class BookShelfFragment extends Fragment {
         updateEmptyView(shelfBookList.isEmpty());
         hideEditMode();
         buildGroupTabs();
+    }
+
+    /**
+     * 释放一本书的派生缓存：按 bookId 分文件的章节列表 / 正文 / 分卷 SP，
+     * 本地书再加解析索引目录与封面文件。
+     *
+     * <p>外站书的正文落在 {@code external_chapter_*} 那两枚共享 SP 里，键是按源站书名算的，
+     * 与书架 bookId 无对应关系，这里不动它——每本书只留最近 10 章正文，体积本就有上限，
+     * 全量清理由设置页「清除缓存」负责。
+     */
+    private void clearBookCache(Book book) {
+        Context ctx = getActivity();
+        if (ctx == null) return;
+        long id = book.getId();
+        for (String prefix : new String[]{"chapter_list_", "chapter_content_", "chapter_meta_"}) {
+            ctx.getSharedPreferences(prefix + id, Context.MODE_PRIVATE).edit().clear().apply();
+        }
+        if (book.getStatus() == -1) {
+            LocalBookParser.deleteHtmlCache(ctx, id);
+            LocalBookParser.deleteCoverFiles(ctx, id);
+        }
     }
 
     @Override
@@ -1388,9 +1476,8 @@ public class BookShelfFragment extends Fragment {
         getActivity().getSharedPreferences(PREF_GROUP_ASSIGN, Context.MODE_PRIVATE)
                 .edit().remove("id_" + bookId).apply();
 
-        // 4) EPUB「保留样式」HTML 文件缓存：删除 filesDir/local_book_html/<bookId> 整目录
-        //    否则重导入同书会生成新 bookId 目录，旧目录残留成为孤儿文件
-        LocalBookParser.deleteHtmlCache(getActivity(), bookId);
+        // 正文索引目录（local_book_html/<bookId>）与封面不在这里删：
+        // 它们属于「书籍缓存」，由删除确认弹窗的勾选项决定，见 clearBookCache()。
     }
 
     /**

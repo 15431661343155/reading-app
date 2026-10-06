@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.util.List;
 import com.example.myapplication.utils.LocalBookParser;
+import com.example.myapplication.utils.LocalBookImport;
 import com.example.myapplication.utils.ThemeManager;
 import com.example.myapplication.utils.Hint;
 
@@ -180,13 +181,20 @@ public class UploadBookActivity extends BaseActivity {
             return;
         }
 
-        // ========== 解析书籍（后台线程） ==========
-        // 大 EPUB 解压 + 图片内联可能耗时数秒，放 UI 线程会卡死甚至 ANR。
+        // ========== 前台只做「卡片解析」，整本解析交给后台队列 ==========
+        // 卡片只要书名/作者/简介/封面 + 粗版目录：EPUB 实测 34ms（读 OPF+NCX+封面那几条小条目），
+        // TXT 更是什么文件都不读。剩下的逐章精修（实测 15MB/544 章冷启动 1.8 秒）由
+        // LocalBookImport 在后台跑，跑完再把目录与回源索引发布到位。
         // 注意：本地导入全程不联网，离线状态同样可用。
+        // 进度框延后 500ms 才显示：前台阶段通常在它出现之前就完事了，避免一闪而过的弹窗。
         final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
         pd.setMessage("正在导入，请稍候…");
         pd.setCancelable(false);
-        pd.show();
+        final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+        final Runnable showProgressDialog = () -> {
+            if (!isFinishing() && !isDestroyed() && !pd.isShowing()) pd.show();
+        };
+        mainHandler.postDelayed(showProgressDialog, 500);
         btnSubmit.setEnabled(false);
 
         new Thread(() -> {
@@ -196,12 +204,14 @@ public class UploadBookActivity extends BaseActivity {
             long tImport0 = System.currentTimeMillis();
             long tParse = 0, tCache = 0;
             try {
-                parsed = LocalBookParser.parse(this, fileUri, fileName, bookId);
+                parsed = LocalBookParser.parseQuick(this, fileUri, fileName, bookId);
                 tParse = System.currentTimeMillis();
                 String finalName = inputName.isEmpty() ? parsed.title : inputName;
                 String finalAuthor = inputAuthor.isEmpty() ? parsed.author : inputAuthor;
                 cacheLocalBook(bookId, finalName, finalAuthor, parsed, fileUri);
                 tCache = System.currentTimeMillis();
+                // 入队必须排在 cacheLocalBook 之后：后台发布目录时按 bookId 找槽位，槽位这会儿才存在
+                LocalBookImport.enqueue(this, bookId, fileUri, fileName);
             } catch (Throwable t) {
                 errMsg = (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage());
                 android.util.Log.e("UploadBookActivity", "本地书导入失败", t);
@@ -212,13 +222,14 @@ public class UploadBookActivity extends BaseActivity {
             final LocalBookParser.BookInfo bookInfo = parsed;
             final String err = errMsg;
             if (err == null && bookInfo != null) {
-                android.util.Log.d("UploadBookActivity", "IMPORTPERF chapters="
+                android.util.Log.d("UploadBookActivity", "IMPORTPERF quickChapters="
                         + bookInfo.chapters.size()
-                        + " parseMs=" + (tParse - tImport0)
+                        + " quickMs=" + (tParse - tImport0)
                         + " cacheMs=" + (tCache - tParse)
                         + " totalMs=" + (tCache - tImport0));
             }
             runOnUiThread(() -> {
+                mainHandler.removeCallbacks(showProgressDialog);
                 if (pd.isShowing()) pd.dismiss();
                 if (isFinishing() || isDestroyed()) return;
                 if (err != null || bookInfo == null) {
@@ -226,8 +237,7 @@ public class UploadBookActivity extends BaseActivity {
                     Hint.showLong(this, "导入失败：" + (err != null ? err : "未知错误"));
                     return;
                 }
-                String okName = inputName.isEmpty() ? bookInfo.title : inputName;
-                Hint.show(this, "成功导入：" + okName + "（" + bookInfo.chapters.size() + "章）");
+                // 成功不提示：导入已秒回，回到书架看见书卡片就是结果，再多一句 Toast 反而挡视线。
                 finish();
             });
         }, "local-book-import").start();
@@ -273,12 +283,9 @@ public class UploadBookActivity extends BaseActivity {
             editor.putInt("book_volume_child_" + count + "_" + v, vi.childStart);
             editor.putInt("book_volume_end_" + count + "_" + v, vi.end);
         }
-        // 正文与 HTML 一律落文件缓存，不进 SharedPreferences：
-        // SP 是整文件 DOM 读写，1000+ 章的正文序列化出的 XML 有十几 MB，
-        // 每次写入都要重建整棵 DOM 并全量落盘，会导致「正在导入」长时间卡住。
-        // 且整本书只写**一个**容器文件（按章各写一个文件时，1800 章会产生 3600 个文件，
-        // 实测这种规模的光是建文件就要 70 秒以上）。
-        LocalBookParser.writeBookChapters(this, bookId, bookInfo);
+        // 正文与 HTML 一律不落盘，回源索引（index.bin / txtindex.bin）也不在这里写：
+        // 那需要整本解析，已由 LocalBookImport 在后台完成后发布（见 LocalBookParser#publishPending）。
+        // 这里只写卡片 + 粗版目录：TXT 前台不读文件，故章数为 0，等后台补上。
 
         editor.apply();
     }
