@@ -1764,27 +1764,17 @@ document.addEventListener('touchcancel', simScheduleFoldCleanup, false);
  * 用捕获阶段监听，确保在 turn.js 的 document 处理器之前拿到事件。
  */
 var _simTapStart = null;
-// 本次触摸的起点是否落在中间 1/3（导航栏开关区）
-var _simCenterHold = false;
-
-function simInCenterZone(x) {
-    var w = window.innerWidth || document.documentElement.clientWidth || 1;
-    return x >= w / 3 && x <= w * 2 / 3;
-}
 
 document.addEventListener('touchstart', function (e) {
-    if (!simulationActive) { _simTapStart = null; _simCenterHold = false; return; }
+    if (!simulationActive) { _simTapStart = null; return; }
     var t = e.touches && e.touches[0];
-    if (!t) { _simTapStart = null; _simCenterHold = false; return; }
+    if (!t) { _simTapStart = null; return; }
     _simTapStart = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false };
-    // 中间 1/3 只用于开关导航栏。turn.js 在 sheet 效果下把屏幕任意点都算作书角
-    // （_cornerActivated：按 x/y 落在哪半屏决定 tl/tr/bl/br），touchstart 里就会
-    // _showFoldedPage() 把书角翘起来 → 点中间也会看到书页跟手。这里整段掐断。
-    _simCenterHold = simInCenterZone(t.clientX);
-    if (_simCenterHold) e.stopPropagation();
+    // 中间 1/3 不再整段屏蔽 turn.js：turn.min.js 已改成「点按不翘角，横向拖拽越过
+    // DRAG_SLOP 才按滑动方向起卷」（见 _pressPoint / _dragCorner），所以点中间只切
+    // 导航栏，拖中间也能正常卷页，不必再区分区域掐断。
 }, true);
 document.addEventListener('touchmove', function (e) {
-    if (_simCenterHold) e.stopPropagation();
     if (!_simTapStart || !e.touches || !e.touches[0]) return;
     var t = e.touches[0];
     if (Math.abs(t.clientX - _simTapStart.x) > 12 || Math.abs(t.clientY - _simTapStart.y) > 12) {
@@ -1792,9 +1782,6 @@ document.addEventListener('touchmove', function (e) {
     }
 }, true);
 document.addEventListener('touchend', function (e) {
-    var hold = _simCenterHold;
-    _simCenterHold = false;
-    if (hold) e.stopPropagation();   // 中间区没有折页，无需 turn.js 收尾
     if (!simulationActive || !_simTapStart) return;
     var s = _simTapStart;
     _simTapStart = null;
@@ -1812,18 +1799,13 @@ document.addEventListener('touchend', function (e) {
             if (dx < 0 && currentPage >= (pages ? pages.length - 1 : 0)) { pagerBoundaryOnce(1); return; }
             if (dx > 0 && currentPage <= 0) { pagerBoundaryOnce(-1); return; }
         }
-        // 中间区滑动：turn.js 已被屏蔽，这里补一次翻页（无跟手动画，但仍能翻）
-        if (hold) {
-            if (dx < -30) nextPage();
-            else if (dx > 30) prevPage();
-        }
         return;
     }
     if (Date.now() - s.time > 250) return;
     var w = window.innerWidth || document.documentElement.clientWidth || 1;
     pagerTapZone(s.x / w);
 }, true);
-document.addEventListener('touchcancel', function () { _simTapStart = null; _simCenterHold = false; }, true);
+document.addEventListener('touchcancel', function () { _simTapStart = null; }, true);
 
 /**
  * 书中页内锚点（{@code <a href="#x">}）不归原生拦截管：Chromium 把同文档跳转当成不通知客户端的导航，
@@ -2126,6 +2108,7 @@ function initSimulation() {
         gradients: true,
         acceleration: true,
         elevation: 60,
+        dragSlop: DRAG_SLOP,  // 点按不翘角，横向拖拽越过这个距离才起卷（turn.min.js 自定义键）
         page: firstPageIdx + 1,  // 当前页，从 1 开始
         pages: pages.length,
         when: {
@@ -4431,6 +4414,7 @@ function htmlInitSim() {
         gradients: true,
         acceleration: true,
         elevation: 60,
+        dragSlop: DRAG_SLOP,  // 点按不翘角，横向拖拽越过这个距离才起卷（turn.min.js 自定义键）
         page: htmlPage + 1,
         pages: htmlPageCount,
         when: {
