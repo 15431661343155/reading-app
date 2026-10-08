@@ -10,7 +10,9 @@
     body {
         margin: 0;
         overflow: hidden;
-        background-color: #FFFFFF;
+        /* 底色一律由 Android 侧垫（ReadActivity.primeEntryBackground）。写死白会在「正文还没到手、
+           JS 尚未应用主题」这段空窗里，从透明加载层下面透出整屏白 —— 真机 0.6~1s，就是「进阅读器闪一下」。 */
+        background-color: transparent;
     }
     canvas {
         display: block;
@@ -39,11 +41,16 @@
         display: none;
         z-index: 30;
         box-sizing: border-box;
-        background-color: #FFFFFF;
+        /* 静态不留白色：applyHtmlTheme 会把 bgColor 写进这一层的内联样式，那之前由 Android 侧垫的
+           WebView 底色顶上来，正文到达前不会闪白。 */
+        background-color: transparent;
         color: #1D1D1F;
         padding: 0;
     }
-    #htmlColumns {
+    /* 纸带一律按 .html-cols 命中，不靠 id —— 快照副本与邻章预排盒都是同一条纸带的复制品，
+       它们带 id 就会让 getElementById('htmlColumns') 在文档序里撞见副本而不是真纸带。
+       id 只留在真纸带身上（跨章落地时随身份互换交给新那条，见 swapToAdjacentHtmlChapter）。 */
+    .html-cols {
         height: 100%;
         box-sizing: border-box;
         column-fill: auto;             /* 填满一列高度再流到下一列（默认 balance 会把内容均摊，不适用） */
@@ -52,17 +59,34 @@
         line-height: 1.8;
         will-change: transform;
     }
+    /* 正文卡片：只管裁切与整体位移，正文仍然只认 #htmlColumns。覆盖档翻页推走的就是这一层 ——
+       活动页本就在屏上、栅格化好的纹理还在，把它推走比把一整页新正文第一次画出来便宜得多
+       （真机实测：快照当移动层时每翻一页掉 5~8% 帧、最坏一帧 100ms，推卡片 0 掉帧）。
+       见 turnBegin 的 push 分支与 htmlPushCard。 */
+    #htmlStack {
+        position: absolute;
+        left: 0; top: 0; right: 0; bottom: 0;
+        overflow: hidden;              /* 位移时把推出去的那半屏裁掉 */
+        box-sizing: border-box;
+        will-change: transform;
+    }
     /* 上下滚动模式：取消分栏，恢复原生纵向滚动（即改造前的行为） */
     #htmlContent.scroll-flow {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-y;
     }
-    #htmlContent.scroll-flow #htmlColumns {
+    #htmlContent.scroll-flow .html-cols {
         height: auto;
         column-width: auto !important;
         column-gap: 0 !important;
         transform: none !important;
+        will-change: auto;
+    }
+    /* 上下档没有卡片位移：正文卡片退回普通块，跟着 #htmlContent 自己的原生滚动走 */
+    #htmlContent.scroll-flow #htmlStack {
+        position: static;
+        overflow: visible;
         will-change: auto;
     }
     /* 正文容器背景交给阅读器主题，避免书中 body 的背景色块盖住主题底色 */
@@ -119,14 +143,14 @@
     /* 正文两端对齐：与 Canvas 模式（fillLineText）同一口径，让每行填满列宽、左右边距严格相等。
        书籍自带 text-align 会盖过默认继承的 left，故用 !important 锁住。
        只作用于正文块级元素，标题的原有对齐（常见居中）保持不动。 */
-    #htmlColumns p, #htmlColumns div, #htmlColumns li, #htmlColumns dd,
-    #htmlColumns blockquote, #htmlColumns figcaption {
+    #htmlContent .html-cols p, #htmlContent .html-cols div, #htmlContent .html-cols li, #htmlContent .html-cols dd,
+    #htmlContent .html-cols blockquote, #htmlContent .html-cols figcaption {
         text-align: justify !important;
         text-justify: inter-ideograph;
     }
     /* 依赖空白与边框的排版不参与两端对齐，否则代码/表格会被拉变形 */
-    #htmlColumns pre, #htmlColumns code, #htmlColumns kbd, #htmlColumns samp,
-    #htmlColumns table, #htmlColumns th, #htmlColumns td {
+    #htmlContent .html-cols pre, #htmlContent .html-cols code, #htmlContent .html-cols kbd, #htmlContent .html-cols samp,
+    #htmlContent .html-cols table, #htmlContent .html-cols th, #htmlContent .html-cols td {
         text-align: left !important;
     }
     /* ===== HTML 模式的页眉页脚覆盖层（Canvas 模式由 canvas 自带绘制，这里仅补 HTML 模式）=====
@@ -155,30 +179,35 @@
     }
     #htmlFooter span { white-space: nowrap; }
     #htmlFooterRight { margin-left: auto; text-align: right; }
-    /* ===== HTML 模式的翻页动画层（覆盖 / 淡入 / 仿真）=====
-       正文是「一整条多列纸带按页平移」，动画期间不能连纸带一起搬（相邻页会跟着动），
-       所以把纸带连视口底色/底图一起克隆成「快照页」放进本层，动画收尾再把真纸带落到目标页。
-       克隆保留 id="htmlColumns" → 分栏、字号、两端对齐那批 #htmlColumns 规则照旧命中；
-       真纸带在文档序里排得更靠前，getElementById 仍然先取到它。
-       z-index 20：压在正文之上、页眉页脚（35）之下 —— 动画期间页眉页脚不闪不跳。 */
-    #htmlTurn {
+    /* ===== 翻页动画层（两条渲染路共用同一个动画器，见 turnBegin/turnApply）=====
+       一页 = 一个铺满视口的 .turn-page 节点：canvas 一路是画好该页的 <canvas>，
+       HTML 一路是把多列纸带连视口底色/底图一起克隆出来的快照 div。
+       HTML 一路正文是「一整条纸带按页平移」：平移与章界阻尼直接搬纸带自己（HtmlPaging.trackSlide），
+       淡入搬不动它（相邻页会跟着走），才用连视口底色一起克隆出来的快照当移动层。
+       覆盖档向前翻例外：抬 #htmlStack（正文卡片）推走它、快照垫在底下当新页，见 htmlPushCard。
+       覆盖 / 平移 / 淡入 / 章界四种动效与 canvas 一路共用同一份实现（turnBegin / turnApply）。
+       克隆只带 .html-cols 不带 id → 分栏、字号、两端对齐那批规则按类命中，
+       而 #htmlColumns 全文档只有真纸带一条，getElementById 不会被副本按文档序抢走。
+       z-index：canvas 一路压在正文 canvas（z 自动）之上；HTML 一路压在正文之上、页眉页脚（35）之下
+       —— 动画期间页眉页脚不闪不跳。正文卡片平时不造层层序（在宿主 20 之下），只有推走那一下抬到 25。 */
+    #turnLayer, #htmlTurn {
         position: absolute;
         left: 0; top: 0; right: 0; bottom: 0;
-        z-index: 20;
         display: none;
         overflow: hidden;
         pointer-events: none;   /* 快照只负责显示；仿真模式下由 .html-sim 打开触摸 */
     }
+    #turnLayer { z-index: 10; }
+    #htmlTurn { z-index: 20; }
     #htmlTurn.html-sim { pointer-events: auto; }
-    #htmlTurn .html-snap {
+    .turn-page {
         position: absolute;
         left: 0; top: 0; width: 100%; height: 100%;
         overflow: hidden;
         will-change: transform, opacity;
     }
-    /* 覆盖翻页：新页压过来那条前缘的投影（方向决定投影落在哪一侧） */
-    #htmlTurn .html-snap.cover-next { box-shadow: -14px 0 26px rgba(0, 0, 0, .26); }
-    #htmlTurn .html-snap.cover-prev { box-shadow: 14px 0 26px rgba(0, 0, 0, .26); }
+    /* 覆盖翻页：移动页的前缘投一道投影。两个方向掠过后层的那条边都是它的右边缘，故只需一条规则 */
+    .turn-page.cover { box-shadow: 14px 0 26px rgba(0, 0, 0, .26); }
     /* 快照自带夜间底图暗纱：真视口层那条在本层之下，长章图页翻页时才不会一亮一暗 */
     #htmlContent.html-night #htmlTurn .html-snap.fs-bleed::before {
         content: ""; position: absolute; left: 0; top: 0; right: 0; bottom: 0;
@@ -216,12 +245,12 @@
     #flipbook {
         background-color: #FFFFFF;
     }
+    /* turn.js 的折页层：backface 必须露出来（卷过去看到的是这一面的背面），overflow 裁掉副本溢出 */
     .fbk .turn-page,
     .fbk .turn-page-wrapper,
     .fbk .page {
         -webkit-backface-visibility: visible !important;
         backface-visibility: visible !important;
-        background-color: #FFFFFF;
         overflow: hidden;
     }
 
@@ -229,6 +258,14 @@
     .fbk .turn-page {
         -webkit-transform: translateZ(0);
         transform: translateZ(0);
+    }
+
+    /* 兜底底色只给 canvas 那一路。EPUB 书本（#htmlFlipbook）同样带 .fbk，跟着这条写死白
+       就会在宣纸页/夜间页上卷出一张白纸背；它的底色改由 syncSimulationBackground() 按
+       正文纸面（含纸纹与长章出血底图）实时同步，这里不留静态色。 */
+    #flipbook .turn-page,
+    #flipbook .turn-page-wrapper,
+    #flipbook .page {
         background-color: #FFFFFF;
     }
 
@@ -279,8 +316,9 @@
 </head>
 <body data-page-node-id="ZWvZ0yyW1CZtThkm03F5ST">
 <canvas id="readerCanvas" data-page-node-id="XnhRy1Gc1le1vtsN4P6Xwd"></canvas>
+<div id="turnLayer"></div>
 <div id="flipbookContainer" data-page-node-id="2AzO88BUiwPHZV67TXEXDy"><div id="flipbook" class="fbk" data-page-node-id="5IYcBNdrLZ4idvcXqfYH8l"></div></div>
-<div id="htmlContent"><div id="htmlColumns"></div><div id="htmlTurn"></div><div id="htmlHeader"></div><div id="htmlFooter"><span id="htmlFooterLeft"></span><span id="htmlFooterRight"></span></div></div>
+<div id="htmlContent"><div id="htmlStack"><div id="htmlColumns" class="html-cols"></div></div><div id="htmlTurn"></div><div id="htmlHeader"></div><div id="htmlFooter"><span id="htmlFooterLeft"></span><span id="htmlFooterRight"></span></div></div>
 <script>
 // ============ 状态变量 ============
 var canvas = document.getElementById('readerCanvas');
@@ -421,7 +459,6 @@ var timeText = '';
 // 翻页动画模式: 'none','cover','slide','updown','fade','simulation'
 var pageTurnMode = 'cover';
 var isAnimating = false;
-var animWatchdog = null; // 动画超时保护
 
 // turn.js 仿真翻页状态
 var simulationActive = false;
@@ -489,6 +526,39 @@ function syncSimulationBackground() {
     css += selectors + ' { background-image: ' + texUrl + ' !important; ' +
            'background-size: 100% 100% !important; ' +
            'background-repeat: no-repeat !important; }\n';
+
+    // 3. EPUB 书本（#htmlFlipbook）：纸面不取 canvas 的 bgColor/纹理，而是直接抄视口层
+    //    （htmlPaper = #htmlContent 的 computed background），于是配色风格、日夜、
+    //    长章整屏出血底图都跟着正文页走，与快照页逐像素同源。
+    //    只在书本已在时输出这一段：换章重排会反复走到这里，没必要每次都为不存在的书本重发规则。
+    if (htmlSim) {
+        var hp = htmlPaper();
+        if (hp) {
+            // ⚠️ 选择器绝不能带 '#htmlFlipbook .page-wrapper'：快照页自己内联画着纸面
+            //    （htmlSnapNode → paintHtmlPaper），wrapper 只是转动的壳。卷页时当前页的快照
+            //    被移进折页层，原 wrapper 空出来却仍排在下一页之上；给它铺上不透明纸面，
+            //    被卷开的区域就只剩一张白纸，下一页要等落地才露出来（真机像素比对：整幅中折帧
+            //    与旧页同色 317/360，去掉这条后同一帧立刻显出新页文字）。canvas 那一路必须给
+            //    wrapper 铺底（见 simOnFlipStart），因为它拿 wrapper 背景当「下一页位图」；
+            //    这一路下层就是真实的下一页 DOM，透明才是对的。
+            var hsel = '#htmlFlipbook, ' +
+                       '#htmlFlipbook .turn-page-wrapper, #htmlFlipbook .turn-page, ' +
+                       '#htmlFlipbook .page.p-temporal';
+            css += hsel + ' { background-color: ' + hp[0] + ' !important; ' +
+                   'background-image: ' + hp[1] + ' !important; ' +
+                   'background-size: ' + hp[2] + ' !important; ' +
+                   'background-position: ' + hp[3] + ' !important; ' +
+                   'background-repeat: no-repeat !important; }\n';
+            // 卷过来的那面纸是背面，正面印着字 —— 同色再压一档，靠深浅而不是靠白把两层分开。
+            // 方向跟纸面走：亮纸压深才看得出层次；夜间纸面本就接近纯黑，压 6% 只从 26 掉到 24，
+            // 折面与页面糊成一片，只能反向往上提（真机实测：提 7% 到 42 才刚好读出「卷起来了」）。
+            var hpr = hp[0].match(/\d+/g) || [255, 255, 255];
+            var hback = (0.299 * hpr[0] + 0.587 * hpr[1] + 0.114 * hpr[2]) / 255 > 0.5
+                    ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.07)';
+            css += '#htmlFlipbook .page.p-temporal { background-image: ' +
+                   'linear-gradient(' + hback + ', ' + hback + '), ' + hp[1] + ' !important; }\n';
+        }
+    }
 
     styleEl.textContent = css;
 }
@@ -651,7 +721,6 @@ function paginate(text, title) {
         pages.push(currentPageLines.slice());
         pageStartOffsets.push(globalOffset);
     }
-    console.log('DBG paginate: innerW=' + window.innerWidth + ' innerH=' + window.innerHeight + ' pages=' + pages.length);
 }
 
 function splitTextToLines(text, maxWidth) {
@@ -710,14 +779,18 @@ function fillLineText(text, x, y, maxWidth, justLast) {
 }
 
 // ============ 绘制指定页 ============
-function drawPage(pageIndex) {
+/** 只铺底色与底图（不画正文）：章界阻尼翻页时静止层要露出的就是这一张 */
+function drawBlank() {
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
     if (bgTextureImg && bgTextureImg.complete) {
         ctx.drawImage(bgTextureImg, 0, 0, window.innerWidth, window.innerHeight);
     }
+}
 
+function drawPage(pageIndex) {
+    drawBlank();
     if (pageIndex < 0 || pageIndex >= pages.length) return;
 
     var lines = pages[pageIndex];
@@ -794,64 +867,301 @@ function drawPage(pageIndex) {
     }
 }
 
+// ============ 统一翻页控制层 ============
+// 翻页的「控制流」过去在两条渲染路上各写了一份：canvas 文本分页有 goToPage/nextPage/prevPage，
+// HTML 富文本分栏又另起一套 htmlGoToPage/htmlNextPage/htmlPrevPage；档位切换、章界换章、
+// 点击三分区同样各有分支。本层把控制流收编成唯一一份，两条路只回答「一页怎么产出」：
+//   flow()                        本章走「横向分页」还是「长卷滚动」
+//   count() / pos()               本章几页 / 现在第几页
+//   show(i) / turnTo(i)           第 i 页直落可见层 / 带动画翻到第 i 页
+//   simOn / simGoto / simStep     仿真书本：在不在用 / 跳到某页 / 卷一步
+//   scrollGoto / scrollStep       长卷：按屏跳 / 滚一屏（含到边换章）
+//   fetchAdjacent/crossTurn/crossFlip  邻章就绪负载 / 跨章复用换页动画 / 跨章无缝卷页
+//   relayout(prev)                档位变化后重建（建拆书本、分页与滚动互换）
+// 动画层同样只剩一份（turnBegin / turnApply / turnRun / turnFinish，见下方「统一翻页动画层」）：
+// 后端另外回答 turnHost / pageW / putPage / pageNode / turnSettled 五件事，
+// 跟手拖拽则完全不再分流（见「跟手拖拽翻页」那一节的 document 级状态机）。
+
+var TextPaging = {
+    // 跳页要不要演动画：canvas 一路要（进度条 seek 与点击翻页同观感），HTML 一路直落 ——
+    // 这是两条路各自长出来的分歧，不是设计。
+    animateJump: true,
+    // 纸带不是现成的轨道：每一页都得单独出一个节点
+    trackSlide: false,
+    settleJump: function () {
+        if (_xCrossFlipping) return false;
+        turnSettle();
+        return true;
+    },
+    flow: function () { return pageTurnMode === 'updown' ? 'scroll' : 'pages'; },
+    count: function () { return pages.length; },
+    pos: function () { return currentPage; },
+    // ---- 动画层后端：一页 = 一只画好该页的 <canvas>，静止层就是正文自己 ----
+    turnHost: function () { return document.getElementById('turnLayer'); },
+    pageW: function () { return window.innerWidth; },
+    putPage: function (i) { drawPage(Math.round(i)); },
+    putBlank: function () { drawBlank(); },
+    pageNode: function (i) {
+        if (i < 0 || i >= pages.length) return null;
+        var cvs = _turnNodePool.pop() || document.createElement('canvas');
+        cvs.className = 'turn-page';
+        cvs.style.transform = '';
+        cvs.style.opacity = '';
+        return renderPageTo(cvs, i);
+    },
+    // 一次翻页最多用到 from/to 两页，池子留两只就够，多留的是显存
+    recycleNode: function (n) {
+        if (n && n.tagName === 'CANVAS' && _turnNodePool.length < 2) _turnNodePool.push(n);
+    },
+    turnSettled: function (land) {
+        currentPage = land;
+        notifyJavaPageChange();
+    },
+    show: function (i) {
+        currentPage = i;
+        drawPage(i);
+        notifyJavaPageChange();
+    },
+    turnTo: function (i) {
+        var from = currentPage, dir = i > from ? 1 : -1;
+        if (pageTurnMode === 'none' || !turnBegin({ base: this, from: from, to: i, dir: dir, mode: pageTurnMode })) {
+            this.show(i);
+            return;
+        }
+        turnRun(0, 1, ANIM_DURATION);
+    },
+    simOn: function () { return simulationActive; },
+    // 书本会经 turning/turned 回调自己上报页码，这里再 notify 就是同页重复上报（刷进度）
+    simGoto: function (i) { $('#flipbook').turn('page', i + 1); },
+    simStep: function (dir) { $('#flipbook').turn(dir > 0 ? 'next' : 'previous'); },
+    scrollGoto: function (i) {
+        cancelScrollAnim();
+        animateScrollTo(i * (scrollViewH || window.innerHeight));
+    },
+    scrollStep: function (dir) { if (dir > 0) scrollNextScreen(); else scrollPrevScreen(); },
+    fetchAdjacent: tryFetchAdjacentChapter,
+    crossTurn: crossChapterTurn,
+    crossFlip: simStartCrossFlip,
+    relayout: function (prev) {
+        var wasSimulation = simulationActive || _simulationPlaceholderActive;
+        var wasScroll = (prev === 'updown');
+        if (pageTurnMode === 'simulation') {
+            if (wasSimulation) return;                       // 书本已在，换章交给 loadContent 重建
+            if (currentContent) initSimulation();
+            else showSimulationPlaceholder();                // 正文未到：先立一本空书，到了再重建
+            return;
+        }
+        if (wasSimulation) destroySimulation();
+        if (pageTurnMode === 'updown') {
+            canvas.style.visibility = 'visible';             // 仿真把 canvas 藏了，长卷得让它自己露面
+            if (!currentContent) return;
+            layoutScroll(currentContent, chapterTitle);
+            clampScroll();
+            drawScroll();
+            notifyJavaPageChange();
+            return;
+        }
+        // 从长卷切回分页：长卷没有「页」的概念，回到本章首页
+        if (wasScroll && currentContent) {
+            paginate(currentContent, chapterTitle);
+            currentPage = 0;
+            drawPage(currentPage);
+            notifyJavaPageChange();
+        }
+    },
+    virtualTotal: function () {
+        if (isScrollMode()) return Math.max(1, Math.ceil((scrollContentHeight || scrollViewH || 1) / (scrollViewH || 1)));
+        return pages.length;
+    },
+    // 虚拟页码从 1 计：长卷以「屏」为页，让进度条/书签/跳转的契约与分页模式一致
+    virtualPos: function () {
+        if (isScrollMode()) return Math.min(this.virtualTotal(), Math.floor(scrollY / (scrollViewH || 1)) + 1);
+        return currentPage + 1;
+    },
+    pageText: function () {
+        if (isScrollMode()) {
+            if (!scrollLines || scrollLines.length === 0) return "";
+            var viewLines = [];
+            for (var i = 0; i < scrollLines.length; i++) {
+                var line = scrollLines[i];
+                // 仅取当前视口附近的若干行作为预览
+                var screenY = line.y - scrollY;
+                if (screenY < -line.fontSize * 2) continue;
+                if (screenY > window.innerHeight) break;
+                if (line.text && line.text.trim() !== "") viewLines.push(line.text);
+            }
+            return viewLines.join("\n");
+        }
+        if (currentPage < 0 || currentPage >= pages.length) return "";
+        var lines = pages[currentPage];
+        if (!lines || lines.length === 0) return "";
+        var textLines = [];
+        for (var j = 0; j < lines.length; j++) {
+            if (lines[j].text && lines[j].text.trim() !== "") textLines.push(lines[j].text);
+        }
+        return textLines.join("\n");
+    }
+};
+
+var HtmlPaging = {
+    animateJump: false,
+    // 多列纸带本身就是一条横向轨道：slide 与章界阻尼平移它即可，不必克隆出节点
+    trackSlide: true,
+    // 覆盖档向前用的「正文卡片」（#htmlStack，真纸带的裁切层）：按 dir 判定给不给，
+    // 给不出（目标页没预热、出血页、上下/仿真）就退回快照移动层那一路
+    pushCard: htmlPushCard,
+    flow: function () { return htmlFlow === 'scrolled' ? 'scroll' : 'pages'; },
+    count: function () { return htmlPageCount; },
+    pos: function () { return htmlPage; },
+    settleJump: function () { turnSettle(); return true; },
+    // ---- 动画层后端：一页 = 纸带连视口底色一起克隆出来的快照 ----
+    turnHost: htmlTurnHost,
+    pageW: function () { return htmlStep; },
+    putPage: function (i) { htmlSetStripPage(i); },
+    // 跨章翻页的两页都由快照节点铺满视口，真纸带留在底下只会从节点边缘漏出一像素，直接藏起来
+    putBlank: function () { htmlBlankStrip(); },
+    // 快照交给动画层才铺 .turn-page（铺满视口、跟着位移走）；仿真书本自己管排版，不吃这套。
+    // warmNodes=true：交出去的是复用池里已经排好版的镜像，动画收尾不许把它摘出文档（见 turnRelease）
+    warmNodes: true,
+    pageNode: function (i) { return htmlBorrowMirror(i); },
+    recycleNode: htmlRecyclePageNode,
+    turnSettled: function (land) {
+        htmlPage = land;
+        updateHtmlHeaderFooter();
+        notifyJavaPageChange();
+        htmlScheduleMirrorWarm();
+    },
+    // 页脚是 DOM 覆盖层、不随正文重绘，所以本路每个落点都要单独刷一次
+    show: function (i) {
+        htmlPage = i;
+        htmlSetStripPage(i);
+        notifyJavaPageChange();
+        updateHtmlHeaderFooter();
+        htmlScheduleMirrorWarm();
+    },
+    turnTo: function (i) { htmlTurnTo(i, true); },
+    simOn: function () { return !!htmlSim; },
+    simGoto: function (i) {
+        htmlPage = i;
+        htmlSimGoTo(i);
+        notifyJavaPageChange();
+        updateHtmlHeaderFooter();
+    },
+    // 快照书本的「卷一步」与「翻到第 i 页」在 HTML 一路是同一件事：纸带位置由 turn.js 说了算
+    simStep: function (dir, to) { htmlTurnTo(to, true); },
+    scrollGoto: function (i) {
+        var c = document.getElementById('htmlContent');
+        if (!c) return;
+        if (i < 0) i = 0;
+        if (i >= htmlPageCount) i = htmlPageCount - 1;
+        htmlPage = i;
+        c.scrollTop = i * htmlClientHeight();
+        notifyJavaPageChange();
+        updateHtmlHeaderFooter();
+    },
+    scrollStep: function (dir) {
+        var c = document.getElementById('htmlContent');
+        if (!c) return;
+        var atEdge = dir > 0 ? (c.scrollTop + c.clientHeight + 2 >= c.scrollHeight) : (c.scrollTop <= 0);
+        if (atEdge) { pagerNotifyChapter(dir); return; }
+        c.scrollTop = dir > 0
+                ? Math.min(c.scrollHeight - c.clientHeight, c.scrollTop + c.clientHeight)
+                : Math.max(0, c.scrollTop - c.clientHeight);
+        notifyJavaPageChange();
+    },
+    // 本地 EPUB 的邻章正文：Java 回送保留样式的 HTML，用真分页函数在隐藏纸带盒里排出首/末页做无缝动画
+    // （仿真书本与长卷档不走这套 —— 它们的「当前页」不由纸带位移决定，见 tryFetchAdjacentChapterHtml）
+    fetchAdjacent: htmlAdjacent,
+    crossTurn: crossChapterTurn,
+    relayout: function () { applyHtmlTheme(true); },
+    virtualTotal: function () { return htmlPageCount; },
+    virtualPos: function () { return htmlCurrentPage() + 1; },
+    pageText: htmlCurrentPageText
+};
+
+function pagerBackend() { return htmlMode ? HtmlPaging : TextPaging; }
+
+function pagerNotifyChapter(dir) {
+    try { if (dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
+}
+
+/**
+ * 章界统一入口：邻章正文已就绪就走跨章无缝（仿真卷页 / 换页动画同一口径），
+ * 否则通知 Java 加载邻章。defer=true 用在 turn.js 事件内部 —— 那时它的状态机正在栈上，
+ * 同步拆书本容器会打断它内部的数据链，只能下一拍再动。
+ */
+function pagerBoundary(dir, defer) {
+    if (_xCrossFlipping) return;                       // 临时双页卷页在途，书本容器已被它占用
+    var b = pagerBackend();
+    var xt = b.fetchAdjacent ? b.fetchAdjacent(dir) : null;
+    if (xt) {
+        if (b.simOn() && b.crossFlip) {
+            if (defer) {
+                setTimeout(function () { if (!b.crossFlip(xt)) pagerNotifyChapter(dir); }, 0);
+                return;
+            }
+            if (b.crossFlip(xt)) return;
+        } else if (b.crossTurn) {
+            b.crossTurn(xt);                           // 接管即落地，换章回调由它在动画收尾时发出
+            return;
+        }
+    }
+    pagerNotifyChapter(dir);
+}
+
+/** 一次手势只允许换一章：turn.js 的 boundary 事件与 document 级滑动分支会各报一次，
+ *  各走各的就连跳两章（先进下一章、约 1s 后再进再下一章）。兜底 1500ms 复位：
+ *  「已经是最后一章」这类不会触发 loadContent 的失败得自己解锁。 */
+function pagerBoundaryOnce(dir) {
+    if (_boundaryPending) return;
+    _boundaryPending = true;
+    setTimeout(function () { _boundaryPending = false; }, 1500);
+    pagerBoundary(dir, true);
+}
+
+/** 点击三分区：左 1/3 上一页、右 1/3 下一页、中间切换导航栏。
+ *  参数是「占屏宽的比例」而不是像素 —— Java 传来的一直是物理像素，而 window.innerWidth 是 CSS
+ *  像素（1080 屏 ≈ 360），只有比例两端等价；按像素判会把屏幕正中间算成右 1/3，导航栏永远调不出。 */
+function pagerTapZone(frac) {
+    if (!isFinite(frac)) return false;
+    if (frac < 0) frac = 0;
+    if (frac > 1) frac = 1;
+    if (frac < 1 / 3) prevPage();
+    else if (frac > 2 / 3) nextPage();
+    else { try { Android.toggleNavigation(); } catch (e) {} }
+    return true;
+}
+
 // ============ 翻页控制 ============
 function goToPage(page) {
-    if (isHtmlMode()) { htmlGoToPage(page); return; }
-    if (isScrollMode()) {
-        cancelScrollAnim();
-        animateScrollTo(page * (scrollViewH || window.innerHeight));
-        return;
-    }
-    if (isAnimating || _xCrossFlipping) return;
+    var b = pagerBackend();
+    if (b.flow() === 'scroll') { b.scrollGoto(page); return; }   // 长卷按屏跳，不参与分页钳制
+    if (!b.settleJump()) return;
+    var n = b.count();
+    if (n === 0) return;
     if (page < 0) page = 0;
-    if (page >= pages.length) page = pages.length - 1;
-    if (page === currentPage) return;
-    if (simulationActive) {
-        $('#flipbook').turn('page', page + 1);
-        return;
-    }
-    var oldPage = currentPage;
-    currentPage = page;
-    if (pageTurnMode === 'none') {
-        drawPage(currentPage);
-        notifyJavaPageChange();
-    } else {
-        animateTurn(oldPage, currentPage, page > oldPage);
-    }
+    if (page > n - 1) page = n - 1;
+    if (page === b.pos()) return;
+    if (b.simOn()) { b.simGoto(page); return; }
+    if (b.animateJump) b.turnTo(page);
+    else b.show(page);
+}
+
+/** 翻一步：页内交给本路的动画层，撞上章界交给 pagerBoundary。
+ *  在途判据对两条路同时生效 —— isAnimating 是两端共用的旗标（拖拽、动画都置它）。 */
+function pagerStep(dir) {
+    var b = pagerBackend();
+    if (isAnimating || _xCrossFlipping) return;
+    if (b.flow() === 'scroll') { b.scrollStep(dir); return; }
+    var to = b.pos() + dir;
+    if (to < 0 || to > b.count() - 1) { pagerBoundary(dir, false); return; }
+    if (b.simOn()) { b.simStep(dir, to); return; }
+    b.turnTo(to);
 }
 
 function nextPage() {
-    console.log('DBG nextPage: pages=' + (pages?pages.length:'(none)') + ' anim=' + isAnimating + ' sim=' + simulationActive + ' mode=' + pageTurnMode + ' swipe=' + swipeEnabled + ' dragMode=' + dragMode() + ' cur=' + currentPage);
-    if (isAnimating || _xCrossFlipping) return;
-    if (isHtmlMode()) { htmlNextPage(); return; }
-    if (isScrollMode()) { scrollNextScreen(); return; }
     try {
-        if (simulationActive) {
-            if (currentPage < pages.length - 1) {
-                $('#flipbook').turn('next');
-            } else {
-                // ✅ 邻章已预加载：无缝卷页换章（与普通卷页同观感）；未就绪走原有加载流程
-                var xtSimNext = tryFetchAdjacentChapter(1);
-                if (xtSimNext && simStartCrossFlip(xtSimNext)) return;
-                Android.onChapterEnd();
-            }
-            return;
-        }
-        if (currentPage < pages.length - 1) {
-            var oldPage = currentPage;
-            currentPage++;
-            if (pageTurnMode === 'none') {
-                drawPage(currentPage);
-                notifyJavaPageChange();
-            } else {
-                animateTurn(oldPage, currentPage, true);
-            }
-        } else {
-            // ✅ 邻章已预加载：换章复用换页动画（跨章无缝），未就绪走原有加载流程
-            var xtNext = tryFetchAdjacentChapter(1);
-            if (xtNext) { crossChapterTapTurn(xtNext); return; }
-            Android.onChapterEnd();
-        }
+        pagerStep(1);
     } catch (e) {
         console.error('nextPage异常: ' + e.message);
         isAnimating = false;
@@ -859,36 +1169,8 @@ function nextPage() {
 }
 
 function prevPage() {
-    if (isAnimating || _xCrossFlipping) return;
-    if (isHtmlMode()) { htmlPrevPage(); return; }
-    if (isScrollMode()) { scrollPrevScreen(); return; }
     try {
-        if (simulationActive) {
-            if (currentPage > 0) {
-                $('#flipbook').turn('previous');
-            } else {
-                // ✅ 邻章（上一章）已预加载：无缝卷页换章，落点为上一章最后一页
-                var xtSimPrev = tryFetchAdjacentChapter(-1);
-                if (xtSimPrev && simStartCrossFlip(xtSimPrev)) return;
-                try { Android.onChapterStart(); } catch(e) {}
-            }
-            return;
-        }
-        if (currentPage > 0) {
-            var oldPage = currentPage;
-            currentPage--;
-            if (pageTurnMode === 'none') {
-                drawPage(currentPage);
-                notifyJavaPageChange();
-            } else {
-                animateTurn(oldPage, currentPage, false);
-            }
-        } else {
-            // ✅ 邻章（上一章）已预加载：换章复用换页动画，落点为上一章最后一页
-            var xtPrev = tryFetchAdjacentChapter(-1);
-            if (xtPrev) { crossChapterTapTurn(xtPrev); return; }
-            try { Android.onChapterStart(); } catch(e) {}
-        }
+        pagerStep(-1);
     } catch (e) {
         console.error('prevPage异常: ' + e.message);
         isAnimating = false;
@@ -897,35 +1179,7 @@ function prevPage() {
 
 // ✅ 新增：获取当前页的文本内容（用于书签预览）
 function getCurrentPageText() {
-    if (isHtmlMode()) { return htmlCurrentPageText(); }
-    if (isScrollMode()) {
-        if (!scrollLines || scrollLines.length === 0) return "";
-        var textLines = [];
-        for (var i = 0; i < scrollLines.length; i++) {
-            var line = scrollLines[i];
-            // 仅取当前视口附近的若干行作为预览
-            var screenY = line.y - scrollY;
-            if (screenY < -line.fontSize * 2) continue;
-            if (screenY > window.innerHeight) break;
-            if (line.text && line.text.trim() !== "") textLines.push(line.text);
-        }
-        return textLines.join("\n");
-    }
-
-    if (currentPage < 0 || currentPage >= pages.length) return "";
-
-    var lines = pages[currentPage];
-    if (!lines || lines.length === 0) return "";
-
-    // 提取所有行的文本，用换行符连接
-    var textLines = [];
-    for (var j = 0; j < lines.length; j++) {
-        if (lines[j].text && lines[j].text.trim() !== "") {
-            textLines.push(lines[j].text);
-        }
-    }
-
-    return textLines.join("\n");
+    return pagerBackend().pageText();
 }
 
 function notifyJavaPageChange() {
@@ -936,6 +1190,32 @@ function notifyJavaPageChange() {
         if (typeof Android === 'undefined' || !Android) return;
         Android.onPageChanged(virtualCurrentPage(), virtualTotalPages());
     } catch(e) {}
+}
+
+/**
+ * 正文真的过完一帧了，回票给 Java 撤「加载中」与进书遮罩。
+ *
+ * <p>Java 侧 evaluateJavascript 的回调只代表「脚本执行完了」，不代表这一帧已经合成出来：HTML 一路的
+ * 测量、分页、定位都排在 rAF 里。抢在取帧之前掀遮罩，露出的是合成器里上一本书那一帧旧画面（真机
+ * 实测 100~600ms，表现为「换书先进到上一本书的那一页，再刷成本书」）。双 rAF 是「上一帧已经交出去」
+ * 的标准判据；页面拿不到帧（不可见 / rAF 被节流）时由 Java 侧超时兜底撤遮罩。
+ *
+ * @param paintGen Java 本次渲染的代次，原样回送；过期票由 Java 丢弃。
+ */
+function notifyJavaPainted(paintGen) {
+    if (typeof requestAnimationFrame !== 'function') {
+        try { if (Android && Android.onContentPainted) Android.onContentPainted(paintGen | 0); } catch (e) {}
+        return;
+    }
+    requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+            try {
+                if (typeof Android !== 'undefined' && Android && Android.onContentPainted) {
+                    Android.onContentPainted(paintGen | 0);
+                }
+            } catch (e) {}
+        });
+    });
 }
 
 // ============ 跨章无缝翻页（预加载就绪时，换章复用换页动画） ============
@@ -970,8 +1250,25 @@ function tryFetchAdjacentChapter(dir) {
     var xPages = pages, xOffsets = pageStartOffsets;
     pages = sPages; pageStartOffsets = sOffsets; chapterTitle = sTitle; currentContent = sContent;
     if (!xPages || !xPages.length) return null;
-    return { dir: (dir > 0 ? 1 : -1), index: pl.index, title: (pl.title || ''),
-             content: text, pages: xPages, offsets: xOffsets };
+    var xt = { dir: (dir > 0 ? 1 : -1), index: pl.index, title: (pl.title || ''),
+               content: text, pages: xPages, offsets: xOffsets, count: xPages.length };
+    // 跟手拖拽时邻章还不在全局分页里，静止层画不到它 —— 由负载自己交出该页节点
+    xt.node = function (i) {
+        var cvs = _turnNodePool.pop() || document.createElement('canvas');
+        cvs.className = 'turn-page';
+        cvs.style.transform = '';
+        cvs.style.opacity = '';
+        return renderAdjacentPageTo(cvs, xt, i);
+    };
+    xt.land = function () { swapToAdjacentChapter(xt); };
+    return xt;
+}
+
+/** 跨章过渡窗口：压住页码上报并置繁忙旗标，Java 回送正文时解除；超时兜底防极端情况长期卡死 */
+function beginCrossChapterWindow() {
+    _suppressPageNotify = true;
+    _xTurnBusy = true;
+    setTimeout(function () { _suppressPageNotify = false; _xTurnBusy = false; _htmlXReady = null; }, 2000);
 }
 
 /** 把全局分页状态整体切换为邻章（此后 drawPage / 页码上报 / 目录页码都基于新章） */
@@ -981,381 +1278,355 @@ function swapToAdjacentChapter(xt) {
     chapterTitle = xt.title;
     currentContent = xt.content;
     currentChapterIndex = xt.index;
-    _suppressPageNotify = true;
-    _xTurnBusy = true;
-    // 兜底：Java loadContent 正常到达时会清这两个旗标；此处超时兜底防极端情况长期卡死
-    setTimeout(function() { _suppressPageNotify = false; _xTurnBusy = false; }, 2000);
+    beginCrossChapterWindow();
 }
 
-/** 跨章「点击 / 音量键 / 自动翻页」翻页：与普通换页同一套动画，落地后再通知 Java 真正换章 */
-function crossChapterTapTurn(xt) {
+/** 跨章「点击 / 音量键 / 自动翻页」翻页：与普通换页同一套动画，落地后再通知 Java 真正换章。
+ *  两条渲染路共用 —— 换掉「当前章」的动作收在 xt.land() 里（canvas 换全局分页，HTML 换纸带本体），
+ *  动画期间两页都由节点出演，所以落地前不能先换章，否则静止层与快照对不上。 */
+function crossChapterTurn(xt) {
+    var b = pagerBackend();
     if (isAnimating) return;
-    var toPage = xt.dir > 0 ? 0 : xt.pages.length - 1;
+    var toPage = xt.dir > 0 ? 0 : xt.count - 1;
+    var fromPage = b.pos();
     if (pageTurnMode === 'none') {
         // none 模式换页本就无动画：直接切换，与换页观感一致
-        swapToAdjacentChapter(xt);
-        currentPage = toPage;
-        drawPage(currentPage);
-        try { if (xt.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
+        xt.land();
+        b.show(toPage);
+        pagerNotifyChapter(xt.dir);
         return;
     }
-    var oldImg = null;
-    try { oldImg = ctx.getImageData(0, 0, canvas.width, canvas.height); } catch (e) { oldImg = null; }
-    if (!oldImg) {
-        // 截图失败（极端环境）→ 退回原有换章流程
-        try { if (xt.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e2) {}
+    // 两页都得先落成节点：换章会把「当前章」整体换成邻章，静止层再靠 putPage 就画到邻章去了
+    var nFrom = b.pageNode(fromPage);
+    var nTo = xt.node(toPage);
+    if (!nFrom || !nTo) {
+        // 渲染不出来（极端环境）→ 退回原有换章流程
+        pagerNotifyChapter(xt.dir);
         return;
     }
-    swapToAdjacentChapter(xt);
-    currentPage = toPage;
-    drawPage(currentPage);
-    var newImg = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    var tmpOld = document.createElement('canvas');
-    tmpOld.width = canvas.width; tmpOld.height = canvas.height;
-    tmpOld.getContext('2d').putImageData(oldImg, 0, 0);
-    var tmpNew = document.createElement('canvas');
-    tmpNew.width = canvas.width; tmpNew.height = canvas.height;
-    tmpNew.getContext('2d').putImageData(newImg, 0, 0);
-    startTurnFrames(tmpOld, tmpNew, toPage, xt.dir > 0, function() {
-        try { if (xt.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
-    });
+    // boundary 显式传 false：to 是邻章的页码，按换章前的 count 判会误判成撞章界
+    if (!turnBegin({ base: b, from: fromPage, to: toPage, dir: xt.dir, mode: pageTurnMode,
+                     boundary: false, nodes: { from: nFrom, to: nTo }, preLand: xt.land })) {
+        pagerNotifyChapter(xt.dir);
+        return;
+    }
+    turnRun(0, 1, ANIM_DURATION, function () { pagerNotifyChapter(xt.dir); });
 }
 
 // ============ 翻页动画系统 ============
 var ANIM_DURATION = 280;
 
 function setPageTurnMode(mode) {
-    var wasSimulation = simulationActive || _simulationPlaceholderActive;
-    var wasScroll = (pageTurnMode === 'updown');
+    var prev = pageTurnMode;
     cancelScrollAnim();
     pageTurnMode = mode;
-    // ✅ HTML 富文本模式下由 HTML 容器自管布局：按新模式在「横向分栏翻页」与
-    //    「上下滚动」之间切换并重排，重排里会顺带建/拆仿真书本（见 htmlInitSim）。
-    //    canvas 路径的那套 flipbook/位图重排一概不碰，两条路各用各的书本容器。
-    if (htmlMode) { applyHtmlTheme(true); return; }
-    if (mode === 'simulation') {
-        if (!wasSimulation) {
-            if (currentContent) {
-                initSimulation();
-            } else {
-                // 还没有章节内容：先展示占位书本，等 loadContent 到达再重建
-                showSimulationPlaceholder();
-            }
-        }
-    } else {
-        if (wasSimulation) {
-            destroySimulation();
-        }
-        if (mode === 'updown') {
-            // 进入连续滚动模式：取消 canvas 隐藏（若从仿真切换），重排为长卷并绘制
-            canvas.style.visibility = 'visible';
-            if (currentContent) {
-                layoutScroll(currentContent, chapterTitle);
-                clampScroll();
-                drawScroll();
-                notifyJavaPageChange();
-            }
+    // 换档位 = 「本页怎么产出」整套重来：建/拆仿真书本、分页与长卷互换、按进度比例还原位置。
+    // Java 每次换章都会重推一次档位（SharedPreferences 里的全局值），所以这里不做同值短路 ——
+    // 长卷档的 loadContent 依赖这次调用把 scrollLines 排出来。
+    pagerBackend().relayout(prev);
+}
+
+// ============ 统一翻页动画层（两条渲染路共用）============
+// 一页 = 一个铺满视口的 .turn-page 节点：canvas 一路是画好该页的 <canvas>，HTML 一路是纸带快照。
+// 后端只回答五件事：turnHost() 容器 / pageW() 一页平移距离 / putPage(i) 静止层落位 /
+// pageNode(i) 交出某页的独立节点 / turnSettled(i) 收尾时对齐「当前页」与页码上报。
+// cover / slide / fade / 章界阻尼四种动效都写成「静止层 + 移动节点」的组合，只有一份实现；
+// 旧版每翻一页做四次全屏 getImageData/putImageData 的位图合成整条链路就此退役。
+// trackSlide=true 的后端（HTML 纸带）在 slide 与章界两处分文不出节点：平移真纸带就是动画。
+// 淡入淡出是唯一要两张节点的一种：底下垫一层页面纯色，两页各按 alpha 叠，才淡得出去也淡得进来。
+var _turn = null;         // { base, host, mode, dir, from, to, boundary, W, kind, mover, a, b, nodes }
+var _turnRaf = 0;
+var _turnWatchdog = 0;
+var _turnNodePool = [];   // canvas 一路的页节点回收池（见 TextPaging.pageNode）
+
+function turnClearWatchdog() {
+    if (_turnWatchdog) { clearTimeout(_turnWatchdog); _turnWatchdog = 0; }
+}
+
+/**
+ * 取一页的节点并挂进动画层；onlyPre=true（跨章）时只认调用方备好的，不回退到静止层。
+ * parentNode===host 就不必再 append：同一个父节点内的 appendChild 是「摘下来再插回去」，
+ * 会把这棵子树的布局打断重排（HTML 一路的快照副本实测 37ms）。复用池交出来的节点本就挂在
+ * 宿主里，挪一次等于把省下来的开销全还回去。层叠顺序改由 turnBegin 显式写 z-index 管，不再靠文档序。
+ */
+function turnGrab(t, i, pre, onlyPre) {
+    var n = pre || (onlyPre ? null : t.base.pageNode(i));
+    if (!n) return null;
+    // 邻章预排盒本就直接躺在视口层里，且已是铺满视口的绝对定位节点 —— 搬进宿主再搬出来，
+    // 等于让那条排好的多列流换两次父亲（真机各 50ms）。它不进宿主，层序改由 turnPlaceInPlace 按角色给。
+    if (!n.__xtBox && n.parentNode !== t.host) t.host.appendChild(n);
+    t.nodes.push(n);
+    return n;
+}
+
+/** 原地出演的那枚页节点（邻章预排盒）自己管层序：宿主的 z 是 20，
+ *  当移动页 / 淡入的新页就抬到 25（页眉页脚 35 仍在它之上），当垫底静止页就留文档序
+ *  —— 它排在旧卡片之后、宿主之前，正被移动页盖住。 */
+function turnPlaceInPlace(t) {
+    var under = t.kind === 'mover' ? t.a : null;
+    var list = [t.a, t.b, t.mover];
+    for (var k = 0; k < list.length; k++) {
+        var n = list[k];
+        if (!n || !n.__xtBox) continue;
+        n.style.zIndex = n === under ? '' : '25';
+    }
+}
+
+/**
+ * 搭不起来时把已经借到手的节点退回去。拖拽那一路是先 pageNode(from) 再 turnBegin 的，
+ * 中途 return null 就不会有 turnRelease 来收 —— canvas 一路丢给 GC 算了，快照镜像池是
+ * 「借出去不还就少一张」，连着几次搭不起来就没得借，每次翻页重新付 53ms。
+ */
+function turnGiveBack(spec) {
+    var b = spec.base, n = spec && spec.nodes;
+    if (!b || !b.recycleNode || !n) return;
+    if (n.from) b.recycleNode(n.from);
+    if (n.to) b.recycleNode(n.to);
+}
+
+/**
+ * 「卡片推走」起势：把正文卡片抬到动画宿主之上、涂一层不透明纸面（否则底下的新页会从字缝里
+ * 透出来）、带上移动页前缘的投影，位移交给 turnApply 逐帧写。
+ * 常态下 #htmlStack 不造层层序（在宿主 20 之下），只有推走这一下才要盖住快照。
+ */
+function turnArmPushCard(card) {
+    if (!card) return null;
+    paintHtmlPaper(card);                                     // 抄 #htmlContent 的底色/底图（见 htmlPaper）
+    // 投影画在卡片右缘之外：向前翻的前缘就是卡片右缘，阴影落在新页上，与快照当移动层那一路同一条。
+    // 只有这一个方向 —— 向后翻要演「上一页盖进来」，动的必须是进来的那页，卡片推不得（见 htmlPushCard）。
+    card.style.boxShadow = '14px 0 26px rgba(0, 0, 0, .26)';
+    card.style.zIndex = '25';                                 // 宿主（快照）20 之上、页眉页脚 35 之下
+    card.style.transform = 'translate3d(0, 0, 0)';
+    return card;
+}
+
+/** 收势：卡片交还给 CSS 常态。#htmlStack 的内联样式只有推走这一路会写，整串清掉即可 */
+function turnCalmPushCard(card) {
+    if (card) card.style.cssText = '';
+}
+
+/**
+ * 搭起一次翻页。spec = { base, from, to, dir, mode, boundary, nodes, preLand }，
+ * nodes 可带 { from, to } 现成节点 —— 跨章翻页时邻章那一页只有节点可用，静止层帮不上；
+ * boundary 由撞章界的调用方（跟手拖拽）明说，跳页那一类按 to 越界自行推导。
+ * 返回 null 表示搭不起来（容器缺失 / 已有在途翻页 / 节点取不到），调用方退回无动画跳页。
+ */
+function turnBegin(spec) {
+    if (_turn) { turnGiveBack(spec); return null; }
+    var base = spec.base;
+    var host = base.turnHost();
+    if (!host) { turnGiveBack(spec); return null; }
+    var forced = !!spec.nodes;    // 跨章：全局分页已换到邻章，putPage 画不到要演的那一页
+    if (forced && !base.putBlank) { turnGiveBack(spec); return null; }
+    var boundary = spec.boundary !== undefined ? spec.boundary
+            : (spec.to < 0 || spec.to >= base.count());
+    var t = {
+        base: base, host: host, mode: spec.mode, dir: spec.dir, from: spec.from,
+        to: boundary ? spec.from : spec.to, boundary: boundary,
+        W: base.pageW(), nodes: [], mover: null, a: null, b: null, kind: 'mover',
+        preLand: spec.preLand || null
+    };
+    var track = !!base.trackSlide;
+    var nFrom = forced ? spec.nodes.from : null;
+    var nTo = forced ? spec.nodes.to : null;
+    // 覆盖档向前能推的正文卡片（后端判定给不给，见 htmlPushCard）：给不了就退回快照移动层。
+    // 向后、跨章（forced）与撞章界一律退回 —— 后两类的「页」不全在真纸带上，搬卡片会搬出错的东西，
+    // 而向后本来要演的就是「上一页盖进来」，动的不能是当下这页。
+    var card = (t.dir && !t.boundary && !forced && base.pushCard) ? base.pushCard(t.dir) : null;
+    host.style.display = 'block';
+
+    if ((t.boundary || t.mode === 'slide') && track && !forced) {
+        // 多列纸带自己就是轨道：平移与章界阻尼都只搬它，不必克隆出节点（也搬不出节点）
+        base.putPage(t.from);
+        t.kind = 'strip';
+    } else if (t.boundary || t.mode === 'slide') {
+        // 章界没有目标页：当前页朝手势方向挪开，露出底色当「翻到头了」的反馈。
+        // 平移与它同构（两页一起走），只是底层换成一页真节点。
+        base.putBlank(t.dir);
+        t.a = turnGrab(t, t.from, nFrom, forced);
+        if (t.boundary) {
+            t.kind = 'mover';
+            t.mover = t.a;
         } else {
-            // 普通分页模式：若从滚动模式切出，恢复分页并回到首页
-            if (wasScroll && currentContent) {
-                paginate(currentContent, chapterTitle);
-                currentPage = 0;
-                drawPage(currentPage);
-                notifyJavaPageChange();
-            }
+            t.kind = 'track';
+            t.b = turnGrab(t, t.to, nTo, forced);
         }
+    } else if (t.mode === 'fade') {
+        // 交叉淡出淡入：底下垫一层页面纯色，两页各出一张节点按 alpha 叠。
+        // 只把新页淡入（旧页留在静止层 100% 不淡出）中途两页文字一样清楚，是重影不是淡出。
+        t.kind = 'fade';
+        var back = document.createElement('div');
+        back.className = 'turn-back';
+        back.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;background:' + bgColor;
+        back.style.zIndex = '1';                       // 垫层永远在最下，两页按 a<b 叠（见下面按角色写 z-index）
+        t.host.appendChild(back);
+        t.nodes.push(back);
+        t.a = turnGrab(t, t.from, nFrom, forced);
+        t.b = turnGrab(t, t.to, nTo, forced);
+    } else if (card) {
+        // 覆盖向前：抬正文卡片把活动页整张推走，目标页的快照垫在底下按露出的宽度才画。
+        // 观感与下面那一路逐像素一致（真机三个进度点最坏差 0/255），换的只是动的层：快照当移动层
+        // 时第一帧要把一整页正文从零栅格化（每翻一页掉 5~8% 帧、最坏一帧 100ms），而活动页本就
+        // 在屏上、纹理是热的，推它只剩合成开销 —— 底下那张也提前预热过（见 htmlPrimeMirrorPage）。
+        // 向后不走这条：那要演的是「上一页从左侧盖进来」，动的必须是进来的那页，卡片推不得。
+        t.kind = 'push';
+        t.a = turnGrab(t, t.to, null, false);           // 底下那张 = 目标页
+        if (t.a) t.mover = turnArmPushCard(card);
+    } else {
+        // 覆盖（快照当移动层，推不走时的画法）：两个方向观感不同（刻意不对称，两个方向都跟手）
+        //   上一页：上一页在上层从左侧滑入 → 覆盖住当前页。
+        //   下一页：当前页的快照在上层向左滑走 → 露出底下已落位的真纸带。
+        t.kind = 'mover';
+        var staticPage = t.dir > 0 ? t.to : t.from;
+        var staticNode = t.dir > 0 ? nTo : nFrom;
+        if (staticNode) {
+            base.putBlank(t.dir);
+            t.a = turnGrab(t, staticPage, staticNode, true);
+        } else {
+            base.putPage(staticPage);
+        }
+        t.mover = turnGrab(t, t.dir > 0 ? t.from : t.to, t.dir > 0 ? nFrom : nTo, forced);
+        if (t.mover) t.mover.className += ' cover';
+    }
+    // 层叠顺序按角色写死，不再吃文档序：复用池交出来的快照本就挂在宿主里，位置由不得这一次。
+    // 淡入是「垫底色 < 旧页 < 新页」，覆盖是「静止页 < 移动页」，平移两页各走各的、不重叠。
+    // push 不用管：卡片（25）整层盖在宿主（20）之上，宿主里只有一张底下的新页。
+    if (t.kind === 'fade') {
+        if (back) back.style.zIndex = '1';
+        if (t.a) t.a.style.zIndex = '2';
+        if (t.b) t.b.style.zIndex = '3';
+    } else if (t.kind === 'mover') {
+        if (t.a) t.a.style.zIndex = '2';
+        if (t.mover) t.mover.style.zIndex = '4';
+    }
+    turnPlaceInPlace(t);
+    var ok = t.kind === 'strip' ? true
+            : (t.kind === 'push' ? (!!t.a && !!t.mover)
+              : (t.kind === 'track' || t.kind === 'fade' ? (!!t.a && !!t.b) : !!t.mover));
+    if (!ok) {
+        turnDrop(t);
+        base.putPage(t.from);   // putBlank 已让静止层让位，搭不起来就得把当前页画回去（HTML 一路还要它解除隐藏）
+        return null;
+    }
+    _turn = t;
+    turnApply(t, 0);
+    return t;
+}
+
+/** 按进度 p（0=当前页，1=目标页）落一帧。纯函数：拖拽跟手与定时动画共用同一入口 */
+function turnApply(t, p) {
+    var W = t.W, x;
+    switch (t.kind) {
+        case 'strip':       // 纸带即轨道：slide 走整页，章界走调用方已阻尼过的位移
+            t.base.putPage(t.from + t.dir * p);
+            return;
+        case 'fade':
+            t.a.style.opacity = 1 - p;
+            t.b.style.opacity = p;
+            return;
+        case 'track':
+            t.a.style.transform = 'translate3d(' + (-t.dir * p * W) + 'px,0,0)';
+            t.b.style.transform = 'translate3d(' + (t.dir * (1 - p) * W) + 'px,0,0)';
+            return;
+        case 'push':          // 正文卡片往左让位（只有向前走这条），底下那张按露出的宽度才画
+            t.mover.style.transform = 'translate3d(' + (-p * W) + 'px,0,0)';
+            return;
+        default:            // mover：章界朝手势方向挪，覆盖按方向滑入 / 滑出
+            x = t.boundary ? -t.dir * p * W : (t.dir > 0 ? -p * W : -(1 - p) * W);
+            t.mover.style.transform = 'translate3d(' + x + 'px,0,0)';
     }
 }
 
-/** 通用翻页帧循环：tmpOld/tmpNew 为两页位图，按当前 pageTurnMode 合成 280ms 动画；
- *  结束后恢复 toPage 正常绘制并解除 isAnimating；onDone 可选（跨章落地时用于通知 Java 换章） */
-function startTurnFrames(tmpOld, tmpNew, toPage, isForward, onDone) {
+/** 摘掉本层挂上去的节点，能回收的交回后端池子 */
+function turnRelease(t) {
+    var b = t.base;
+    for (var i = 0; i < t.nodes.length; i++) {
+        var n = t.nodes[i];
+        if (!n) continue;
+        // warmNodes 后端（HTML 快照镜像池）自己收尾：节点留在文档里才保得住已经排好的布局，
+        // 摘掉再挂回去等于把「借 1ms」打回「借 53ms」。交不出镜像时它会给游离快照，那时才真摘。
+        if (b.warmNodes) { b.recycleNode(n); continue; }
+        if (n.parentNode) n.parentNode.removeChild(n);
+        if (b.recycleNode) b.recycleNode(n);
+    }
+    t.nodes.length = 0;
+    t.mover = t.a = t.b = null;
+}
+
+/** 动画层用完要不要关容器：warmNodes 后端要它一直开着 —— display:none 会把池内节点的布局一起丢掉 */
+function turnHideHost(t) {
+    if (t.host && !t.base.simOn() && !t.base.warmNodes) t.host.style.display = 'none';
+}
+
+/** 只拆本层挂上去的节点，不动后端自己的静止层（跨章落地前要先单独拆，故与 turnFinish 分开） */
+function turnDrop(t) {
+    if (t.kind === 'push') turnCalmPushCard(t.mover);   // 卡片已经抬起来了，搭不起来也得按回常态
+    turnRelease(t);
+    turnHideHost(t);
+}
+
+/** 收尾：静止层落到 commit ? to : from，拆节点、对齐页码并解除 isAnimating */
+function turnFinish(t, commit) {
+    if (!t) return;
+    if (_turn === t) _turn = null;
+    if (_turnRaf) { cancelAnimationFrame(_turnRaf); _turnRaf = 0; }
+    turnClearWatchdog();
+    var landed = commit !== false;
+    var land = landed ? t.to : t.from;
+    var card = t.kind === 'push' ? t.mover : null;   // turnRelease 会把 mover 抹平，先攥住
+    turnRelease(t);
+    // 跨章落地：先把全局分页换成邻章，静止层才画得到新章那页
+    // （否则 putPage 画出旧章的同名页，闪一下才被 Java 回送的正文纠正）
+    if (landed && t.preLand) t.preLand();
+    t.base.putPage(land);
+    // 卡片推走档收势放在 putPage 之后：卡片就是活动页自己，静止层还没落位就撤 z-index
+    // 会让底下那张快照（演的是目标页）在回弹时露一脸。同一拍里改完，绘不出来先后。
+    if (card) turnCalmPushCard(card);
+    turnHideHost(t);
+    t.base.turnSettled(land);
+    isAnimating = false;
+}
+
+/** 把在途翻页从 fromP 演到 toP（toP<1 即回弹），结束后收尾。onDone 在收尾之后触发 */
+function turnRun(fromP, toP, ms, onDone) {
+    var t = _turn;
+    if (!t) { isAnimating = false; if (onDone) onDone(); return; }
     isAnimating = true;
-    // 超时保护：2秒后强制恢复
-    if (animWatchdog) clearTimeout(animWatchdog);
-    animWatchdog = setTimeout(function() {
-        if (isAnimating) {
-            console.warn('翻页动画超时，强制恢复');
-            isAnimating = false;
-        }
+    turnClearWatchdog();
+    // 兜底：WebView 把页面切到后台时会整排冻结 rAF，没有这一拍 isAnimating 就再也解不开
+    _turnWatchdog = setTimeout(function () {
+        if (_turn !== t) return;
+        turnApply(t, toP);
+        turnFinish(t, toP >= 1);
+        if (onDone) onDone();
     }, 2000);
-    var dpr = window.devicePixelRatio || 1;
-    var CW = canvas.width;   // 实际像素宽
-    var CH = canvas.height;  // 实际像素高
-    var startTime = null;
-    function frame(timestamp) {
-        try {
-            if (!startTime) startTime = timestamp;
-            var progress = Math.min((timestamp - startTime) / ANIM_DURATION, 1);
-            var ease = 1 - Math.pow(1 - progress, 3);
-
-            // 重置变换，直接用实际像素坐标操作
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-            switch (pageTurnMode) {
-                case 'cover':
-                    drawCoverAnim(tmpOld, tmpNew, CW, CH, ease, isForward);
-                    break;
-                case 'slide':
-                    drawSlideAnim(tmpOld, tmpNew, CW, CH, ease, isForward);
-                    break;
-                case 'updown':
-                    drawUpDownAnim(tmpOld, tmpNew, CW, CH, ease, isForward);
-                    break;
-                case 'fade':
-                    drawFadeAnim(tmpOld, tmpNew, CW, CH, ease);
-                    break;
-                default:
-                    drawCoverAnim(tmpOld, tmpNew, CW, CH, ease, isForward);
-            }
-
-            if (progress < 1) {
-                requestAnimationFrame(frame);
-            } else {
-                // 动画结束，恢复 DPR 变换并正常绘制
-                ctx.setTransform(1, 0, 0, 1, 0, 0);
-                ctx.scale(dpr, dpr);
-                currentPage = toPage;
-                drawPage(currentPage);
-                notifyJavaPageChange();
-                isAnimating = false;
-                if (animWatchdog) { clearTimeout(animWatchdog); animWatchdog = null; }
-                if (onDone) onDone();
-            }
-        } catch (e) {
-            // 动画出错时安全恢复状态，防止 isAnimating 卡死
-            console.error('翻页动画异常: ' + e.message);
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.scale(dpr, dpr);
-            currentPage = toPage;
-            drawPage(currentPage);
-            notifyJavaPageChange();
-            isAnimating = false;
-            if (animWatchdog) { clearTimeout(animWatchdog); animWatchdog = null; }
-            if (onDone) onDone();
-        }
-    }
-    requestAnimationFrame(frame);
+    var t0 = null;
+    var frame = function (ts) {
+        _turnRaf = 0;
+        if (_turn !== t) return;            // 期间被重排 / 换章拆掉，交给那一次的处理
+        if (t0 === null) t0 = ts;
+        var k = ms <= 0 ? 1 : Math.min(1, (ts - t0) / ms);
+        turnApply(t, fromP + (toP - fromP) * (1 - Math.pow(1 - k, 3)));
+        if (k < 1) { _turnRaf = requestAnimationFrame(frame); return; }
+        turnClearWatchdog();
+        turnFinish(t, toP >= 1);
+        if (onDone) onDone();
+    };
+    _turnRaf = requestAnimationFrame(frame);
 }
 
-function animateTurn(fromPage, toPage, isForward) {
-    var dpr = window.devicePixelRatio || 1;
-    var CW = canvas.width;   // 实际像素宽
-    var CH = canvas.height;  // 实际像素高
-
-    var tmpNew, tmpOld;
-    try {
-        // 截取旧页画面（用实际像素尺寸）
-        var savedPage = currentPage;
-        currentPage = fromPage;
-        var oldImg = ctx.getImageData(0, 0, CW, CH);
-        // 截取新页画面
-        currentPage = toPage;
-        drawPage(toPage);
-        var newImg = ctx.getImageData(0, 0, CW, CH);
-        currentPage = savedPage;
-
-        // 将新页像素放入离屏 canvas（同样用实际像素尺寸）
-        tmpNew = document.createElement('canvas');
-        tmpNew.width = CW;
-        tmpNew.height = CH;
-        tmpNew.getContext('2d').putImageData(newImg, 0, 0);
-
-        // 将旧页像素放入离屏 canvas
-        tmpOld = document.createElement('canvas');
-        tmpOld.width = CW;
-        tmpOld.height = CH;
-        tmpOld.getContext('2d').putImageData(oldImg, 0, 0);
-    } catch (e) {
-        console.error('翻页截图异常: ' + e.message);
-        // 截图失败，直接跳到目标页
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(dpr, dpr);
-        currentPage = toPage;
-        drawPage(currentPage);
-        notifyJavaPageChange();
-        isAnimating = false;
-        return;
-    }
-
-    startTurnFrames(tmpOld, tmpNew, toPage, isForward);
+/** 在途翻页先落地再跳：两条路同一口径，跳页不会再把两套动画叠着跑 */
+function turnSettle() {
+    if (_turn) turnFinish(_turn, true);
 }
 
-// 覆盖动画：两个方向观感不同（刻意不对称，两个方向都跟手）
-//   下一页（forward）：当前页在上层向左滑走 → 露出底层的下一页
-//   上一页（backward）：上一页在上层从左侧滑入 → 覆盖住当前页
-function drawCoverAnim(oldCvs, newCvs, CW, CH, p, forward) {
-    var topCvs, bottomCvs, topX;
-    if (forward) {
-        bottomCvs = newCvs; topCvs = oldCvs; topX = -CW * p;        // 当前页左移，露出新页
-    } else {
-        bottomCvs = oldCvs; topCvs = newCvs; topX = -CW * (1 - p);  // 上一页从左滑入覆盖
-    }
-    ctx.drawImage(bottomCvs, 0, 0);
-    // 上层页的右边缘（两个方向都是这条边掠过下层页），在其右侧投阴影
-    var shW = 8;
-    var edge = topX + CW;
-    if (edge > 0 && edge < CW) {
-        var l = Math.max(0, edge), r = Math.min(CW, edge + shW);
-        if (r > l) {
-            var g = ctx.createLinearGradient(l, 0, r, 0);
-            g.addColorStop(0, 'rgba(0,0,0,0.25)');
-            g.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = g;
-            ctx.fillRect(l, 0, r - l, CH);
-        }
-    }
-    ctx.drawImage(topCvs, topX, 0);
-}
-
-// 平移动画：旧页滑出 + 新页滑入
-function drawSlideAnim(oldCvs, newCvs, CW, CH, p, forward) {
-    ctx.clearRect(0, 0, CW, CH);
-    var oldOff = forward ? (-CW * p) : (CW * p);
-    var newOff = forward ? (CW * (1 - p)) : (-CW * (1 - p));
-    ctx.drawImage(oldCvs, oldOff, 0);
-    ctx.drawImage(newCvs, newOff, 0);
-}
-
-// 上下动画：垂直滑动
-function drawUpDownAnim(oldCvs, newCvs, CW, CH, p, forward) {
-    ctx.clearRect(0, 0, CW, CH);
-    var oldOff = forward ? (-CH * p) : (CH * p);
-    var newOff = forward ? (CH * (1 - p)) : (-CH * (1 - p));
-    ctx.drawImage(oldCvs, 0, oldOff);
-    ctx.drawImage(newCvs, 0, newOff);
-}
-
-// 淡入动画：交叉淡入淡出
-function drawFadeAnim(oldCvs, newCvs, CW, CH, p) {
-    ctx.clearRect(0, 0, CW, CH);
-    ctx.globalAlpha = 1 - p;
-    ctx.drawImage(oldCvs, 0, 0);
-    ctx.globalAlpha = p;
-    ctx.drawImage(newCvs, 0, 0);
-    ctx.globalAlpha = 1;
-}
-
-// 仿真翻书动画：带3D透视的翻页效果
-function drawSimulationAnim(oldCvs, newCvs, CW, CH, p, forward) {
-    // 翻页中点时透视变形最强
-    var perspective = Math.sin(p * Math.PI) * 0.055;
-    var vShrink = CH * perspective;  // 上下各收缩的像素
-    var hShift  = CW * perspective * 0.35; // 远端水平偏移
-
-    if (forward) {
-        var slideX = CW * (1 - p); // 新页左边缘位置
-
-        // 1. 底层背景
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, CW, CH);
-
-        // 2. 旧页（静止不动）
-        ctx.drawImage(oldCvs, 0, 0);
-
-        // 3. 旧页上随翻页移动的阴影
-        var shL = Math.max(0, slideX - CW * 0.1);
-        var shR = Math.min(CW, slideX + CW * 0.03);
-        if (shR > shL) {
-            var sg = ctx.createLinearGradient(shL, 0, shR, 0);
-            sg.addColorStop(0, 'rgba(0,0,0,0)');
-            sg.addColorStop(1, 'rgba(0,0,0,0.25)');
-            ctx.fillStyle = sg;
-            ctx.fillRect(shL, 0, shR - shL, CH);
-        }
-
-        // 4. 新页（带3D透视变形：上下收窄 + 梯形倾斜）
-        ctx.save();
-        ctx.beginPath();
-        // 梯形：左侧（铰链边）全高，右侧（自由边）收缩
-        ctx.moveTo(slideX, vShrink * 0.3);
-        ctx.lineTo(slideX + CW, vShrink);
-        ctx.lineTo(slideX + CW, CH - vShrink);
-        ctx.lineTo(slideX, CH - vShrink * 0.3);
-        ctx.closePath();
-        ctx.clip();
-        // 将新页绘制到梯形区域内
-        ctx.drawImage(newCvs, slideX, 0);
-        ctx.restore();
-
-        // 5. 新页左边缘高光（纸张边缘反光）
-        var hlL = Math.max(0, slideX);
-        var hlR = Math.min(CW, slideX + 5);
-        if (hlR > hlL && slideX > 0 && slideX < CW) {
-            var hl = ctx.createLinearGradient(hlL, 0, hlR, 0);
-            hl.addColorStop(0, 'rgba(255,255,255,0.4)');
-            hl.addColorStop(1, 'rgba(255,255,255,0)');
-            ctx.fillStyle = hl;
-            ctx.fillRect(hlL, 0, hlR - hlL, CH);
-        }
-
-        // 6. 新页表面微弱暗角（靠近铰链处）
-        var cL = Math.max(0, slideX);
-        var cR = Math.min(CW, slideX + CW * 0.05);
-        if (cR > cL && slideX > 0 && slideX < CW) {
-            var cg = ctx.createLinearGradient(cL, 0, cR, 0);
-            cg.addColorStop(0, 'rgba(0,0,0,0.05)');
-            cg.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = cg;
-            ctx.fillRect(cL, 0, cR - cL, CH);
-        }
-
-    } else {
-        // ===== 向右翻（镜像处理）=====
-        var slideX2 = -CW * (1 - p); // 新页左边缘位置（负值→右移）
-
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, CW, CH);
-
-        ctx.drawImage(oldCvs, 0, 0);
-
-        // 旧页上阴影
-        var shL2 = Math.max(0, slideX2 + CW - CW * 0.03);
-        var shR2 = Math.min(CW, slideX2 + CW + CW * 0.1);
-        if (shR2 > shL2) {
-            var sg2 = ctx.createLinearGradient(shL2, 0, shR2, 0);
-            sg2.addColorStop(0, 'rgba(0,0,0,0.25)');
-            sg2.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = sg2;
-            ctx.fillRect(shL2, 0, shR2 - shL2, CH);
-        }
-
-        // 新页（带透视：右侧铰链边全高，左侧自由边收缩）
-        var nLeft = slideX2;
-        var nRight = slideX2 + CW;
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(nLeft, vShrink);
-        ctx.lineTo(nRight, vShrink * 0.3);
-        ctx.lineTo(nRight, CH - vShrink * 0.3);
-        ctx.lineTo(nLeft, CH - vShrink);
-        ctx.closePath();
-        ctx.clip();
-        ctx.drawImage(newCvs, nLeft, 0);
-        ctx.restore();
-
-        // 新页右边缘高光
-        var hlL2 = Math.max(0, nRight - 5);
-        var hlR2 = Math.min(CW, nRight);
-        if (hlR2 > hlL2 && nRight > 0 && nRight < CW) {
-            var hl2 = ctx.createLinearGradient(hlL2, 0, hlR2, 0);
-            hl2.addColorStop(0, 'rgba(255,255,255,0)');
-            hl2.addColorStop(1, 'rgba(255,255,255,0.4)');
-            ctx.fillStyle = hl2;
-            ctx.fillRect(hlL2, 0, hlR2 - hlL2, CH);
-        }
-
-        // 新页暗角
-        var cL2 = Math.max(0, nRight - CW * 0.05);
-        var cR2 = Math.min(CW, nRight);
-        if (cR2 > cL2 && nRight > 0 && nRight < CW) {
-            var cg2 = ctx.createLinearGradient(cL2, 0, cR2, 0);
-            cg2.addColorStop(0, 'rgba(0,0,0,0)');
-            cg2.addColorStop(1, 'rgba(0,0,0,0.05)');
-            ctx.fillStyle = cg2;
-            ctx.fillRect(cL2, 0, cR2 - cL2, CH);
-        }
-    }
+/** 换章 / 重排 / 退 HTML 模式时拆掉整个动画层，保证不留半张快照 */
+function turnReset() {
+    if (!_turn) { drag = null; return; }
+    drag = null;          // 拖拽状态机还攥着这一拍的节点，留着只会把动画演到空气上
+    var t = _turn;
+    t.preLand = null;     // 半途而废的跨章拖拽不该真的换章，只落位
+    turnFinish(t, true);
 }
 
 // ============ turn.js 仿真翻页 ============
@@ -1534,12 +1805,12 @@ document.addEventListener('touchend', function (e) {
         var dy = ct ? ct.clientY - s.y : 0;
         // ✅ 仿真模式边界换章：已在末页/首页且向边界外横向滑动时，turn.js 无法继续翻页，
         //    这里补一次「换章」。普通翻页仍交给 turn.js（仅边界触发，不冲突）。
-        //    ⚠️ 必须与 turn.js 的 boundary 事件共用 _boundaryPending 守卫：一次手势会被
+        //    ⚠️ 必须与 turn.js 的 boundary 事件共用 pagerBoundaryOnce 的守卫：一次手势会被
         //    「本分支」与「turn.js 的 boundary 事件」各触发一次 onChapterEnd/onChapterStart，
-        //    导致连跳两章（先进入下一章、约 1s 后跳到再下一章）。统一走 simBoundarySwap 保证单次换章。
+        //    导致连跳两章（先进入下一章、约 1s 后跳到再下一章）。
         if (absDx >= 30 && absDx > Math.abs(dy)) {
-            if (dx < 0 && currentPage >= (pages ? pages.length - 1 : 0)) { simBoundarySwap(1); return; }
-            if (dx > 0 && currentPage <= 0) { simBoundarySwap(-1); return; }
+            if (dx < 0 && currentPage >= (pages ? pages.length - 1 : 0)) { pagerBoundaryOnce(1); return; }
+            if (dx > 0 && currentPage <= 0) { pagerBoundaryOnce(-1); return; }
         }
         // 中间区滑动：turn.js 已被屏蔽，这里补一次翻页（无跟手动画，但仍能翻）
         if (hold) {
@@ -1549,14 +1820,8 @@ document.addEventListener('touchend', function (e) {
         return;
     }
     if (Date.now() - s.time > 250) return;
-    var w = window.innerWidth || document.documentElement.clientWidth;
-    if (s.x < w / 3) {
-        prevPage();
-    } else if (s.x > w * 2 / 3) {
-        nextPage();
-    } else {
-        try { Android.toggleNavigation(); } catch (err) {}
-    }
+    var w = window.innerWidth || document.documentElement.clientWidth || 1;
+    pagerTapZone(s.x / w);
 }, true);
 document.addEventListener('touchcancel', function () { _simTapStart = null; _simCenterHold = false; }, true);
 
@@ -1570,37 +1835,6 @@ document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
     if (a) e.preventDefault();
 }, true);
-
-/**
- * ✅ 仿真模式章节边界换章（单一权威入口）：
- * 一次手势（无论是 document 级滑动分支，还是 turn.js 的 boundary 事件）只允许换一章，
- * 用 _boundaryPending 守卫。dir>0 下一章，dir<0 上一章。
- * ⚠️ 之所以需要统一：一次章末滑动会被「document 级滑动分支」与「turn.js boundary 事件」
- * 各触发一次，若各自独立调用 onChapterEnd 就会连跳两章（先进入下一章、约 1s 后跳到再下一章）。
- * 兜底解锁：跨章失败（如"已经是最后一章"）时不会触发 loadContent，需自行复位。
- */
-function simBoundarySwap(dir) {
-    if (_xCrossFlipping) return;
-    if (_boundaryPending) return;
-    _boundaryPending = true;
-    setTimeout(function() { _boundaryPending = false; }, 1500);
-    // ✅ 邻章已就绪 → 无缝卷页换章（与普通卷页同观感）；未就绪 → 原有加载流程。
-    //    turn.js 的 boundary 事件处于其内部状态机中，同步 destroy flipbook 有风险 → 下一拍再拆。
-    var xt = null;
-    try { xt = tryFetchAdjacentChapter(dir); } catch (e) { xt = null; }
-    if (xt) {
-        setTimeout(function() {
-            if (!simStartCrossFlip(xt)) {
-                try { if (dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
-            }
-        }, 0);
-        return;
-    }
-    try {
-        if (dir > 0) Android.onChapterEnd();
-        else Android.onChapterStart();
-    } catch (e) {}
-}
 
 // ============ 仿真模式跨章无缝卷页（临时双页 flipbook） ============
 // turn.js 的 flipbook 页数即本章页数，无法原地追加邻章页，因此用「临时双页 flipbook」完成跨章：
@@ -1663,9 +1897,7 @@ function simStartCrossFlip(xt) {
             var zLast = xt.pages.length - 1;
             frontUrl = simRenderUrlForPages(xt.pages, xt.title, zLast);
             if (!frontUrl) return false;
-            _suppressPageNotify = true;
-            _xTurnBusy = true;
-            setTimeout(function() { _suppressPageNotify = false; _xTurnBusy = false; }, 2000);
+            beginCrossChapterWindow();
             underEl = createSimPageElement(0);   // 本章第 1 页（读当前全局）
             initPage = 2;
         }
@@ -1816,10 +2048,9 @@ function simFinishCrossFlip(xt, completed) {
  * 本章最后一页继续向后滑 → dir=+1 请求下一章；本章第一页继续向前滑 → dir=-1 请求上一章。
  * 说明：不能用 when 注册——turn.js 的 destroy 只会解绑内置事件，
  * 自定义事件会随每次重建累积，导致一次滑动跳多章。故在脚本层绑定一次。
- * 统一走 simBoundarySwap（与 document 级滑动分支共用 _boundaryPending 守卫），保证单次换章。
  */
 $('#flipbook').on('boundary', function(event, dir) {
-    simBoundarySwap(dir);
+    pagerBoundaryOnce(dir);
 });
 
 // 翻页结束：
@@ -2294,19 +2525,13 @@ function scrollPrevScreen() {
     animateScrollTo(Math.max(0, scrollY - scrollViewH));
 }
 
-/** 滚动模式下的"虚拟页码"：以"屏"为单位，使进度条/书签/跳转契约与分页模式一致 */
+/** 「页」口径的总数与当前页：分页档 = 本章页数，长卷档以「屏」为页，
+ *  使进度条/书签/跳转的契约对两条路一致 */
 function virtualTotalPages() {
-    if (isHtmlMode()) return htmlTotalPages();
-    if (isScrollMode()) return Math.max(1, Math.ceil((scrollContentHeight || scrollViewH || 1) / (scrollViewH || 1)));
-    return pages.length;
+    return pagerBackend().virtualTotal();
 }
 function virtualCurrentPage() {
-    if (isHtmlMode()) return htmlCurrentPage() + 1;   // htmlCurrentPage 从 0 计，这里统一为从 1 计
-    if (isScrollMode()) {
-        var total = virtualTotalPages();
-        return Math.min(total, Math.floor(scrollY / (scrollViewH || 1)) + 1);
-    }
-    return currentPage + 1;
+    return pagerBackend().virtualPos();
 }
 
 /** 仅重绘当前显示（不改变排版）：滚动模式画长卷，否则画当前分页页 */
@@ -2330,15 +2555,16 @@ function relayoutAndRedraw() {
     notifyJavaPageChange();
 }
 
-// ============ 跟手拖拽翻页（覆盖 / 平移 / 上下） ============
-// 非仿真模式下手指滑动时，书页实时跟随手指移动（松手前不真正翻页）；
-// 松手后按「滑动距离 + 速度」决定翻到目标页还是回弹到当前页。
+// ============ 跟手拖拽翻页（两条渲染路共用一套状态机）============
+// 状态机只把「手势」翻译成进度 p（0=当前页，1=目标页），画什么全交给统一动画层：
+// 起势定方向 → turnBegin 搭起静止层与移动节点 → 每次位移 turnApply 一帧 →
+// 松手按「滑动距离 + 速度」决定演到目标页还是回弹。
+// canvas 一路旧版每帧四次全屏 getImageData/putImageData 的位图合成、HTML 一路另写的那一套
+// 快照拖拽，都在这一步收掉：可拖档位、阈值、阻尼口径两端自此同一个值。
 // 章节边界（首页向前 / 末页向后）没有目标页可渲染，改为橡皮筋阻尼，
 // 松手且达到阈值时才请求换章，避免误触跳章。
 var swipeEnabled = true;          // 与 Android「滑动翻页」开关同步
 var drag = null;                  // 当前触摸/拖拽状态
-var dragOldCvs = null;            // 当前页位图
-var dragNewCvs = null;            // 目标页位图
 var lastDragFinishTs = 0;         // 最近一次拖拽完成翻页的时间（防止与 Android onFling 重复翻页）
 var lastDragActivityTs = 0;       // 最近一次拖拽收尾（含回弹）的时间
 // ⚠️ 必须大于系统的点击判定阈值（ViewConfiguration touch slop = 8dp，CSS px 与 dp 等价）：
@@ -2349,7 +2575,6 @@ var DRAG_COMMIT_RATIO = 0.2;      // 松手完成翻页所需的最小滑动比�
 var DRAG_BOUNDARY_RATIO = 0.2;    // 章节边界触发换章的最小滑动比例
 var DRAG_FLICK_MIN_RATIO = 0.08;  // 按速度判定甩动时的最小滑动比例（防点击抖动误翻）
 var DRAG_COMMIT_VELOCITY = 0.45;  // px/ms：快速甩动时降低距离要求
-var DRAG_EDGE_SHADOW = 30;        // 页边投影宽度（CSS px）
 
 var touchStartX = 0;
 
@@ -2359,23 +2584,94 @@ function setSwipeEnabled(enabled) {
     if (!swipeEnabled && drag && drag.active) finishDrag(drag, false);
 }
 
-/** 支持跟手翻页（分页动画）的模式；'updown' 已改为滚动模式，'none' / 'fade' / 'simulation' 走各自逻辑 */
+/** 支持跟手翻页的档位：'none' 本无动效、'updown' 是连续滚动、仿真由书本自己跟手，都不进这套 */
 function dragMode() {
-    return (pageTurnMode === 'cover' || pageTurnMode === 'slide') ? pageTurnMode : null;
+    return (pageTurnMode === 'cover' || pageTurnMode === 'slide' || pageTurnMode === 'fade') ? pageTurnMode : null;
 }
 
-/** 复制当前画布内容到离屏 canvas（作为拖拽中的「当前页」位图） */
-function copyCanvasTo(cvs) {
-    if (!cvs) cvs = document.createElement('canvas');
-    if (cvs.width !== canvas.width || cvs.height !== canvas.height) {
-        cvs.width = canvas.width;
-        cvs.height = canvas.height;
+/** 仿真书本的元素，两条路各自的容器；没在用仿真书本时 null */
+function simBookEl() {
+    if (htmlSim) return document.getElementById('htmlFlipbook');
+    if (simulationActive) return document.getElementById('flipbook');
+    return null;
+}
+
+/** 此刻有没有折页真正在途（turn.js 只在这种情况下才会发 released） */
+function simFoldBusy() {
+    var el = htmlSim ? document.getElementById('htmlFlipbook') : null;
+    if (!el || !window.$) return false;
+    try {
+        var d = $(el).data();
+        var mv = d && d.pageMv;
+        if (!mv || !mv.length) return false;
+        var pg = d.pages[mv[0]];
+        var f = pg && pg.length && pg.data().f;
+        return !!(f && f.corner);
+    } catch (e) {
+        return false;
     }
-    var c = cvs.getContext('2d');
-    c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, cvs.width, cvs.height);
-    c.drawImage(canvas, 0, 0);
-    return cvs;
+}
+
+var _simTrack = null;   // 仿真档的滑行量度（书本自己跟手，本文件的 drag 状态机不参它的拖拽）
+var _simFling = null;   // {dir, ratio, velocity} —— 捕获阶段写、released 读，一次手势只留一份意图
+
+/** 仿真档记下滑行的方向与速度，松手判定要用（见 simTakeRelease） */
+function simTrackMove(t) {
+    if (!t || !_simTrack) return;
+    var now = Date.now(), dt = now - _simTrack.ts;
+    if (dt <= 0) return;
+    var v = Math.abs(t.clientX - _simTrack.x) / dt;
+    _simTrack.v = _simTrack.v * 0.5 + v * 0.5;
+    _simTrack.x = t.clientX;
+    _simTrack.ts = now;
+}
+
+/**
+ * 折页自己收到 released 时接管这次松手。
+ * 挂在页面节点上：turn.js 的 released 由折页触发、冒泡到书本，目标阶段的这里早于书本的松手判定。
+ * 非要不接管不可是因为它那套判定只会「先 turn('stop') 拆掉在途折页、再从头卷一遍」：折页是整条
+ * 多列纸带的副本，摘出与插回各要一次整页重排（真机微基准单趟 75~140ms，同屏副本越多越贵），
+ * 于是松手那一下整本书冻住、折页重卷 —— 观感就是「刷新闪动」。接管之后要翻就接着当前折角把
+ * 这一卷走完（不拆不重卷），不翻才照它原来的样子 800ms 回弹。
+ * 翻不翻的阈值与其它四档同口径（DRAG_COMMIT_RATIO / 甩动速度），中线判据仍保留作兜底。
+ */
+function simTakeRelease(e, p) {
+    var pg = $(this), f = pg.data() && pg.data().f;
+    var book = f && f.opts && f.opts.turn;
+    if (!book || !f.corner) return;            // 没有折页在途：这次手势不归这里收尾
+    var d = book.data();
+    var nx = f.opts.next, tp = d.totalPages || 0;
+    var point = p || f.corner;
+    var corner = point.corner || f.corner.corner || '';
+    var w = pg.width() || 1;
+    // turn.js 原口径：拖过页宽一半算翻（br/tr 折角从右往左卷，x 越来越小）
+    var pastMid = (corner === 'br' || corner === 'tr') ? point.x < w / 2 : point.x > w / 2;
+    var fl = _simFling;
+    _simFling = null;
+    var want = !!fl && fl.dir === (nx > d.page ? 1 : -1) &&
+            (fl.ratio >= DRAG_COMMIT_RATIO ||
+                    (fl.velocity >= DRAG_COMMIT_VELOCITY && fl.ratio >= DRAG_FLICK_MIN_RATIO));
+    e.stopPropagation();   // 书本不再判第二次（它判完就是拆了重卷）
+    e.preventDefault();    // 折页自己的回弹也不做，收尾统一在下面
+    d.mouseAction = false;
+    if (!(nx >= 1 && nx <= tp)) {               // 越出本章：纸面回弹，换章交给章界那两条分支
+        pg.flip('hideFoldedPage', true);
+        return;
+    }
+    if (!pastMid && !want) {
+        pg.flip('hideFoldedPage', true);
+        return;
+    }
+    try {
+        // 与 turn.js 的 _turnPage 同口径，只把 turn('stop') 那一趟省下来
+        book.triggerHandler($.Event('turning'), [nx, book.turn('view', nx)]);
+        d.page = nx;
+        d.tpage = nx;
+        book.turn('update');
+        pg.flip('turnPage');
+    } catch (err) {
+        pg.flip('hideFoldedPage', true);
+    }
 }
 
 /** 把指定页渲染到离屏 canvas（直接复用 drawPage，省去 getImageData 的开销） */
@@ -2426,262 +2722,192 @@ function renderAdjacentPageTo(cvs, xt, pageIdx) {
     return cvs;
 }
 
-/** 开始拖拽：确定方向与是否有目标页，并预渲染两页位图 */
+/** 起势：定方向与目标页（撞章界时试着取邻章负载），并搭起动画层 */
 function beginDrag(d, dir) {
-    var target = currentPage + dir;
-    var valid = target >= 0 && target < pages.length;
-    d.active = true;
+    var b = d.base;
+    var target = d.from + dir;
+    var boundary = (target < 0 || target >= b.count());
+    var xt = null;
+    if (boundary && b.fetchAdjacent) {
+        // ✅ 邻章已预加载：拖拽直接跟手展示邻章首/末页（与普通翻页观感一致），不再做橡皮筋
+        xt = b.fetchAdjacent(dir);
+        if (xt) {
+            boundary = false;
+            target = dir > 0 ? 0 : xt.count - 1;
+        }
+    }
     d.dir = dir;
     d.target = target;
-    d.boundary = !valid;
-    d.crossChapter = null;
+    d.boundary = !xt && boundary;
+    d.xt = xt;
+    d.active = true;
     isAnimating = true;                 // 拖拽期间屏蔽外部翻页（音量键 / 进度条 / 自动翻页）
-    dragOldCvs = copyCanvasTo(dragOldCvs);
-    if (valid) {
-        dragNewCvs = renderPageTo(dragNewCvs, target);
-    } else {
-        // ✅ 邻章已预加载：拖拽直接跟手展示邻章目标页（与普通跨页拖拽观感一致），不再做橡皮筋
-        var xt = tryFetchAdjacentChapter(dir);
-        if (xt) {
-            d.crossChapter = xt;
-            d.boundary = false;
-            d.target = dir > 0 ? 0 : xt.pages.length - 1;
-            dragNewCvs = renderAdjacentPageTo(dragNewCvs, xt, d.target);
-        } else {
-            dragNewCvs = null;
-        }
+    var spec = { base: b, from: d.from, to: target, dir: dir, mode: d.mode, boundary: d.boundary };
+    if (xt) {
+        // 邻章那一页还不在全局分页里，静止层画不到 —— 两页都只认现成节点
+        spec.nodes = { from: b.pageNode(d.from), to: xt.node(target) };
+        // 落地时先把全局分页换成邻章，静止层与页码才对得上；Java 回送 loadContent 后过渡窗口结束。
+        //    必须用 xt.land 而不是写死 canvas 那一只：两条渲染路各自的「换掉当前章」都收在 xt.land 里
+        //    （canvas 换全局分页，HTML 换纸带本体并把 _htmlXReady 交出去）。写死的那一路在 EPUB 上
+        //    只改了页码不改纸带，落地的节点被回收 → 旧章纸带回脸，Java 回送的正文只能整章重建 = 闪一下。
+        spec.preLand = xt.land;
     }
-    if (animWatchdog) { clearTimeout(animWatchdog); animWatchdog = null; }
+    d.turn = turnBegin(spec);
+    if (!d.turn) {
+        // 搭不起来（节点取不到 / 容器缺失）：退回去掉跟手的简单滑动判定
+        isAnimating = false;
+        d.active = false;
+        d.failed = true;
+        return;
+    }
+    lastDragActivityTs = Date.now();
 }
 
-/** 按当前进度绘制拖拽帧（p：0=当前页，1=目标页） */
-function dragDraw(d, p) {
-    var CW = canvas.width, CH = canvas.height;
-    var dpr = window.devicePixelRatio || 1;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-    // ---- 章节边界：当前页带阻尼位移，露出背景 ----
-    if (d.boundary) {
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, CW, CH);
-        if (bgTextureImg && bgTextureImg.complete) {
-            ctx.drawImage(bgTextureImg, 0, 0, CW, CH);
-        }
-        var bOff = (d.vertical ? CH : CW) * p * (d.dir > 0 ? -1 : 1);
-        if (d.vertical) ctx.drawImage(dragOldCvs, 0, bOff);
-        else ctx.drawImage(dragOldCvs, bOff, 0);
-        return;
-    }
-
-    if (d.mode === 'slide') {
-        // ---- 平移：旧页滑出 + 新页滑入 ----
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, CW, CH);
-        var sOld = d.dir > 0 ? -CW * p : CW * p;
-        var sNew = d.dir > 0 ? CW * (1 - p) : -CW * (1 - p);
-        ctx.drawImage(dragOldCvs, sOld, 0);
-        ctx.drawImage(dragNewCvs, sNew, 0);
-        return;
-    }
-
-    if (d.mode === 'updown') {
-        // ---- 上下：旧页上/下移出 + 新页移入 ----
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, CW, CH);
-        var uOld = d.dir > 0 ? -CH * p : CH * p;
-        var uNew = d.dir > 0 ? CH * (1 - p) : -CH * (1 - p);
-        ctx.drawImage(dragOldCvs, 0, uOld);
-        ctx.drawImage(dragNewCvs, 0, uNew);
-        return;
-    }
-
-    // ---- 覆盖：两个方向观感不同（刻意不对称，两个方向都跟手）----
-    //   dir>0（手指左滑 / 下一页）：当前页在上层跟手左移 → 露出底层的下一页
-    //   dir<0（手指右滑 / 上一页）：上一页在上层从左滑入 → 覆盖住当前页
-    var topCvs, bottomCvs, topX;
-    if (d.dir > 0) {
-        bottomCvs = dragNewCvs; topCvs = dragOldCvs; topX = -CW * p;
-    } else {
-        bottomCvs = dragOldCvs; topCvs = dragNewCvs; topX = -CW * (1 - p);
-    }
-    ctx.drawImage(bottomCvs, 0, 0);            // 底层：静止的那页
-    // 上层页的右边缘掠过下层页，在其右侧投阴影
-    var shW = DRAG_EDGE_SHADOW * dpr;
-    var edge = topX + CW;
-    if (edge > 0 && edge < CW) {
-        var l = Math.max(0, edge), r = Math.min(CW, edge + shW);
-        if (r > l) {
-            var g = ctx.createLinearGradient(l, 0, r, 0);
-            g.addColorStop(0, 'rgba(0,0,0,0.28)');
-            g.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = g;
-            ctx.fillRect(l, 0, r - l, CH);
-        }
-    }
-    ctx.drawImage(topCvs, topX, 0);            // 上层：移动的那页
-    // 纸张边缘高光：上层页右边缘的那条纸边
-    var hlW = Math.max(1, 2 * dpr);
-    var ha = Math.max(0, edge - hlW), hb = Math.min(CW, edge);
-    if (hb > ha) {
-        ctx.fillStyle = 'rgba(255,255,255,0.25)';
-        ctx.fillRect(ha, 0, hb - ha, CH);
-    }
+/** 手指位移 → 进度：越出章界没有目标页，做橡皮筋阻尼，最多露出 12% */
+function updateDrag(d, delta) {
+    var size = d.base.pageW() || 1;
+    var magn = -delta * d.dir;   // 沿翻页方向的有效位移（>0 表示继续朝目标页方向）
+    d.raw = Math.max(0, Math.min(1, magn / size));
+    d.progress = d.turn.boundary ? Math.min(d.raw * 0.35, 0.12) : d.raw;
+    turnApply(d.turn, d.progress);
 }
 
-/** 松手收尾：commit=true 翻到目标页（边界则请求换章），false 回弹 */
+/** 松手收尾：commit=true 翻到目标页（跨章则切分页并请求换章），false 回弹到当前页 */
 function finishDrag(d, commit) {
     if (!d || !d.active) return;
     d.active = false;
+    drag = null;
     lastDragActivityTs = Date.now();
-    var from = d.progress;
-    var to = (commit && !d.boundary) ? 1 : 0;
-    var dur = Math.max(90, Math.round(ANIM_DURATION * Math.abs(to - from)));
-    var startTime = null;
-    isAnimating = true;
-    if (animWatchdog) clearTimeout(animWatchdog);
-    animWatchdog = setTimeout(function () {
-        if (!isAnimating) return;
-        isAnimating = false;
-        var dpr = window.devicePixelRatio || 1;
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(dpr, dpr);
-        drawPage(currentPage);
-        if (drag === d) drag = null;
-    }, 2000);
-
-    function step(ts) {
-        if (!startTime) startTime = ts;
-        var t = Math.min((ts - startTime) / dur, 1);
-        var e = 1 - Math.pow(1 - t, 3);
-        dragDraw(d, from + (to - from) * e);
-        if (t < 1) { requestAnimationFrame(step); return; }
-        if (animWatchdog) { clearTimeout(animWatchdog); animWatchdog = null; }
-        var dpr = window.devicePixelRatio || 1;
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(dpr, dpr);
-        if (commit && !d.boundary) {
-            if (d.crossChapter) {
-                // ✅ 跨章跟手拖拽落地：切换全局分页到邻章，再通知 Java 真正换章。
-                //    Java 回送的 loadContent 用同一算法重排 → 与当前画面一致，零跳变。
-                //    页码上报由 _suppressPageNotify 抑制到 loadContent 到达为止。
-                swapToAdjacentChapter(d.crossChapter);
-                currentPage = d.target;
-                lastDragFinishTs = Date.now();
-                drawPage(currentPage);
-                isAnimating = false;
-                if (drag === d) drag = null;
-                try { if (d.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (ee) {}
-                return;
-            }
-            currentPage = d.target;
+    var t = d.turn;
+    if (!t) { isAnimating = false; return; }
+    if (t.boundary) {
+        // 先回弹到原页，落地后再请求换章：Java 回送的邻章正文接着把新页放上静止层
+        turnRun(d.progress, 0, Math.max(90, Math.round(ANIM_DURATION * d.progress)), function () {
+            if (!commit) return;
             lastDragFinishTs = Date.now();
-            drawPage(currentPage);
-            notifyJavaPageChange();
-        } else {
-            drawPage(currentPage);
-            if (commit && d.boundary) {
-                try { if (d.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (ee) {}
-            }
-        }
-        isAnimating = false;
-        if (drag === d) drag = null;
+            pagerNotifyChapter(d.dir);
+        });
+        return;
     }
-    requestAnimationFrame(step);
+    var done = commit || d.raw >= DRAG_COMMIT_RATIO ||
+               (d.velocity >= DRAG_COMMIT_VELOCITY && d.raw >= DRAG_FLICK_MIN_RATIO);
+    turnRun(d.progress, done ? 1 : 0,
+            Math.max(90, Math.round(ANIM_DURATION * (done ? 1 - d.progress : d.progress))),
+            function () {
+                if (!done) return;
+                lastDragFinishTs = Date.now();
+                // 跨章：preLand 已把全局分页换到邻章并把页码上报压住，这里只通知 Java 真正换章
+                if (d.xt) pagerNotifyChapter(d.dir);
+            });
 }
 
-canvas.addEventListener('touchstart', function (e) {
-    if (simulationActive) return;
+// 挂 document 捕获阶段：两条路的正文分属不同容器（#readerCanvas / #htmlContent），
+// 挂在正文上就只有一条路收得到；捕获阶段也保证早于任何容器自己的滚动处理拿到手势。
+document.addEventListener('touchstart', function (e) {
     var t = e.touches && e.touches[0];
     if (!t) return;
     touchStartX = t.clientX;
-    // 连续滚动模式：手势交给滚动逻辑（上下拖拽即滚动）
-    if (isScrollMode()) { beginScrollTouch(t); return; }
-    console.log('DBG touchstart: anim=' + isAnimating + ' pages=' + (pages?pages.length:0) + ' dragMode=' + dragMode() + ' swipe=' + swipeEnabled);
-    if (isAnimating || !pages.length || !dragMode() || !swipeEnabled) { console.log('DBG touchstart BLOCKED'); drag = null; return; }
-    drag = {
-        mode: pageTurnMode,
-        vertical: pageTurnMode === 'updown',
-        start: pageTurnMode === 'updown' ? t.clientY : t.clientX,
-        cross: pageTurnMode === 'updown' ? t.clientX : t.clientY,
-        active: false, dir: 0, target: -1, boundary: false,
-        progress: 0, raw: 0, lastMagn: 0, lastTs: Date.now(), velocity: 0
-    };
-}, { passive: true });
+    drag = null;
+    _simFling = null;
+    var b = pagerBackend();
+    if (b.simOn()) {                             // 仿真书本自己跟手，这里只留起点给章界判定
+        if (htmlSim) {
+            // 书本会在邻页进range时临时把它们重新装进折页包装盒，搬一次清一次节点事件，
+            // addPage 时绑的那次可能已经被抹掉。手势起手补一遍，此后到松手之前不会再搬。
+            htmlSimBindRelease();
+            _simTrack = { x: t.clientX, ts: Date.now(), v: 0 };
+        } else {
+            _simTrack = null;
+        }
+        return;
+    }
+    if (b.flow() === 'scroll') {                 // 连续滚动：canvas 自绘滚动，HTML 用原生滚动
+        if (!htmlMode) beginScrollTouch(t);
+        return;
+    }
+    if (isAnimating || !b.count() || !dragMode() || !swipeEnabled) return;
+    drag = { base: b, mode: pageTurnMode, from: b.pos(), start: t.clientX, cross: t.clientY,
+             active: false, failed: false, dir: 0, target: -1, boundary: false, xt: null,
+             turn: null, raw: 0, progress: 0, lastMagn: 0, lastTs: Date.now(), velocity: 0 };
+}, { passive: true, capture: true });
 
-canvas.addEventListener('touchmove', function (e) {
-    if (simulationActive) return;
-    // 连续滚动模式：直接处理滚动拖拽
-    if (isScrollMode()) { handleScrollTouchMove(e); return; }
-    if (!drag) return;
+document.addEventListener('touchmove', function (e) {
+    if (scrollTouch) { handleScrollTouchMove(e); return; }
+    if (_simTrack) { simTrackMove(e.touches && e.touches[0]); return; }   // 仿真档只记量度，拖拽由书本自己做
+    var d = drag;
+    if (!d) return;
     var t = e.touches && e.touches[0];
     if (!t) return;
-    var pos = drag.vertical ? t.clientY : t.clientX;
-    var cross = drag.vertical ? t.clientX : t.clientY;
-    var delta = pos - drag.start;
-
-    if (!drag.active) {
-        // 方向判定：沿翻页轴的位移需明显大于另一根轴的位移
-        if (Math.abs(delta) < DRAG_SLOP || Math.abs(delta) <= Math.abs(cross - drag.cross)) return;
-        if (isAnimating || !pages.length || !dragMode() || !swipeEnabled) { drag = null; return; }
-        beginDrag(drag, delta < 0 ? 1 : -1);
+    var delta = t.clientX - d.start;
+    if (!d.active) {
+        if (d.failed) return;
+        // 方向判定：横向位移要明显大于纵向，且越过起手势阈值
+        if (Math.abs(delta) < DRAG_SLOP || Math.abs(delta) <= Math.abs(t.clientY - d.cross)) return;
+        if (isAnimating || !d.base.count() || !dragMode() || !swipeEnabled) { drag = null; return; }
+        beginDrag(d, delta < 0 ? 1 : -1);
+        if (!d.active) return;
     }
-
-    var size = drag.vertical ? window.innerHeight : window.innerWidth;
-    var magn = -delta * drag.dir;   // 沿翻页方向的有效位移（>0 表示继续朝目标页方向）
-    var raw = Math.max(0, Math.min(1, magn / size));
-    drag.raw = raw;
-    // 章节边界没有目标页，做橡皮筋阻尼，最多露出 12%
-    drag.progress = drag.boundary ? Math.min(raw * 0.35, 0.12) : raw;
-
-    var now = Date.now();
-    var dt = now - drag.lastTs;
+    var magn = -delta * d.dir;
+    var now = Date.now(), dt = now - d.lastTs;
     if (dt > 0) {
-        var v = (magn - drag.lastMagn) / dt;
-        drag.velocity = drag.velocity * 0.5 + v * 0.5;
-        drag.lastMagn = magn;
-        drag.lastTs = now;
+        var v = (magn - d.lastMagn) / dt;
+        d.velocity = d.velocity * 0.5 + v * 0.5;
+        d.lastMagn = magn;
+        d.lastTs = now;
     }
-    dragDraw(drag, drag.progress);
-    e.preventDefault();
-}, { passive: false });
+    updateDrag(d, delta);
+    e.preventDefault();     // 横向翻页吃掉这次滚动，避免 WebView 顺带动别的容器
+}, { passive: false, capture: true });
 
-canvas.addEventListener('touchend', function (e) {
-    if (simulationActive) return;
-    // 连续滚动模式：交给滚动收尾（惯性 / 越界换章）
-    if (isScrollMode()) { handleScrollTouchEnd(e); return; }
+document.addEventListener('touchend', function (e) {
+    if (scrollTouch) { handleScrollTouchEnd(e); return; }
+    var st = _simTrack;
+    _simTrack = null;
     var d = drag;
     drag = null;
     var ct = e.changedTouches && e.changedTouches[0];
     if (!d || !d.active) {
+        // canvas 仿真书本的手势不归本状态机管：折页由 turn.js 自己跟手，中间区滑动与章界换章由上面
+        // 那段 _simTapStart 专门收尾（旧版 canvas 触摸处理开头就有同一道闸）。这里再补一次翻页，
+        // 就是 turn.js 已卷一页、我们又逼它卷第二页 —— 真机观感「滑动一下翻两页」。
+        // htmlSim 与 simulationActive 互斥（一进 HTML 模式 destroySimulation 就把后者置 false），
+        // 故这道闸只挡得住 canvas 那一路，EPUB 仿真的兜底翻页照常可达。
+        if (simulationActive) return;
         // 未形成跟手拖拽（不支持的模式 / 位移过小 / 方向不符）：沿用简单滑动判定
         // 注意要尊重「滑动翻页」开关，否则关闭开关后仍能滑动翻页
-        console.log('DBG touchend simple: anim=' + isAnimating + ' swipe=' + swipeEnabled + ' ct=' + (ct?ct.clientX:'null') + ' startX=' + touchStartX);
         if (isAnimating || !ct || !swipeEnabled) return;
         var dx = ct.clientX - touchStartX;
-        if (dx < -50) { console.log('DBG touchend -> nextPage'); nextPage(); }
-        else if (dx > 50) { console.log('DBG touchend -> prevPage'); prevPage(); }
+        if (dx >= -50 && dx <= 50) return;
+        lastDragActivityTs = Date.now();
+        // 仿真书本：折页已在途就把这次滑行交给它自己的 released 收尾（见 simTakeRelease），
+        // 在这里再 nextPage() 会逼 turn.js 先拆掉在途折页再重卷一遍，松手那一下就是「刷新闪动」。
+        if (st && simFoldBusy()) {
+            _simFling = { dir: dx < 0 ? 1 : -1,
+                          ratio: Math.abs(dx) / ((htmlStep || htmlViewW()) || 1),
+                          velocity: st.v };
+            return;
+        }
+        if (dx < -50) nextPage(); else prevPage();
         return;
     }
-    var commit;
-    if (d.boundary) {
-        commit = d.raw >= DRAG_BOUNDARY_RATIO ||
-                 (d.velocity >= DRAG_COMMIT_VELOCITY && d.raw >= DRAG_FLICK_MIN_RATIO);
-    } else {
-        commit = d.raw >= DRAG_COMMIT_RATIO ||
-                 (d.velocity >= DRAG_COMMIT_VELOCITY && d.raw >= DRAG_FLICK_MIN_RATIO);
-    }
-    finishDrag(d, commit);
-}, { passive: true });
+    if (ct) updateDrag(d, ct.clientX - d.start);
+    finishDrag(d, d.raw >= (d.boundary ? DRAG_BOUNDARY_RATIO : DRAG_COMMIT_RATIO) ||
+                  (d.velocity >= DRAG_COMMIT_VELOCITY && d.raw >= DRAG_FLICK_MIN_RATIO));
+}, { passive: true, capture: true });
 
-canvas.addEventListener('touchcancel', function () {
-    if (isScrollMode()) {
-        if (scrollTouch) { scrollTouch = null; clampScroll(); drawScroll(); }
+document.addEventListener('touchcancel', function () {
+    _simTrack = null;
+    _simFling = null;
+    if (scrollTouch) {
+        scrollTouch = null;
+        clampScroll();
+        drawScroll();
         return;
     }
     var d = drag;
     drag = null;
     if (d && d.active) finishDrag(d, false);
-}, { passive: true });
+}, { passive: true, capture: true });
 
 // ============ 仿真翻页模式：章节边界翻章检测 ============
 // ✅ 复用池修复：仿真模式下 canvas 触摸处理被禁用（simulationActive 时直接 return），
@@ -2790,6 +3016,45 @@ function handleScrollTouchEnd(e) {
 }
 
 // ============ Java 调用接口 ============
+/**
+ * 换书清场：复用池的 WebView 跨 Activity 常驻，文档还停在上一本书的那一页，
+ * 而新书要先拿到目录、再回源正文才谈得上渲染 —— 这段加载期用户读到的是上一本书的正文。
+ * 这里只把两路渲染清空、位置状态归零，主题底色/字体/纹理一概不动，也不重载 reader.html
+ * （那等于把复用池省下的冷启动又还回去）。Java 侧只在「池里那份文档属于另一本书」时调它，
+ * 同一本书退出再进仍保留旧画面，那是秒开的一部分。
+ */
+function clearReaderDocument() {
+    // 跨章那套在途状态一并作废：不清的话，新书第一章恰好撞上 _xTurnBusy 窗口时，
+    // loadHtmlContent 会走「邻章排版盒已换上、Java 正文只当确认」的快路，把旧书的纸带原样留在场上。
+    _xTurnBusy = false;
+    _xCrossFlipping = false;
+    _boundaryPending = false;
+    _htmlXReady = null;
+    _htmlContentGen++;          // 旧书的每一页副本都出局：签名再像也不能复用
+    if (htmlMode) {
+        htmlResetTurnLayer();                   // 仿真书本 + 动画层 + 邻章排版盒
+        htmlDisposeMirrors();
+        var c = document.getElementById('htmlContent');
+        var cols = document.getElementById('htmlColumns');
+        clearFullscreenBackground(c);           // 整页画的背景挂在视口层上，不清就换书还衬着一张旧封面
+        if (cols) { cols.innerHTML = ''; cols.style.transform = ''; }
+        if (c) c.scrollTop = 0;
+        htmlPage = 0;
+        htmlPageCount = 1;
+    } else {
+        if (simulationActive || _simulationPlaceholderActive) { try { destroySimulation(); } catch (e) {} }
+        pages = [];
+        pageStartOffsets = [];
+        currentPage = 0;
+        currentContent = '';
+        drawBlank();
+    }
+    chapterTitle = '';
+    bookProgress = 0;
+    updateHtmlHeaderFooter();   // 页眉的章节名、页脚的页码也是上一本书的
+}
+
+
 // ✅ 复用池 WebView 关键修复：reader.html 由池子只 loadUrl 一次（首次加载时 WebView 尚未 attach，
 //    window.innerWidth/innerHeight=0）。后续 attach 到布局后，JS 视口宽高滞后于原生布局——
 //    若此时恰好执行 loadContent，会在 0 宽下分页/绘制：画布 0 尺寸→整页空白，且上报给 Java 的
@@ -2989,7 +3254,6 @@ function _finishLoadContent(p) {
     }
 
     notifyJavaPageChange();
-    console.log('DBG loadContent end: startPage=' + startPage + ' pages=' + pages.length + ' currentPage=' + currentPage + ' scroll=' + isScrollMode() + ' sim=' + simulationActive);
 }
 
 // ============ 内容预处理 ============
@@ -3033,11 +3297,9 @@ var htmlGap = 0;              // 列间距
 var htmlStep = 0;             // 每页平移距离 = 列宽 + 列间距
 var htmlClientH = 0;          // 视口高度（缓存）
 
-function isHtmlMode() { return htmlMode; }
-
 // 把当前主题（背景/文字色/字号/字体）应用到 HTML 容器，保持与 Canvas 模式视觉一致。
 // keepPosition !== false 时，重排后按原进度比例还原位置（改字号 / 切模式不该跳回开头）。
-function applyHtmlTheme(keepPosition) {
+function applyHtmlTheme(keepPosition, deferSimBuild) {
     var c = document.getElementById('htmlContent');
     var cols = document.getElementById('htmlColumns');
     if (!c || !cols) return;
@@ -3047,7 +3309,27 @@ function applyHtmlTheme(keepPosition) {
     cols.style.fontSize = fontSize + 'px';
     cols.style.lineHeight = lineHeightRatio;
     cols.style.fontFamily = fontFamily;
-    applyHtmlFlow(keepPosition !== false);
+    applyHtmlFlow(keepPosition !== false, deferSimBuild);
+}
+
+// ============ 设置变更后的统一重建（HTML 纸带一路）============
+// 与 canvas 一路同构：改配色只需重画（redrawCurrent 的对应物），改排版才整章重排
+// （relayoutAndRedraw 的对应物）。设置弹窗一次改多个参数，_deferDraw 期间只登记最重的那一档，
+// 由 finishSettingsBatch 收尾做一次 —— 否则八个 setter 就是八次重排加八次重建仿真书本。
+var _htmlRebuild = '';
+
+function rebuildHtml(kind) {
+    _htmlRebuild = (kind === 'layout' || _htmlRebuild === 'layout') ? 'layout' : 'colors';
+    if (_deferDraw) return;
+    flushHtmlRebuild();
+}
+
+function flushHtmlRebuild() {
+    if (!_htmlRebuild) return;
+    var kind = _htmlRebuild;
+    _htmlRebuild = '';
+    if (kind === 'layout') applyHtmlTheme(true);
+    else applyHtmlThemeColors();
 }
 
 // 记录当前章内进度（0~1），用于重排后按比例还原阅读位置
@@ -3061,14 +3343,35 @@ function htmlPositionRatio() {
     return htmlPageCount > 1 ? htmlPage / (htmlPageCount - 1) : 0;
 }
 
+// ============ 仿真书本的「这一本还配不配得上当前正文」判据 ============
+// 书本的每一页都是整条多列纸带的副本，建一本要五次整页重排（真机 200~280ms）。Java 每次回送正文
+// 之后还要连推整套外观参数（档位一次、设置批次一次），参数一个字没变时旧路会把刚建好的书拆了重建
+// —— 真机实测一次换章建三本、卡 1.2s。签名全等就说明副本仍旧合用，原样留着。
+// 判据取「排版输入 + 量出来的输出」两头：只认输入会漏掉图片异步解码撑长纸带那种情况（页数变了而
+// 书本的 totalPages 还停在旧值，末页就翻不出去）；只认输出会漏掉字体刚加载到位那种字形变了、
+// 页数恰好没变的情况（见 loadCustomFont 里那两处 _htmlLayoutBump）。
+var _htmlContentGen = 0;   // 纸带正文换了一代（整段 innerHTML 重写）
+var _htmlLayoutBump = 0;   // 签名表达不出来的「必须重建」：自定义字体加载到位
+var _htmlLayerSig = '';    // 当前这本仿真书本按哪个签名建的；拆掉即清空
+
+function htmlLayerSignature() {
+    return [pageTurnMode, htmlViewW(), htmlClientH, window.innerWidth, window.innerHeight,
+            Math.round(htmlStep), Math.round(htmlColW), Math.round(htmlGap), htmlPageCount,
+            currentChapterIndex, _htmlContentGen, _htmlLayoutBump,
+            fontSize, lineHeightRatio, paraGapRatio, fontFamily, padding, vPadding, topPadding,
+            showHeaderFooter ? 1 : 0, headerFooterFontSize, chapterTitle || '',
+            bgColor, textColor, isNightMode ? 1 : 0].join('#');
+}
+
 // 依据 pageTurnMode 决定分页方式（横向分栏 / 上下滚动），并重新计算列宽与页数。
 // keepPosition 为真时按原进度比例还原位置。
-function applyHtmlFlow(keepPosition) {
+// deferSimBuild：排完几何但不建仿真书本。换章那一路要用 —— 同步趟里量到的尺寸可能还没稳定，
+// 等一帧后的精确趟才是书本该照的几何；两头各建一本等于白付一次整本书的重排（真机单趟约 250ms），
+// 中间那一帧露出的是已经排好的真纸带，不是空白。
+function applyHtmlFlow(keepPosition, deferSimBuild) {
     var c = document.getElementById('htmlContent');
     var cols = document.getElementById('htmlColumns');
     if (!c || !cols || !htmlMode) return;
-    // 重排会让既有快照与新的列宽/页边距对不上，先把动画层整个拆掉（分页参数按新尺寸重算）
-    htmlResetTurnLayer();
     var ratio = keepPosition ? htmlPositionRatio() : 0;
     var scrolled = (pageTurnMode === 'updown');
     htmlFlow = scrolled ? 'scrolled' : 'paginated';
@@ -3082,6 +3385,11 @@ function applyHtmlFlow(keepPosition) {
         c.classList.remove('scroll-flow');
     }
     layoutHtmlColumns();
+    // 量完才知道新几何配不配得上手上这本：对不上才把动画层整个拆掉（副本按新尺寸重画）。
+    // #htmlContent 是定尺寸的视口层、副本又不在真纸带里，故旧书留在场上不影响这一趟测量。
+    var sig = htmlLayerSignature();
+    var reuse = !!htmlSim && sig === _htmlLayerSig;
+    if (!reuse) htmlResetTurnLayer();
     if (!keepPosition) {
         htmlGoToPage(0);
     } else if (htmlFlow === 'scrolled') {
@@ -3091,16 +3399,28 @@ function applyHtmlFlow(keepPosition) {
     } else {
         htmlGoToPage(Math.round(ratio * (htmlPageCount - 1)));
     }
-    if (htmlFlow === 'paginated') htmlInitSim();
+    // 签名全等就别碰书本：htmlInitSim 头一件事是拆掉旧书，所以「免重建」必须连它一起跳过。
+    if (htmlFlow === 'paginated') {
+        if (deferSimBuild) {
+            // 换章的同步趟只量几何，书本留给下一帧那一趟（尺寸可能还没稳定）
+        } else if (reuse) {
+            // 副本只是给下一次拖拽预备的，晚一帧无妨
+            setTimeout(function () { htmlSimEnsure(htmlPage); }, 0);
+        } else {
+            htmlInitSim();
+        }
+    }
     updateHtmlHeaderFooter();
 }
 
 // 计算页边距 / 列宽 / 列间距，并重新测量总页数（不改动当前位置）。
 // 要点：容器宽度 = 视口宽，column-width 也 = 一列正文宽，因此只排得下 1 列；
 // 超出列高的内容会横向溢出成"额外列"（正是我们要的多页），由视口 overflow:hidden 裁剪。
-function layoutHtmlColumns() {
+// colsOverride：只给「量邻章」那一路用 —— 邻章纸带盒不靠抢 id 上位（那要先插到真纸带前面、
+//    量完再挪回末尾，一来一回各一次整章重排），它排在视口层末尾、由参数直接交进来。
+function layoutHtmlColumns(colsOverride) {
     var c = document.getElementById('htmlContent');
-    var cols = document.getElementById('htmlColumns');
+    var cols = colsOverride || document.getElementById('htmlColumns');
     if (!c || !cols) return;
     var W = c.clientWidth || window.innerWidth || 1;
     // 为页眉页脚预留空间（与 Canvas 模式一致），避免正文被覆盖：
@@ -3136,15 +3456,27 @@ function layoutHtmlColumns() {
         htmlPageCount = sc;
         return;
     }
-    // 列间距 = 屏宽 6%（不小于 16px）：页与页之间留出可见空白
-    htmlGap = Math.max(16, Math.round(W * 0.06));
+    // 列间距 = 屏宽 6%（不小于 16px），且不得小于「两页各自的内侧留白」，见 setHtmlColumnGeom
+    setHtmlColumnGeom(cols, W, side);
+    var count = measureColumnCount(cols, side);
+    if (fs && count > 1) restorePageMargins(fs, cols, W, pgTop, pgSide, pgBottom, false);
+    htmlPageCount = count;
+}
+
+/**
+ * 纸带的分栏几何：列宽 = 视口宽 - 左右页边距，列间距按「至少 2× 页边距」兜底。
+ * 为什么间距要跟页边距挂钩：每页是把整条纸带平移 -p*htmlStep 摆进视口这个窗口的，
+ * 下一列的左边缘落在 W - (页边距 - 列间距) 处。列间距一旦小于页边距，下一页最左边
+ * (页边距 - 列间距) px 就落在窗口里，正文左右两缘各露出一条被切齐的字（默认边距 24 /
+ * 间距 22 → 2px；边距拉到 40 → 18px）。取 2× 页边距时 htmlStep 恰好等于视口宽，
+ * 一页 = 一个视口，镜像池停在左侧那张也不会和当前页错位。
+ */
+function setHtmlColumnGeom(cols, W, side) {
+    htmlGap = Math.max(16, Math.round(W * 0.06), side * 2);
     htmlColW = Math.max(1, W - side * 2);
     cols.style.columnWidth = htmlColW + 'px';
     cols.style.columnGap = htmlGap + 'px';
     htmlStep = htmlColW + htmlGap;
-    var count = measureColumnCount(cols, side);
-    if (fs && count > 1) restorePageMargins(fs, cols, W, pgTop, pgSide, pgBottom, false);
-    htmlPageCount = count;
 }
 
 /**
@@ -3154,10 +3486,11 @@ function layoutHtmlColumns() {
 function restorePageMargins(fs, cols, W, top, side, bottom, scrolled) {
     applyFullscreenPage(fs, top, side, bottom, false);
     setPagePadding(cols, side, top, bottom);
-    htmlColW = Math.max(1, W - side * 2);
-    if (scrolled) return Math.max(1, Math.ceil(document.getElementById('htmlContent').scrollHeight / htmlClientH));
-    cols.style.columnWidth = htmlColW + 'px';
-    htmlStep = htmlColW + htmlGap;
+    if (scrolled) {
+        htmlColW = Math.max(1, W - side * 2);
+        return Math.max(1, Math.ceil(document.getElementById('htmlContent').scrollHeight / htmlClientH));
+    }
+    setHtmlColumnGeom(cols, W, side);   // 整页画那趟是按 side=0 量的，退回普通边距要连列间距一起重算
     htmlPageCount = measureColumnCount(cols, side);
     return htmlPageCount;
 }
@@ -3257,7 +3590,27 @@ function htmlLastColumnRight(cols, side) {
     return maxRight;
 }
 
-function loadHtmlContent(chapterIndex, title, html, startPage, isLocal, progress) {
+function loadHtmlContent(chapterIndex, title, html, startPage, isLocal, progress, paintGen) {
+    // 无缝跨章的落地确认：这一章的 HTML 刚由邻章排版盒换上（逐字节相同），Java 回送的正文就只当确认 ——
+    //    不重建 DOM、不重排：纸带已经是排好的那条，再排一次会把已解码的插图重刷一遍，白闪一下。
+    //    判据三样都缺一不可：跨章窗口还在（_xTurnBusy，超时即失效）、索引就是本章、HTML 逐字相同。
+    if (_xTurnBusy && _htmlXReady != null && chapterIndex === currentChapterIndex
+            && html === _htmlXReady
+            && (startPage === null || startPage === undefined || startPage === 1 || startPage === -1)) {
+        _htmlXReady = null;
+        _boundaryPending = false;
+        _suppressPageNotify = false;
+        _xTurnBusy = false;
+        if (typeof isLocal !== 'undefined') isLocalBook = isLocal;
+        if (typeof progress !== 'undefined') bookProgress = progress;
+        chapterTitle = title;
+        htmlGoToPage(startPage === -1 ? htmlPageCount - 1 : htmlPage);   // 落点就是该到的页，只校准
+        notifyJavaPageChange();
+        updateHtmlHeaderFooter();
+        notifyJavaPainted(paintGen);
+        return;
+    }
+    _htmlXReady = null;
     _boundaryPending = false;
     _suppressPageNotify = false;
     _xTurnBusy = false;
@@ -3278,6 +3631,7 @@ function loadHtmlContent(chapterIndex, title, html, startPage, isLocal, progress
     // .epub-chapter 包装层由 Java 侧连书中 body 的 class 一起产出（全面屏页要靠那个 class 命中背景图），
     //    这里不再二次包裹；空章兜底一个空容器，保证 .epub-chapter 选择器始终有落点。
     cols.innerHTML = html || '<div class="epub-chapter"></div>';
+    _htmlContentGen++;   // 正文换代：旧书本的每一页副本都是上一章的纸，签名再像也不能留
     c.style.display = 'block';
     c.scrollTop = 0;
     // 隐藏 Canvas / 仿真层，避免拦截触摸与重绘
@@ -3286,7 +3640,7 @@ function loadHtmlContent(chapterIndex, title, html, startPage, isLocal, progress
     if (fb) fb.style.display = 'none';
     if (_simulationPlaceholderActive || simulationActive) { try { destroySimulation(); } catch (e) {} }
 
-    applyHtmlTheme(false);   // 先按当前主题落样式（此刻尺寸可能还没稳定）
+    applyHtmlTheme(false, true);   // 先按当前主题落样式并量几何（此刻尺寸可能还没稳定，书本留给下一趟）
 
     // 等一帧让布局生效后再精确测量、定位到 startPage
     requestAnimationFrame(function () {
@@ -3299,6 +3653,7 @@ function loadHtmlContent(chapterIndex, title, html, startPage, isLocal, progress
             htmlGoToPage(0);
         }
         notifyJavaPageChange();
+        notifyJavaPainted(paintGen);
     });
     console.log('loadHtmlContent 接收 HTML 长度: ' + (html ? html.length : 0) + ' flow=' + htmlFlow);
 }
@@ -3307,7 +3662,6 @@ function htmlClientHeight() {
     var c = document.getElementById('htmlContent');
     return (c ? c.clientHeight : 0) || htmlClientH || window.innerHeight || 1;
 }
-function htmlTotalPages() { return htmlPageCount; }
 function htmlCurrentPage() {
     if (htmlFlow === 'scrolled') {
         var c = document.getElementById('htmlContent');
@@ -3371,36 +3725,30 @@ function updateHtmlHeaderFooter() {
     ftr.style.paddingRight = padding + 'px';
     ftr.style.bottom = '12px';
 }
-/** 无动画跳转到指定页（0 起） */
+/** 无动画落到指定页（0 起）：重排与换章定位用的内部入口，
+ *  对外（Java 跳页）走统一控制层的 goToPage，那里还要钳制页码与判在途。 */
 function htmlGoToPage(p) {
     var c = document.getElementById('htmlContent');
     var cols = document.getElementById('htmlColumns');
     if (!c || !cols) return;
     if (p < 0) p = 0;
     if (p >= htmlPageCount) p = htmlPageCount - 1;
-    if (htmlFlow === 'scrolled') {
-        htmlPage = p;
-        c.scrollTop = p * htmlClientHeight();
-    } else {
-        htmlEndTurn(true);            // 在途动画先落地（会把 htmlPage 同步到落点）
-        htmlPage = p;
-        if (htmlSim) htmlSimGoTo(p);
-        else htmlSetStripPage(p);
-    }
-    notifyJavaPageChange();
-    updateHtmlHeaderFooter();
+    if (htmlFlow === 'scrolled') { HtmlPaging.scrollGoto(p); return; }
+    turnSettle();                 // 在途动画先落地（会把 htmlPage 同步到落点）
+    if (htmlSim) { if (!htmlSimPlace(p)) HtmlPaging.simGoto(p); return; }
+    HtmlPaging.show(p);
 }
 
-// ============ HTML 模式的翻页动画（覆盖 / 平移 / 淡入 / 仿真） ============
+// ============ HTML 一路的动画层后端（覆盖 / 平移 / 淡入 / 仿真）============
 // 正文是「一整条多列纸带按页平移」，动画期间连纸带一起搬会把相邻页拖着走，
-// 所以覆盖 / 淡入改用「快照页」演：纸带静止当旧页，快照当新页压过来 / 淡进来，
-// 收尾时把纸带落到目标页、快照销毁。平移不需要快照（目标页就在纸带的下一列）。
-// 见 #htmlTurn 的样式注释：本层压在正文之上、页眉页脚之下，动画期间页眉页脚不闪。
+// 所以淡入与向后覆盖用「纸带快照」演：纸带静止当旧页，快照当新页压过来 / 淡进来。
+// 平移与章界阻尼不建快照 —— 纸带本身就是轨道，直接搬它（见 HtmlPaging.trackSlide）。
+// 向前覆盖另走一条：抬 #htmlStack 把活动页整张推走，新页的快照垫在底下按露出的宽度才画
+// （见 htmlPushCard；快照当移动层时第一帧要栅格化一整页正文，是真机上剩下的那点掉帧）。
+// 动效本身与 canvas 一路共用同一套（turnBegin / turnApply / turnRun / turnFinish）。
 
-var _htmlTurn = null;     // { from, to, dir, mode, node, boundary }
-var _htmlTurnRaf = 0;
-var _htmlDrag = null;
 var htmlSim = null;       // 仿真模式下的 turn.js 书本状态
+var _htmlStripBlanked = false;   // 真纸带被跨章动画藏起来了（见 htmlBlankStrip）
 
 function htmlViewW() {
     var c = document.getElementById('htmlContent');
@@ -3409,11 +3757,86 @@ function htmlViewW() {
 
 function htmlTurnHost() { return document.getElementById('htmlTurn'); }
 
+/**
+ * 覆盖档向前能推的「正文卡片」= #htmlStack。推不走就返回 null，调用方退回快照移动层：
+ *   - 向后翻一律不推：向后要演的是「上一页从左侧整页盖进来」，动的必须是进来的那一页，
+ *     而卡片是当下这一页 —— 推它右让就变成「底下的上一页静止显出」，那是另一种观感
+ *     （真机逐像素比过：向前推与旧画法最坏差 0/255，向后差 203/255、均值 34）。
+ *     向后的掉帧改由「按移动层起势预热镜像」去消（见 htmlPrimeMirrorPage）；
+ *   - 仿真书本与上下档：当前页不是由一次位移决定的，搬卡片等于搬错东西；
+ *   - 视口层挂了底图出血（fs-bleed，长章纸纹）：卡片要涂不透明纸面才盖得住底下的快照，
+ *     连视口层的底图和夜间暗纱就一起被抹掉了，翻页时整屏一亮；
+ *   - 要翻进去的那一页没有正停在池子里的镜像（还没预热上）：垫底那张得当场重画一整页，
+ *     推与不推一样掉帧，不如走老路。
+ */
+/** 视口层里的「正文卡片」= 真纸带那一层。跨章落地是身份互换（预排盒当上卡片，旧卡片摘掉），
+ *  它未必还排在第一个子节点，所以按 id 找、不按位置找（见 swapToAdjacentHtmlChapter）。 */
+function htmlStackEl(c) {
+    for (var i = 0; i < c.children.length; i++) {
+        var e = c.children[i];
+        if (e.id === 'htmlStack') return e;
+    }
+    return null;
+}
+
+function htmlPushCard(dir) {
+    if (dir < 0 || htmlSim || htmlFlow !== 'paginated') return null;
+    var c = document.getElementById('htmlContent');
+    var card = c && htmlStackEl(c);
+    if (!card || !card.firstElementChild
+            || card.firstElementChild.id !== 'htmlColumns') return null;
+    if (c.classList.contains('fs-bleed')) return null;
+    return htmlMirrorParked(htmlPage + dir) ? card : null;
+}
+
+/** 池子里有没有一张空闲镜像正停在第 i 页 —— 停着即纹理是热的，借来垫底不用当场栅格化一整页 */
+function htmlMirrorParked(i) {
+    for (var k = 0; k < _htmlMirrors.length; k++) {
+        var m = _htmlMirrors[k];
+        if (m.free && m.gen === _htmlMirrorGen && m.parked === i) return true;
+    }
+    return false;
+}
+
 /** 把真纸带落到第 p 页（动画收尾 / 无动画跳页都走这里，保证位移口径只有一处） */
 function htmlSetStripPage(p) {
     var cols = document.getElementById('htmlColumns');
     if (!cols) return;
+    if (_htmlStripBlanked) { cols.style.visibility = ''; _htmlStripBlanked = false; }
     cols.style.transform = 'translateX(' + (-p * htmlStep) + 'px)';
+}
+
+/** 跨章动画期间把真纸带藏起来：两页都由快照节点出演且铺满视口，纸带只会在节点边缘漏出一像素 */
+function htmlBlankStrip() {
+    var cols = document.getElementById('htmlColumns');
+    if (!cols) return;
+    cols.style.visibility = 'hidden';
+    _htmlStripBlanked = true;
+}
+
+/**
+ * 视口层的「纸面」= 底色 + 底图，读成数组好一次算完多处用。
+ * 快照页（仿真书本、翻页动画层、淡入垫层）是一张张独立纸面，挂在 #htmlTurn 里但
+ * 不吃 #htmlContent 的 background 继承，所以抄的时候要连底图一起抄 —— 长章的出血底图就在这一层。
+ */
+function htmlPaper() {
+    var c = document.getElementById('htmlContent');
+    if (!c) return null;
+    var cs = getComputedStyle(c);
+    return [cs.backgroundColor, cs.backgroundImage, cs.backgroundSize, cs.backgroundPosition];
+}
+
+function paintHtmlPaper(node, paper) {
+    if (!node) return;
+    if (!paper) {
+        paper = htmlPaper();
+        if (!paper) return;
+    }
+    var st = node.style;
+    st.backgroundColor = paper[0];
+    st.backgroundImage = paper[1];
+    st.backgroundSize = paper[2];
+    st.backgroundPosition = paper[3];
 }
 
 /** 克隆第 p 页为一张独立快照：外层带上视口层的底色/底图，内层是整条纸带的副本 */
@@ -3421,200 +3844,426 @@ function htmlSnapNode(p) {
     var c = document.getElementById('htmlContent');
     var cols = document.getElementById('htmlColumns');
     if (!c || !cols) return null;
-    var cs = getComputedStyle(c);
     var node = document.createElement('div');
     node.className = 'html-snap' + (c.classList.contains('fs-bleed') ? ' fs-bleed' : '');
-    node.style.backgroundColor = cs.backgroundColor;
-    node.style.backgroundImage = cs.backgroundImage;
-    node.style.backgroundSize = cs.backgroundSize;
-    node.style.backgroundPosition = cs.backgroundPosition;
+    paintHtmlPaper(node);
     var strip = cols.cloneNode(true);
-    // 克隆会连内联样式一起抄：真纸带此刻可能正被隐藏（仿真模式），必须显式恢复可见
-    strip.style.visibility = 'visible';
+    // 副本一律不带走 id：满文档只有真纸带那一条 #htmlColumns，getElementById 才不会被副本抢走
+    // （样式改按 .html-cols 命中，副本带着 class 一起抄过来，分栏/字号/两端对齐照旧生效）
+    strip.removeAttribute('id');
+    // 克隆会连内联样式一起抄：真纸带此刻可能正被隐藏（仿真模式、跨章落地前的 blank），
+    // 抄来的 hidden 得解掉 —— 但只能解成 inherit，不能写成 visible：
+    // 复用池把镜像「停」在文档里靠的是外层 visibility:hidden，子节点上一个写死的 visible
+    // 会把继承链打断，停着的快照就还在原处照画，屏幕上叠出第二页。
+    strip.style.visibility = 'inherit';
     strip.style.transform = 'translateX(' + (-p * htmlStep) + 'px)';
     node.appendChild(strip);
     return node;
 }
 
-/** 搭起一次翻页：需要快照的模式先建快照。返回 null 表示建不出来，调用方退回无动画跳页。 */
-function htmlBeginTurn(from, to, dir, mode) {
+// ============ 快照镜像池（HTML 一路翻页不掉帧的关键）============
+/* 一枚快照 = 整条纸带的副本。冷做一张并不贵（cloneNode 3ms），贵的是把它挂进文档：
+   多列流必须从头重排一遍，真机实测 53ms，动画的第一帧就空在那儿；摘掉它再来一次又要 15ms
+   —— 一次翻页前后共掉 70ms 上下，观感就是「按下去先卡一下再滑」。
+   副本的布局只在正文或排版口径变了之后才作废，所以每章留着一两张已排好的镜像来回借：
+   借 = 改内层纸带的 translateX + 抬到不透明（实测 1ms），还 = 只把 alpha 归零、留在文档里。
+   停着的时候用 opacity:0 而不是 visibility:hidden：隐藏会让合成器丢掉这一层已经栅格化好的画面，
+   下次借出去先重画一整页（真机实测每翻一页多掉 6~9 帧 50ms），而 alpha=0 的层纹理还在，抬起来就走。
+   留在文档里也是前提：宿主 #htmlTurn 一旦 display:none，池内节点的布局会被一起丢掉，
+   重新打开就是整章重排（实测 11ms），所以本路的宿主常开。 */
+var _htmlMirrors = [];              // [{ node, strip, free, gen, parked }] —— parked = 纸带此刻停在哪一页
+var _htmlMirrorTimer = 0;
+var _htmlMirrorGen = 0;             // 正文口径的代次：作废时进一代，在途那几张归还时按代次清出去
+var _HTML_MIRROR_MAX = 3;           // 淡入两页同屏 + 拖拽中途改向，三张兜得住；再多就是白占内存
+
+/** 这一档同时需要几张镜像：覆盖档前后各一张预停在目标页上（向前当推卡片的垫底页，向后当移动层，
+    见 htmlPrimeMirrorPage）；淡入一次要旧页新页各一张，前后两个方向都要停满，故要「当前 + 下一页 + 上一页」
+    三张 —— 少一张就是向后翻当场重画一整页（真机 8 页连翻掉 6.2% 帧）；平移/上下一张就够转起来 */
+function htmlMirrorWant() {
+    return pageTurnMode === 'fade' ? 3 : (pageTurnMode === 'cover' ? 2 : 1);
+}
+
+/** 造一张并当场量一次布局 —— 这 53ms 只该出现在预热里，不该出现在翻页里 */
+function htmlMakeMirror(i) {
     var host = htmlTurnHost();
-    if (!host || _htmlTurn) return null;
-    var boundary = (to < 0 || to >= htmlPageCount);
-    var t = { from: from, to: boundary ? from : to, dir: dir, mode: mode, node: null, boundary: boundary };
-    if (!boundary && (mode === 'cover' || mode === 'fade')) {
-        t.node = htmlSnapNode(t.to);
-        if (!t.node) return null;
-        if (mode === 'cover') t.node.className += (dir > 0 ? ' cover-next' : ' cover-prev');
-        else t.node.style.opacity = '0';
-        host.appendChild(t.node);
-    }
+    if (!host || htmlSim) return null;
+    var node = htmlSnapNode(i);
+    if (!node) return null;
+    node.className = 'turn-page ' + node.className;
+    var strip = node.querySelector('.html-cols');
+    // 副本里的纸带动不了（动的是外层 .turn-page），留着 CSS 给真纸带的那条 will-change 只会
+    // 让它按整条纸带的宽度（4010px 见方 = 12030×2400 设备像素）去开合成层；关掉它，快照层就只有视口大
+    if (strip) strip.style.willChange = 'auto';
+    node.style.opacity = '0';
     host.style.display = 'block';
-    _htmlTurn = t;
-    return t;
+    host.appendChild(node);
+    void node.offsetHeight;         // 隐藏态不排版，必须在这里把重排付掉，借出去才快得起来
+    var m = { node: node, strip: strip, free: true, gen: _htmlMirrorGen, parked: i };
+    _htmlMirrors.push(m);
+    return m;
 }
 
-/** 拆掉一次翻页：commit=false 表示回弹（纸带留在原页） */
-function htmlEndTurn(commit) {
-    if (_htmlTurnRaf) { cancelAnimationFrame(_htmlTurnRaf); _htmlTurnRaf = 0; }
-    var t = _htmlTurn;
-    _htmlTurn = null;
-    if (t) {
-        // 纸带落点就是「当前页」：在这里同步 htmlPage，拖拽提交与动画跳页共用一条口径
-        var land = commit === false ? t.from : t.to;
-        htmlPage = land;
-        htmlSetStripPage(land);
+/** 借第 i 页：优先挑已经停在这一页的镜像（改位移等于要重新栅格化一整页），命中只改位移；
+    池子还没预热上就当场造一张，并留下继续用 */
+function htmlBorrowMirror(i) {
+    var pick = -1;
+    for (var k = 0; k < _htmlMirrors.length; k++) {
+        var m = _htmlMirrors[k];
+        if (!m.free || m.gen !== _htmlMirrorGen) continue;
+        if (m.parked === i) { pick = k; break; }
+        if (pick < 0) pick = k;
     }
-    var host = htmlTurnHost();
-    if (host && !htmlSim) { host.innerHTML = ''; host.style.display = 'none'; }
-    isAnimating = false;
-}
-
-/** 按进度 p（0=当前页，1=目标页）画一帧 */
-function htmlApplyTurn(t, p) {
-    var cols = document.getElementById('htmlColumns');
-    var W = htmlStep;
-    if (t.boundary) {
-        // 章节边界没有目标页：整条纸带做阻尼位移，露出底色当「翻到头了」的反馈
-        if (cols) cols.style.transform = 'translateX(' + (-t.from * W + t.dir * p * W * 0.35) + 'px)';
-        return;
+    if (pick >= 0) {
+        var hit = _htmlMirrors[pick];
+        hit.free = false;
+        hit.parked = i;
+        if (hit.strip) hit.strip.style.transform = 'translateX(' + (-i * htmlStep) + 'px)';
+        // 预热可能把这张按「移动层的起势」停着（外层整页挪开一页 + cover 投影）。交出去先归位：
+        // 静止页与推卡片的垫底页要的是 0 位移，移动层的位移随后由 turnApply 按方向写回。
+        hit.node.style.transform = '';
+        hit.node.classList.remove('cover');
+        // 挂着的时候可能正好被改过配色（日夜渐变逐帧只刷已知的几张），借出去前对一次账
+        var c = document.getElementById('htmlContent');
+        if (c) hit.node.classList.toggle('fs-bleed', c.classList.contains('fs-bleed'));
+        paintHtmlPaper(hit.node);
+        hit.node.style.opacity = '1';
+        return hit.node;
     }
-    if (t.mode === 'slide') {
-        if (cols) cols.style.transform = 'translateX(' + (-(t.from + t.dir * p) * W) + 'px)';
-        return;
+    var made = _htmlMirrors.length < _HTML_MIRROR_MAX ? htmlMakeMirror(i) : null;
+    if (made) {
+        made.free = false;
+        made.node.style.opacity = '1';
+        return made.node;
     }
-    if (!t.node) return;
-    if (t.mode === 'fade') t.node.style.opacity = p;
-    else t.node.style.transform = 'translateX(' + (t.dir * (1 - p) * W) + 'px)';
+    var once = htmlSnapNode(i);     // 池满（连点 / 拖拽改向）：给一张游离快照，回收时直接摘掉
+    if (once) once.className = 'turn-page ' + once.className;
+    return once;
 }
 
-/** 把当前翻页从 fromP 演到 toP（toP<1 即回弹），结束后收尾 */
-function htmlRunTurn(fromP, toP, ms, onDone) {
-    var t = _htmlTurn;
-    if (!t) { isAnimating = false; if (onDone) onDone(); return; }
-    isAnimating = true;
-    var t0 = null;
-    var frame = function (ts) {
-        _htmlTurnRaf = 0;
-        if (_htmlTurn !== t) return;            // 期间被重排 / 换章拆掉，交给那一次的处理
-        if (t0 === null) t0 = ts;
-        var k = ms <= 0 ? 1 : Math.min(1, (ts - t0) / ms);
-        htmlApplyTurn(t, fromP + (toP - fromP) * (1 - Math.pow(1 - k, 3)));
-        if (k < 1) { _htmlTurnRaf = requestAnimationFrame(frame); return; }
-        htmlEndTurn(toP >= 1);
-        if (onDone) onDone();
-    };
-    _htmlTurnRaf = requestAnimationFrame(frame);
-}
-
-/** 支持跟手拖拽的 HTML 档位；仿真由 turn.js 自己跟手，上下滚动交给原生滚动 */
-function htmlDragMode() {
-    if (!htmlMode || htmlFlow === 'scrolled' || htmlSim) return null;
-    return (pageTurnMode === 'cover' || pageTurnMode === 'slide' || pageTurnMode === 'fade') ? pageTurnMode : null;
-}
-
-function htmlBeginDrag(d, dir) {
-    var to = d.from + dir;
-    var mode = htmlDragMode();
-    if (!mode) { htmlCancelDrag(d); return; }
-    var t = htmlBeginTurn(d.from, to, dir, mode);
-    if (!t) { htmlCancelDrag(d); return; }
-    d.turn = t;
-    isAnimating = true;                 // 拖拽期间屏蔽外部翻页（音量键 / 进度条 / 自动翻页）
-    lastDragActivityTs = Date.now();
-}
-
-function htmlUpdateDrag(d, delta) {
-    var size = htmlViewW();
-    var magn = -delta * d.dir;
-    d.raw = Math.max(0, Math.min(1, magn / size));
-    if (!d.turn.boundary) htmlApplyTurn(d.turn, d.raw);
-    else htmlApplyTurn(d.turn, Math.min(d.raw * 0.35, 0.12));
-}
-
-function htmlFinishDrag(d, commit) {
-    var t = d.turn;
-    _htmlDrag = null;
-    lastDragFinishTs = Date.now();
-    lastDragActivityTs = Date.now();
-    if (!t) { isAnimating = false; return; }
-    if (t.boundary) {
-        if (commit || (d.velocity >= DRAG_COMMIT_VELOCITY && d.raw >= DRAG_FLICK_MIN_RATIO)) {
-            htmlEndTurn(false);         // 先落回原页，换章由 Java 回调后的 loadHtmlContent 接手
-            try { if (t.dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
+/** 还：镜像藏起来留在池里，非池内节点（游离快照、淡入垫层、邻章排版盒）照旧摘出文档 */
+function htmlRecycleMirror(n) {
+    if (!n) return;
+    for (var k = 0; k < _htmlMirrors.length; k++) {
+        var m = _htmlMirrors[k];
+        if (m.node !== n) continue;
+        // 借出去之后换过章/重排过：这张的内容已经对不上新口径，回收时直接出局，不能当空闲的借给下一章
+        if (m.gen !== _htmlMirrorGen) {
+            _htmlMirrors.splice(k, 1);
+            if (n.parentNode) n.parentNode.removeChild(n);
             return;
         }
-        htmlRunTurn(0, 0, ANIM_DURATION);
+        m.free = true;
+        n.style.opacity = '0';
+        n.style.transform = '';
+        // 档位class（cover 要投影）是一次性的，留着下次当静止页就会平白多出一道阴影
+        n.className = 'turn-page html-snap';
         return;
     }
-    var done = commit || d.raw >= DRAG_COMMIT_RATIO ||
-               (d.velocity >= DRAG_COMMIT_VELOCITY && d.raw >= DRAG_FLICK_MIN_RATIO);
-    var back = d.raw;
-    htmlRunTurn(back, done ? 1 : 0, Math.round(ANIM_DURATION * (done ? 1 - back : back)), function () {
-        if (done) { notifyJavaPageChange(); updateHtmlHeaderFooter(); }
-    });
+    if (n.parentNode) n.parentNode.removeChild(n);
 }
 
-function htmlCancelDrag(d) {
-    _htmlDrag = null;
-    if (d && d.turn) htmlEndTurn(false);
-    else isAnimating = false;
+/** 邻章预排盒用完回到待命位：留在视口层里藏起来 —— 搬出文档等于把刚排好的整章丢掉，
+ *  下次取用又要 50~133ms 重排（镜像池同一套道理，见上面那段注释） */
+function htmlParkXtBox(box) {
+    box.style.visibility = 'hidden';
+    box.style.transform = '';
+    box.style.zIndex = '';
+    box.className = 'html-snap';
+    var c = document.getElementById('htmlContent');
+    if (c && box.parentNode !== c) c.appendChild(box);   // 兜底：万一还在宿主里，回到视口层才待命
 }
 
-document.addEventListener('touchstart', function (e) {
-    if (!htmlMode || htmlSim || _htmlDrag) return;
-    var t = e.touches && e.touches[0];
-    if (!t) return;
-    _htmlDrag = { start: t.clientX, cross: t.clientY, from: htmlPage, dir: 0, turn: null,
-                  raw: 0, velocity: 0, lastMagn: 0, lastTs: Date.now(), active: false };
-}, { passive: true });
+/** 动画层交还页节点：预排盒原地停放，其余按镜像池的规矩办（池内留着复用、游离的摘掉） */
+function htmlRecyclePageNode(n) {
+    if (n && n.__xtBox) { htmlParkXtBox(n); return; }
+    htmlRecycleMirror(n);
+}
 
-document.addEventListener('touchmove', function (e) {
-    var d = _htmlDrag;
-    if (!d) return;
-    var t = e.touches && e.touches[0];
-    if (!t) return;
-    var delta = t.clientX - d.start;
-    if (!d.active) {
-        if (!htmlDragMode() || !swipeEnabled || isAnimating) { _htmlDrag = null; return; }
-        // 方向判定：横向位移要明显大于纵向，且越过起手势阈值
-        if (Math.abs(delta) < DRAG_SLOP || Math.abs(delta) <= Math.abs(t.clientY - d.cross)) return;
-        d.dir = delta < 0 ? 1 : -1;
-        d.active = true;
-        htmlBeginDrag(d, d.dir);
-        if (!_htmlDrag) return;
+/** 作废整池：换章 / 重排 / 进仿真都会让副本与新口径对不上。在途的那几张不硬摘，回收时按代次出局 */
+function htmlDisposeMirrors() {
+    _htmlMirrorGen++;
+    if (_htmlMirrorTimer) { clearTimeout(_htmlMirrorTimer); _htmlMirrorTimer = 0; }
+    for (var k = _htmlMirrors.length - 1; k >= 0; k--) {
+        var m = _htmlMirrors[k];
+        if (!m.free) continue;
+        if (m.node.parentNode) m.node.parentNode.removeChild(m.node);
+        _htmlMirrors.splice(k, 1);
     }
-    var now = Date.now(), dt = now - d.lastTs;
-    if (dt > 0) {
-        var v = (-delta * d.dir - d.lastMagn) / dt;
-        d.velocity = d.velocity * 0.5 + v * 0.5;
-        d.lastMagn = -delta * d.dir;
-        d.lastTs = now;
-    }
-    htmlUpdateDrag(d, delta);
-    e.preventDefault();     // 横向翻页吃掉这次滚动，避免 WebView 顺带动别的容器
-}, { passive: false });
+}
 
-document.addEventListener('touchend', function (e) {
-    var d = _htmlDrag;
-    _htmlDrag = null;
-    if (!d || !d.active) return;
-    var ct = e.changedTouches && e.changedTouches[0];
-    if (ct) {
-        var delta = ct.clientX - d.start;
-        htmlUpdateDrag(d, delta);
-    }
-    var raw = d.raw;
-    var go = raw >= (d.turn && d.turn.boundary ? DRAG_BOUNDARY_RATIO : DRAG_COMMIT_RATIO) ||
-             (d.velocity >= DRAG_COMMIT_VELOCITY && raw >= DRAG_FLICK_MIN_RATIO);
-    htmlFinishDrag(d, go);
-}, { passive: true });
+/** 翻完一页 / 跳页 / 重排之后补池：一次只排一张，避开动画在途，把 53ms 放到用户看不见的时候付 */
+function htmlScheduleMirrorWarm() {
+    if (_htmlMirrorTimer) return;
+    if (!htmlMode || htmlSim || htmlFlow !== 'paginated') return;
+    _htmlMirrorTimer = setTimeout(function () {
+        _htmlMirrorTimer = 0;
+        if (!htmlMode || htmlSim || htmlFlow !== 'paginated') return;
+        // 动画在途 / 手指还按着都别付这 53ms：整章量版落在 touchStart 与首个 touchMove 之间，
+        // 观感就是「按下去先卡一下再滑」。让开一拍再来，且不能就此放弃 —— 错过这一拍，
+        // 下一次补池要等用户真翻一页才发生，而那一页正是当场造镜像、当场卡的地方。
+        if (_turn || isAnimating || drag) { htmlScheduleMirrorWarm(); return; }
+        var free = 0;
+        for (var k = 0; k < _htmlMirrors.length; k++) {
+            if (_htmlMirrors[k].free && _htmlMirrors[k].gen === _htmlMirrorGen) free++;
+        }
+        if (free < htmlMirrorWant()) {
+            htmlMakeMirror(htmlPage);
+            htmlScheduleMirrorWarm();
+        } else {
+            htmlPrimeMirrorPage();
+            htmlScheduleXWarm();   // 池子热了，接着把章界那头的邻章也空闲排好（见那里）
+        }
+    }, 320);
+}
 
-document.addEventListener('touchcancel', function () {
-    var d = _htmlDrag;
-    _htmlDrag = null;
-    if (d && d.active) htmlFinishDrag(d, false);
-}, { passive: true });
+/** 快照层贵在第一帧要把一整页正文从零栅格化（真机 8 页连翻掉 5~8% 帧、最坏一帧 83ms）。
+    补完池的空档里把空闲镜像先停到要翻进去的那一页、抬到 1% 透明度让栅格化趁用户停顿时跑完，再归零：
+    借出去就只剩改 alpha，实测向前同一串 8 页连翻 0 掉帧、最坏一帧 16.7ms。
+    用 1% 而不是 0 —— 全透明的层 Blink 压根不出纹理，池里那张热的是「眼下这一页」，要翻进去的那页还是生的。
+    真机量过 1% 的残影：整屏最大逐像素差 3/255、均值 0.48，肉眼看不出（5% 才开始显形）。
+    覆盖档向前推卡片、向后由快照当移动层从左侧盖入（见 htmlPushCard），所以两张的停法不一样：
+    下一页那张按 0 位移摆好当垫底，上一页那张连移动层的起势一起摆（见下面 targets[j] === prev）。
+    实测向前 0 掉帧，向后从 6.2% 压到 0.7%（剩的是动画中段一帧 33ms，不再是起手那一卡）。
+    淡入档一次两页同屏，前后两个方向合起来要「当前 + 下一页 + 上一页」三张（见 htmlMirrorWant），
+    补齐第三张前后向都是 0 掉帧（原先向后 6.2%）；停当前页那张与屏上正文逐字重合，抬起来连残影都没有。
+    平移/上下/仿真不用快照层，一律不预热。 */
+var _HTML_PRIME_HOLD = 260;
+
+function htmlPrimeMirrorPage() {
+    if (!htmlMode || htmlSim || htmlFlow !== 'paginated') return;
+    if (pageTurnMode !== 'cover' && pageTurnMode !== 'fade') return;
+    var next = htmlPage + 1 < htmlPageCount ? htmlPage + 1 : -1;   // 本章末页：下一页在跨章那一路，不在池子里
+    var prev = htmlPage > 0 ? htmlPage - 1 : -1;
+    var targets = pageTurnMode === 'fade' ? [htmlPage, next, prev] : [next, prev];
+    var m = [], free = 0;
+    for (var k = 0; k < _htmlMirrors.length; k++) {
+        var c = _htmlMirrors[k];
+        if (!c.free || c.gen !== _htmlMirrorGen || !c.strip) continue;
+        free++;
+        m.push(c);
+    }
+    if (!m.length || free < htmlMirrorWant()) return;              // 池子还没补齐：下一轮补池再对这笔账
+    var lit = [];
+    for (var j = 0; j < targets.length && j < m.length; j++) {
+        if (targets[j] < 0) continue;
+        var mm = m[j];
+        if (mm.parked !== targets[j]) {
+            mm.strip.style.transform = 'translateX(' + (-targets[j] * htmlStep) + 'px)';
+            mm.parked = targets[j];
+        }
+        // 向后覆盖要演的是「上一页从左侧整页盖进来」，动的就是它自己：动画第一帧写的位移是整页
+        // 往左挪开一页（turnApply 在 p=0 时算出的 -pageW），并且带 .cover 的投影。就按这个姿态停
+        // —— 合成层的纹理跟着层自己的内容走，起势时画好了，动画才不必在第一帧现画一整页。
+        if (pageTurnMode === 'cover' && targets[j] === prev) {
+            mm.node.style.transform = 'translate3d(' + (-htmlStep) + 'px, 0, 0)';
+            mm.node.classList.add('cover');
+        } else {
+            mm.node.style.transform = '';
+            mm.node.classList.remove('cover');
+        }
+        lit.push(mm);
+    }
+    if (!lit.length) return;
+    // 一张一张点亮，不是一起抬起来：两张 1% 叠在一起最坏偏差就到 6/255、两成份子都在动，
+    // 单张只有 3/255（真机量过，肉眼看不出）。栅格化在点亮的那一两帧就跑完，260ms 的窗口绰绰有余。
+    for (var q = 0; q < lit.length; q++) {
+        htmlPrimeLit(lit[q], q * _HTML_PRIME_HOLD);
+    }
+}
+
+function htmlPrimeLit(mm, delay) {
+    setTimeout(function () {
+        if (!mm.free || mm.gen !== _htmlMirrorGen || !mm.node.parentNode) return;
+        mm.node.style.opacity = '0.01';
+        setTimeout(function () {
+            // 那期间被借走就别碰 —— alpha 正归动画管；还回来时回收逻辑自己已经归零了
+            if (mm.free && mm.node.parentNode) mm.node.style.opacity = '0';
+        }, _HTML_PRIME_HOLD);
+    }, delay);
+}
+
+// ============ HTML 一路的邻章负载（跨章无缝翻页）============
+// 与 canvas 一路共用 xt 契约：node(i) 交出邻章第 i 页的一整屏节点，land() 在动画落地时把邻章转正。
+// 差别只在「邻章的一页怎么排出来」：canvas 重画一张位图，HTML 要把邻章 HTML 排进一只隐藏纸带盒。
+// 关键是必须用真分页函数排 —— 落地后 Java 回送同一章还会再排一次，两次结果逐像素一致才谈得上无缝。
+// 手法：邻章纸带盒带 .html-cols（分栏、字号、两端对齐那批规则按类命中）排在视口层末尾，
+// 把这条纸带按参数交给 layoutHtmlColumns 量页数 —— 不插到真纸带前面抢身份，也就不必量完再挪回去。
+// 盒子排好就留在原地待命：动画期间它就是那一页（不搬进宿主），落地时它与旧「正文卡片」互换身份
+// （谁也不搬 DOM，见 swapToAdjacentHtmlChapter）。
+// 预排按 dir 各留一只，站在章界那一页时空闲就排好（见 htmlScheduleXWarm），拖拽起手只取不排。
+var _htmlXBoxes = {};     // { '1': xt, '-1': xt } —— 已排好待命的邻章
+var _htmlXMiss = {};      // { '1': ts, '-1': ts } —— 这一头问过没有邻章，空闲预热别再反复敲桥
+var _htmlXReady = null;   // 已换上但又尚未被 Java 正文确认的 HTML —— loadHtmlContent 据此免掉一次重建（见那里）
+
+/** 摘掉一只排版盒（xt 已经升格当正文卡片的那种调用方自己负责，别把它摘了） */
+function dropHtmlXBox(key, keep) {
+    var xt = _htmlXBoxes[key];
+    if (!xt) return;
+    delete _htmlXBoxes[key];
+    if (xt === keep) return;
+    if (xt.box && xt.box.parentNode) xt.box.parentNode.removeChild(xt.box);
+}
+
+/** 丢掉所有邻章排版盒（换章 / 重排 / 用完即弃） */
+function disposeHtmlXStrip(keep) {
+    var keys = Object.keys(_htmlXBoxes);
+    for (var i = 0; i < keys.length; i++) dropHtmlXBox(keys[i], keep);
+    _htmlXMiss = {};
+}
+
+function tryFetchAdjacentChapterHtml(dir) {
+    if (_xTurnBusy || htmlSim || htmlFlow !== 'paginated') return null;   // 仿真书本与长卷不吃这套
+    if (typeof Android === 'undefined' || !Android || !Android.getAdjacentChapterPayload) return null;
+    var raw = null;
+    try { raw = Android.getAdjacentChapterPayload(dir > 0 ? 1 : -1); } catch (e) { return null; }
+    if (!raw) { _htmlXMiss[dir > 0 ? '1' : '-1'] = Date.now(); return null; }
+    var pl = null;
+    try { pl = JSON.parse(raw); } catch (e2) { return null; }
+    if (!pl || typeof pl.index !== 'number' || !pl.html || !String(pl.html).trim()) return null;
+    // 邻章索引必须与 JS 当前位置严格相邻：不相邻说明两端失步，交回加载链路自我修正
+    if (pl.index !== currentChapterIndex + (dir > 0 ? 1 : -1)) return null;
+    var c = document.getElementById('htmlContent');
+    var live = document.getElementById('htmlColumns');
+    if (!c || !live) return null;
+
+    var box = document.createElement('div');
+    box.className = 'html-snap';
+    // 纸面按视口层的底色抄成不透明（底图不抄：邻章按闸门不含整页画，落地还要清出血）；
+    // 透明节点交出去当页节点时，向后覆盖是它盖在旧页快照之上 —— 只有字没有纸，两章正文叠在一起。
+    box.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;'
+            + 'visibility:hidden;pointer-events:none;background:' + getComputedStyle(c).backgroundColor;
+    var strip = document.createElement('div');
+    strip.className = 'html-cols';        // 样式按类命中；不带走 id，免得它在文档序里冒充真纸带
+    strip.style.cssText = live.style.cssText;   // 字号 / 行高 / 字体 / 列宽 / 页边距等现值整套抄过来
+    strip.style.visibility = '';                // 抄来的可能含「跨章动画期间把真纸带藏起来」那条 hidden
+    strip.style.willChange = 'auto';            // 待命的盒子不按整条纸带那么大的面积开合成层（见 htmlMakeMirror）
+    strip.style.transform = 'translateX(0px)';  // 位移除外：量的是邻章自己的第 0 页
+    box.appendChild(strip);
+    // 直接排在视口层末尾，把这条纸带按参数交给 layoutHtmlColumns 去量 —— 不插到真纸带前面抢 id，
+    // 于是「量完再挪回末尾」那次整章重排免掉了，盒子也从此待在原地、一次都不必搬
+    c.appendChild(box);
+
+    var sCount = htmlPageCount, sColW = htmlColW, sGap = htmlGap, sStep = htmlStep,
+        sH = htmlClientH, sTitle = chapterTitle, sSrc = _fsBleedSource, sBleed = c.classList.contains('fs-bleed');
+    var count = 0;
+    try {
+        strip.innerHTML = String(pl.html);
+        // 「整页就是一张画」的章要按收归整列重算分页，判据与落地后那一次不同源 → 不做无缝，交回加载链路
+        if (!strip.querySelector('.epub-chapter.epub-fs')) {
+            chapterTitle = pl.title || '';   // 页眉占高按邻章标题算，落地后重排才与这次同值
+            layoutHtmlColumns(strip);        // 真分页函数，只是把待量的纸带显式交给它
+            count = htmlPageCount;
+        }
+    } catch (e3) {
+        console.error('邻章 HTML 排版失败: ' + e3);
+        count = 0;
+    }
+    var xColW = htmlColW, xGap = htmlGap, xStep = htmlStep;
+    chapterTitle = sTitle;
+    htmlPageCount = sCount; htmlColW = sColW; htmlGap = sGap; htmlStep = sStep; htmlClientH = sH;
+    // layoutHtmlColumns 的「非整页画」分支会把视口层的出血底图擦掉，按原状补回来
+    if (sBleed && sSrc) hoistFullscreenBackground(sSrc, c); else clearFullscreenBackground(c);
+    if (count <= 0) { if (box.parentNode) box.parentNode.removeChild(box); return null; }
+
+    var key = dir > 0 ? '1' : '-1';
+    var xt = { dir: (dir > 0 ? 1 : -1), index: pl.index, title: (pl.title || ''),
+               html: String(pl.html), count: count, colW: xColW, gap: xGap, step: xStep,
+               // 排版口径签名（视口高 × 列步长）：窗口期内若真发生过改口径的重排（转屏 / 改字号边距），
+               //    这套预排就作废 —— 落地时据此放弃「免重建」，让 Java 回送的正文按新口径整章重排。
+               vp: htmlClientH + 'x' + htmlStep,
+               box: box, strip: strip };
+    box.__xtBox = xt;
+    // 待命盒只留「脚下这一头」：站章首只可能往回跨、站章末只可能往前跨；
+    //    只有单页章两头都是章界，才允许两只并存（各是一条整章 DOM，白养不起）
+    if (htmlPageCount > 1) dropHtmlXBox(dir > 0 ? '-1' : '1');
+    dropHtmlXBox(key);
+    delete _htmlXMiss[key];
+    _htmlXBoxes[key] = xt;
+    xt.node = function (i) {
+        if (i < 0 || i >= xt.count) return null;
+        xt.strip.style.transform = 'translateX(' + (-i * xt.step) + 'px)';
+        xt.box.className = 'turn-page html-snap';   // 交出去就是一枚铺满视口的页节点（覆盖档要靠它取投影）
+        // 待命期间可能翻过日夜 —— 逐帧刷色的那一路只扫宿主里的快照，不碰停在视口层的盒子
+        xt.box.style.backgroundColor = bgColor;
+        xt.box.style.visibility = 'visible';
+        return xt.box;
+    };
+    xt.land = function () { swapToAdjacentHtmlChapter(xt); };
+    return xt;
+}
+
+/** 邻章转正：那条排好的纸带不搬位置，只换身份 —— 预排盒当上「正文卡片」，旧卡片整只摘掉。
+ *  旧写法是把纸带 replaceChild 进 #htmlStack，可那条多列流已经按旧父亲排完了，换个父亲就整个重排
+ *  一遍（真机量到落地前后各 50ms）。盒子与卡片的几何逐像素相同（都是视口层的绝对铺满子节点），
+ *  所以换身份与换 DOM 等价，却一次布局都不用付。 */
+function swapToAdjacentHtmlChapter(xt) {
+    var c = document.getElementById('htmlContent');
+    var box = xt.box;
+    var promoted = false;
+    if (c && box && box.parentNode === c) {
+        promoted = true;
+        var old = htmlStackEl(c);
+        box.id = 'htmlStack';                   // 卡片身份交接到盒子身上，旧卡片在下面同拍摘掉
+        box.className = '';                     // .turn-page/.html-snap 都是动画期的身份，交还给 #htmlStack 的 CSS
+        box.style.cssText = '';                 // 内联的定位/纸面/藏匿整串清掉，别让它们压住 CSS
+        box.__xtBox = null;                     // 它已经不是「待命的盒子」了，别被回收逻辑当盒子停回去
+        if (xt.strip) {
+            xt.strip.id = 'htmlColumns';              // 真纸带的身份随它交出去，旧卡片同拍摘掉，全文档只此一条
+            xt.strip.style.visibility = '';     // 动画期间可能被 putBlank 藏过，转正必须露面
+            xt.strip.style.willChange = '';     // 真纸带要自己那层合成层，之后每次平移才不掉帧
+        }
+        if (old && old !== box && old.parentNode) old.parentNode.removeChild(old);
+    }
+    // 章已经换了：两头待命的预排盒都是按旧章位置排的，本只升格为卡片，其余作废
+    disposeHtmlXStrip(xt);
+    // 窗口期内排版口径变过 → 这条预排纸带已经不合新口径，只换身份、不给「免重建」的资格
+    var stale = !!xt.vp && xt.vp !== (htmlClientH + 'x' + htmlStep);
+    htmlPageCount = xt.count;
+    htmlColW = xt.colW; htmlGap = xt.gap; htmlStep = xt.step;
+    chapterTitle = xt.title;
+    currentChapterIndex = xt.index;
+    _htmlXReady = (promoted && !stale) ? xt.html : null;   // Java 回送同一章的同一份 HTML 时，据此免掉一次重建
+    // 旧章的出血底图是画在视口层上的，随旧纸带一起撤下（邻章按判据不含整页画/底图，见上面那道闸门）
+    clearFullscreenBackground(c);
+    // 池里的镜像是旧章纸带的副本，此刻真纸带已经换成邻章那条，留着只会演出一页旧正文
+    htmlDisposeMirrors();
+    beginCrossChapterWindow();
+}
+
+/** 取邻章：待命盒命中就零成本交出去（只改一次位移），没命中才当场排 ——
+ *  拖起手那一下 50~133ms 的停顿就是「当场排」，靠 htmlScheduleXWarm 把它挪到用户停着不动时付掉。 */
+function htmlAdjacent(dir) {
+    var xt = _htmlXBoxes[dir > 0 ? '1' : '-1'];
+    return xt || tryFetchAdjacentChapterHtml(dir);
+}
+
+/* 空闲预热：补完镜像池再排「脚下这一头」的邻章。判据只看页码 —— 站章首只可能往回跨，
+   站章末只可能往前跨，中间页用不着邻章，一条 DOM 都不多养。
+   问过一次没有邻章（首/末章）就记一笔，TTL 内不再白敲同步桥调用；拖拽那一路不受此限。 */
+var _htmlXTimer = 0;
+var _HTML_X_MISS_TTL = 5000;
+
+function htmlScheduleXWarm() {
+    if (_htmlXTimer || !htmlMode || htmlSim || htmlFlow !== 'paginated') return;
+    _htmlXTimer = setTimeout(function () {
+        _htmlXTimer = 0;
+        if (!htmlMode || htmlSim || htmlFlow !== 'paginated') return;
+        // 换章窗口没关（Java 正文还没确认落地）就再等一拍：那时 currentChapterIndex 已经是新章，
+        // 拿旧的待命盒只会排出错邻居；手指还按着也再等一拍 —— 这一排是整章量版（真机 70~90ms），
+        // 落在 touchStart 与首个 touchMove 之间，就等于把「跟手」的第一帧垫上这段账。
+        if (_turn || isAnimating || _xTurnBusy || drag) { htmlScheduleXWarm(); return; }
+        if (htmlPage <= 0) htmlWarmXBox(-1);
+        if (htmlPage >= htmlPageCount - 1) htmlWarmXBox(1);
+    }, 340);
+}
+
+function htmlWarmXBox(dir) {
+    var key = dir > 0 ? '1' : '-1';
+    if (_htmlXBoxes[key]) return;
+    var miss = _htmlXMiss[key];
+    if (miss && Date.now() - miss < _HTML_X_MISS_TTL) return;
+    htmlAdjacent(dir);   // 成功进 _htmlXBoxes，没邻章进 _htmlXMiss，调用方不看返回值
+}
 
 // 「上下」档的滚动是 #htmlContent 自己的原生滚动，不经过任何翻页函数：不接 scroll 事件的话，
 // 页脚页码会一直停在进档那一刻，退出后 Java 记的位置也还是旧的。
@@ -3662,7 +4311,9 @@ document.addEventListener('touchmove', function (e) {
     st.dir = dy > 0 ? 1 : -1;           // over 取的是绝对值，方向只能看手指本身
     st.over += over;
     var now = Date.now(), dt = now - st.ts;
-    if (dt > 0) st.v = st.v * 0.7 + (Math.abs(over) / dt) * 0.3;
+    // 0.4 = canvas 路径 applyDamping 的拉扯系数：那边的速度取的是阻尼后的显示位移，
+    // 这边原生滚动无法阻尼，故按同一比例折算，两档的甩动门槛才对得上。
+    if (dt > 0) st.v = st.v * 0.7 + (over * 0.4 / dt) * 0.3;
     st.ts = now;
 }, { passive: true, capture: true });
 
@@ -3670,14 +4321,14 @@ document.addEventListener('touchend', function () {
     var st = _htmlEdgeDrag;
     _htmlEdgeDrag = null;
     if (!st || !st.dir) return;
-    if (st.over > htmlClientHeight() * 0.12 || st.v > 0.5) htmlBoundarySwap(st.dir);
+    if (st.over > htmlClientHeight() * 0.12 || st.v > 0.5) pagerBoundaryOnce(st.dir);
 }, { passive: true, capture: true });
 
 document.addEventListener('touchcancel', function () { _htmlEdgeDrag = null; }, { passive: true, capture: true });
 
 /**
- * 带翻页动画地切到指定页。覆盖 / 平移 / 淡入各按自己的动效演；
- * 仿真由 turn.js 卷页（见 htmlSimTurn），上下滚动模式退化为纵向滚动。
+ * 带翻页动画地切到指定页：动效与 canvas 一路共用同一套动画层（见 turnBegin），
+ * 仿真由 turn.js 卷页，上下滚动档退化为纵向滚动。
  */
 function htmlTurnTo(p, animate) {
     var c = document.getElementById('htmlContent');
@@ -3686,29 +4337,17 @@ function htmlTurnTo(p, animate) {
     if (p < 0) p = 0;
     if (p >= htmlPageCount) p = htmlPageCount - 1;
     if (p === htmlPage) return;
-    if (htmlFlow === 'scrolled') {
-        htmlPage = p;
-        c.scrollTop = p * htmlClientHeight();
-        notifyJavaPageChange();
-        return;
-    }
-    if (_htmlTurn) htmlEndTurn(true);   // 在途的拖拽/动画先落地，避免两套动画叠加把纸带画歪
+    if (htmlFlow === 'scrolled') { HtmlPaging.scrollGoto(p); return; }
+    turnSettle();                     // 在途的拖拽/动画先落地，避免两套动画叠加把纸带画歪
+    if (htmlSim) { HtmlPaging.simGoto(p); return; }
     var from = htmlPage, dir = p > from ? 1 : -1;
     var mode = (animate === false || pageTurnMode === 'none') ? null : pageTurnMode;
     if (mode !== 'cover' && mode !== 'slide' && mode !== 'fade') mode = null;
-    if (htmlSim) {
-        htmlPage = p;
-        // 卷页到位后 turned 回调会上报；但目标页已在视野内时 turn.js 不回调，这里兜底同步一次
-        if (htmlSimGoTo(p)) { notifyJavaPageChange(); updateHtmlHeaderFooter(); return; }
+    if (mode && turnBegin({ base: HtmlPaging, from: from, to: p, dir: dir, mode: mode })) {
+        turnRun(0, 1, ANIM_DURATION);
+        return;
     }
-    htmlPage = p;
-    if (mode && htmlBeginTurn(from, p, dir, mode)) {
-        htmlRunTurn(0, 1, ANIM_DURATION);
-    } else {
-        htmlSetStripPage(p);
-    }
-    notifyJavaPageChange();
-    updateHtmlHeaderFooter();
+    HtmlPaging.show(p);
 }
 
 // ---- 仿真：turn.js 直接吃快照页（canvas 路径喂的是整页位图，两条路互不影响） ----
@@ -3719,6 +4358,31 @@ function htmlSimPage(p) {
     if (!node) return null;
     node.className += ' page p' + (p + 1);
     return node;
+}
+
+/**
+ * 把松手接管绑到书本里的书纸上 —— 必须在交进书本之后绑。
+ * released 由折页节点触发、冒泡到书本，挂在节点上才早于书本那套「先拆折页再重卷」的判定
+ * （见 simTakeRelease）。先前绑在节点上等于没绑：turn.js 给折页做包装盒时要把节点搬进盒子，
+ * 这一搬把节点上的 jQuery 事件数据整个清掉（真机查书本内 .page 节点，released 绑定数恒为 0），
+ * 于是接管从没赶上松手，松手那一帧白丢 100ms 布局、折页冻住再重卷。
+ * canvas 那一路的 #flipbook 不走这里，不受影响。
+ */
+function htmlSimBindRelease() {
+    var host = document.getElementById('htmlFlipbook');
+    if (!host) return;
+    var nodes = host.querySelectorAll('.html-snap');
+    for (var i = 0; i < nodes.length; i++) {
+        var ev = $._data(nodes[i], 'events');
+        if (ev && ev.released) continue;
+        $(nodes[i]).on('released', simTakeRelease);
+    }
+}
+
+/** 交一页进书本：addPage 会把节点搬进包装盒，搬完才绑得住 */
+function htmlSimAddPage(fb, el, n) {
+    fb.turn('addPage', el, n);
+    htmlSimBindRelease();
 }
 
 /** 预置当前页前后的书纸：turn.js 拖拽折页阶段不触发 missing，缺页会露出空白 */
@@ -3732,7 +4396,7 @@ function htmlSimEnsure(center) {
             var idx = center + off;
             if (idx < 0 || idx >= htmlPageCount || data.pageObjs[idx + 1]) continue;
             var el = htmlSimPage(idx);
-            if (el) fb.turn('addPage', el, idx + 1);
+            if (el) htmlSimAddPage(fb, el, idx + 1);
         }
     } catch (e) {
         console.error('htmlSimEnsure 异常: ' + e);
@@ -3757,6 +4421,8 @@ function htmlInitSim() {
     var cols = document.getElementById('htmlColumns');
     if (cols) cols.style.visibility = 'hidden';
     htmlSim = true;
+    // 折页层是 turn.js 在翻页那一刻才造的，只能靠样式表规则提前备好纸面（同 canvas 一路的理由）
+    syncSimulationBackground();
     $('#htmlFlipbook').turn({
         width: htmlViewW(),
         height: htmlClientH || htmlClientHeight(),
@@ -3772,10 +4438,22 @@ function htmlInitSim() {
                 isAnimating = true;
                 htmlPage = Math.max(0, Math.min(htmlPageCount - 1, page - 1));
             },
+            end: function (event, opts, completed) {
+                // 折页被取消（拖拽未过中线、被下一次 turn('page') 打断）时 turn.js 不回 turned，
+                // 而本路的 isAnimating 只在 turned 里清 —— 不在此兜底就再也没人能解锁，整本书点不动。
+                // canvas 那一路有 when.end + simScheduleFoldCleanup 双保险，这里补齐同一口径。
+                if (completed) return;
+                htmlSimClearSettle();
+                isAnimating = false;
+                updateHtmlHeaderFooter();
+            },
             turned: function (event, page) {
+                htmlSimClearSettle();
                 isAnimating = false;
                 htmlPage = Math.max(0, Math.min(htmlPageCount - 1, page - 1));
-                htmlSimEnsure(htmlPage);
+                // 落地这一帧不叠第二趟重排：turn.js 刚在 _fitPage 里把书纸摘了又插（真机 90~150ms），
+                // 当场再补五页副本会把新页稳定后的第一帧一起吞掉。副本只是给下一次拖拽预备的，晚一帧无妨。
+                setTimeout(function () { htmlSimEnsure(htmlPage); }, 0);
                 notifyJavaPageChange();
                 updateHtmlHeaderFooter();
             },
@@ -3785,18 +4463,34 @@ function htmlInitSim() {
                     var idx = missingPages[i] - 1;
                     if (idx < 0 || idx >= htmlPageCount) continue;
                     var el = htmlSimPage(idx);
-                    if (el) fb.turn('addPage', el, missingPages[i]);
+                    if (el) htmlSimAddPage(fb, el, missingPages[i]);
                 }
             }
         }
     });
+    htmlSimBindRelease();     // 首叶也是 addPage 之前就绑的，搬过之后同样作废，统一在这里补
     setTimeout(function () { htmlSimEnsure(htmlPage); }, 0);
+    // 记下这本是按哪个签名建的：下一次重排若签名全等，就原样留着它（见 htmlLayerSignature）
+    _htmlLayerSig = htmlLayerSignature();
 }
 
 function htmlDestroySim() {
+    _htmlLayerSig = '';      // 书一拆，「按哪个签名建的」就作废了
+    // 书本容器接下来可能被整个清空，池里的镜像挂在同一个容器里，先作废免得留下指向已摘节点的额度
+    htmlDisposeMirrors();
+    htmlSimClearSettle();
     try {
         var fb = $('#htmlFlipbook');
-        if (fb.length && fb.turn('is')) fb.turn('destroy');
+        if (fb.length && fb.turn('is')) {
+            // 先让整本书离体，再交给 turn.js 拆：它的 destroy 是逐页 removePage，每页都要重排
+            // 剩下所有页的包装盒（真机 6 页 ≈ 400ms，全耗在同步布局上）。摘出文档后这些几何读写
+            // 不再触发布局，剩下的只是对象清理。detach 会让 turn.js 摸不到 parent()，故它挂在
+            // host 上的 start 监听必须由我们先摘掉，否则每建一本书就漏一个指向死书的回调。
+            var d = fb.data(), onStart = d && d.eventHandlers && d.eventHandlers.start;
+            if (onStart) fb.parent().unbind('start', onStart);
+            fb.detach();
+            fb.turn('destroy');
+        }
     } catch (e) {
         console.error('htmlDestroySim 异常: ' + e);
     }
@@ -3804,7 +4498,7 @@ function htmlDestroySim() {
     var host = htmlTurnHost();
     if (host) {
         host.classList.remove('html-sim');
-        if (!_htmlTurn) { host.innerHTML = ''; host.style.display = 'none'; }
+        if (!_turn) { host.innerHTML = ''; host.style.display = 'none'; }
     }
     var cols = document.getElementById('htmlColumns');
     if (cols) {
@@ -3816,27 +4510,62 @@ function htmlDestroySim() {
 }
 
 /** 仿真模式下的跳页：交给 turn.js 卷过去（与 canvas 路径同一口径） */
+var _htmlSimSettleTimer = 0;
+
+function htmlSimClearSettle() {
+    if (_htmlSimSettleTimer) { clearTimeout(_htmlSimSettleTimer); _htmlSimSettleTimer = 0; }
+}
+
 function htmlSimGoTo(p) {
     if (!htmlSim) return false;
     try {
         $('#htmlFlipbook').turn('page', p + 1);
+        // 程序化卷页再兜一层：turn.js 若既不回 turned 也不回 end（折页被打断后可能两个都吞掉），
+        // 900ms（> 卷页时长 500ms）后强制解锁，否则 isAnimating 会把翻页彻底锁死。
+        htmlSimClearSettle();
+        _htmlSimSettleTimer = setTimeout(function () {
+            _htmlSimSettleTimer = 0;
+            if (!htmlSim) return;
+            isAnimating = false;
+            htmlSimEnsure(htmlPage);
+            updateHtmlHeaderFooter();
+        }, 900);
         return true;
     } catch (e) {
         return false;
     }
 }
 
-/** htmlMode 下「没有越界回调」的档位补一次换章：仿真档 turn.js 在首页/末页卷不动也不回调，
- *  上下档滚到顶/底后原生滚动吃住。与 canvas 路径共用 _boundaryPending 守卫，防一次手势连跳两章。 */
-function htmlBoundarySwap(dir) {
-    if (_boundaryPending) return;
-    _boundaryPending = true;
-    setTimeout(function () { _boundaryPending = false; }, 1500);
-    try { if (dir > 0) Android.onChapterEnd(); else Android.onChapterStart(); } catch (e) {}
+/**
+ * 无动画把书本摆到第 p 页（0 起）—— 进书定位、重排还原位置、换章落地都属「摆」不属「翻」。
+ * turn.js 的 page 只有在「初始化那一趟（done=false）」或目标已在当前视图里才走 _fitPage（原地摆），
+ * 否则一律 _turnPage 演一次卷页。先前这些位置都交给 simGoto，于是恢复阅读位置时先亮本章首页、
+ * 再当着用户卷到目标页（真机观感：进阅读器闪一下并带一次翻页动画；改字号一类重排同理）。
+ * done 只被三处读：addPage 借它决定要不要先 stop（_fitPage 自己会 stop，与初始化那趟同序），
+ * direction 借它决定要不要重设尺寸，page 借它选路径 —— 这一趟同步借完即还原，不外泄。
+ */
+function htmlSimPlace(p) {
+    if (!htmlSim) return false;
+    var fb = $('#htmlFlipbook');
+    var d = fb.data();
+    if (!d) return false;
+    var wasDone = d.done;
+    d.done = false;
+    try {
+        fb.turn('page', p + 1);
+    } catch (e) {
+        d.done = wasDone;
+        return false;
+    }
+    d.done = wasDone;
+    htmlPage = Math.max(0, Math.min(htmlPageCount - 1, p));
+    updateHtmlHeaderFooter();
+    return true;
 }
 
 // turn.js 在书本元素上 stopPropagation，冒泡阶段的监听永远收不到（canvas 路径踩过同一坑），
 // 所以章界判定也必须挂在捕获阶段。只记起点，判定放在 touchend，普通卷页仍交给 turn.js。
+// 越界判定落在末页/首页时交给 pagerBoundaryOnce —— 仿真档 turn.js 卷不动也不回调，得自己补一次换章。
 var _htmlSimSwipe = null;
 document.addEventListener('touchstart', function (e) {
     if (!htmlSim) { _htmlSimSwipe = null; return; }
@@ -3852,54 +4581,18 @@ document.addEventListener('touchend', function (e) {
     var dx = ct.clientX - s.x;
     if (Math.abs(dx) < 30 || Math.abs(dx) <= Math.abs(ct.clientY - s.y)) return;
     if (dx < 0) {
-        if (htmlPage >= htmlPageCount - 1) htmlBoundarySwap(1);
+        if (htmlPage >= htmlPageCount - 1) pagerBoundaryOnce(1);
     } else if (htmlPage <= 0) {
-        htmlBoundarySwap(-1);
+        pagerBoundaryOnce(-1);
     }
 }, true);
 document.addEventListener('touchcancel', function () { _htmlSimSwipe = null; }, true);
 
 /** 换章 / 重排 / 改档位时拆掉整个动画层，保证不留半张快照 */
 function htmlResetTurnLayer() {
-    _htmlDrag = null;
-    htmlEndTurn(true);
+    turnReset();
     htmlDestroySim();
-}
-function htmlNextPage() {
-    if (htmlFlow === 'scrolled') {
-        var c = document.getElementById('htmlContent');
-        if (!c) return;
-        if (c.scrollTop + c.clientHeight + 2 >= c.scrollHeight) {
-            try { Android.onChapterEnd(); } catch (e) {}
-            return;
-        }
-        c.scrollTop = Math.min(c.scrollHeight - c.clientHeight, c.scrollTop + c.clientHeight);
-        notifyJavaPageChange();
-        return;
-    }
-    if (htmlPage >= htmlPageCount - 1) {
-        try { Android.onChapterEnd(); } catch (e) {}
-        return;
-    }
-    htmlTurnTo(htmlPage + 1, true);
-}
-function htmlPrevPage() {
-    if (htmlFlow === 'scrolled') {
-        var c = document.getElementById('htmlContent');
-        if (!c) return;
-        if (c.scrollTop <= 0) {
-            try { Android.onChapterStart(); } catch (e) {}
-            return;
-        }
-        c.scrollTop = Math.max(0, c.scrollTop - c.clientHeight);
-        notifyJavaPageChange();
-        return;
-    }
-    if (htmlPage <= 0) {
-        try { Android.onChapterStart(); } catch (e) {}
-        return;
-    }
-    htmlTurnTo(htmlPage - 1, true);
+    disposeHtmlXStrip();   // 邻章排版盒与新正文的列宽无关，一并丢掉
 }
 function htmlCurrentPageText() {
     var cols = document.getElementById('htmlColumns');
@@ -3912,38 +4605,19 @@ window.addEventListener('resize', function () {
     if (htmlMode) applyHtmlTheme(true);
 });
 
-// HTML 富文本模式下的「点击三分区」处理：左 1/3 上一页、右 1/3 下一页、中间 1/3 切换导航栏。
-// 由 Android 端在「仿真翻页」分支回调（该模式下 Android 的 onSingleTapConfirmed 不自行处理点击）；
-// 非仿真模式仍由 Android 三分区统一下发，因此这里不再注册容器级触摸监听——
-// 否则一次点击会被两端各处理一次，表现为「点一下翻两屏」。
-//
-// ★ 参数是「相对 WebView 宽度的比例」(0~1)，不是像素！
-//   原因：Android 传过来的是**物理像素**（1080 宽的屏就是 0~1080），
-//   而这里的 window.innerWidth 是 **CSS 像素**（1080 / dpr3 ≈ 360）。
-//   若直接拿物理像素和 window.innerWidth 比，屏幕正中间(540)会被判成
-//   「> 2w/3 = 240」→ 走 nextPage() 翻页，于是点屏幕中央只会翻页、
-//   永远调不出上下导航栏（用户表现为「点击不显示导航栏」）。
+// HTML 富文本模式下的「点击三分区」：由 Android 端在「仿真翻页」分支回调。
+// canvas 一路必须在这里返回 false —— 它的仿真点击已由 document 级触摸处理（见 _simTapStart 那段）
+// 接管，两端各处理一次就是「点一下翻两页」。
 function onAndroidTap(ratio) {
-    if (!htmlMode) return false;   // 非 HTML 模式：保持原有前端行为不变
-    var f = ratio / 1;             // 归一化比例 0~1
-    if (!isFinite(f)) return false;
-    if (f < 0) f = 0;
-    if (f > 1) f = 1;
-    if (f < 1 / 3) {
-        prevPage();
-    } else if (f > 2 / 3) {
-        nextPage();
-    } else {
-        try { Android.toggleNavigation(); } catch (e) {}
-    }
-    return true;
+    if (!htmlMode) return false;
+    return pagerTapZone(ratio);
 }
 
 function setFontSize(size) {
     fontSize = size;
     titleFontSize = size + 4;
     topPadding = (vPadding >= 0) ? vPadding : padding + fontSize; // 字号变化时同步顶部边距（显式上下边距优先）
-    if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：直接套用样式，跳过 canvas 重排
+    if (htmlMode) { rebuildHtml('layout'); return; }   // HTML 模式：字号进列高，要重排（批量设置时只登记）
     if (currentContent) {
         if (!_deferDraw) {
             relayoutAndRedraw();
@@ -3959,7 +4633,7 @@ function setFontFamily(name) {
     } else {
         fontFamily = name;
     }
-    if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：直接套用样式，跳过 canvas 重排
+    if (htmlMode) { rebuildHtml('layout'); return; }   // HTML 模式：换字面要重排（字体量度不同，列数会变）
     if (currentContent) {
         if (!_deferDraw) {
             relayoutAndRedraw();
@@ -3979,7 +4653,7 @@ function setTypesetting(lineRatio, paraGap, padLR, padTB) {
     padding = padLR;
     vPadding = padTB;
     topPadding = (vPadding >= 0) ? vPadding : padding + fontSize;
-    if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：直接套用样式，跳过 canvas 重排
+    if (htmlMode) { rebuildHtml('layout'); return; }   // HTML 模式：行距/段距/边距都进列高，要重排
     if (currentContent) {
         if (!_deferDraw) {
             relayoutAndRedraw();
@@ -3996,9 +4670,11 @@ function loadCustomFont(src, name) {
         while (!entry.done) {
             if (entry.value.family === '"' + name + '"' || entry.value.family === name) {
                 fontFamily = name;
-                if (currentContent && !_deferDraw) {
+                // 纸带一路不看 currentContent（那是 canvas 的正文缓存），字体到位就得重排
+                if (htmlMode || (currentContent && !_deferDraw)) {
                     // 已注册字体再次切换：同样等该具体字体可用后再重绘，避免首绘回退
                     var _dFn = function() {
+                        if (htmlMode) { _htmlLayoutBump++; rebuildHtml('layout'); return; }
                         relayoutAndRedraw();
                         if (simulationActive) reinitSimulation();
                     };
@@ -4026,6 +4702,7 @@ function loadCustomFont(src, name) {
         // 刚加入的自定义字体（首绘仍回退系统字体）。改用 document.fonts.load('18px 字体名')
         // 显式等待「该具体字体」真正可用后再重排重绘；setTimeout 兜底保证即使 Promise 异常也必重绘。
         var redrawFn = function() {
+            if (htmlMode) { _htmlLayoutBump++; rebuildHtml('layout'); return; }
             if (currentContent) {
                 relayoutAndRedraw();
                 if (simulationActive) reinitSimulation();
@@ -4052,7 +4729,7 @@ function loadCustomFont(src, name) {
 
 function setBackgroundColor(color) {
     bgColor = color;
-    if (htmlMode) { applyHtmlTheme(); return; }
+    if (htmlMode) { rebuildHtml('colors'); return; }   // HTML 模式：底色不影响排版，只刷配色
     // ✅ 在仿真模式下，通过样式表规则统一更新容器和 wrapper 背景（含纹理同步，折角不镂空）
     if (_simulationPlaceholderActive || simulationActive) {
         $('#flipbook .page-div').css('background-color', color);
@@ -4066,7 +4743,7 @@ function setBackgroundColor(color) {
 
 function setTextColor(color) {
     textColor = color;
-    if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：直接套用样式，跳过 canvas 重排
+    if (htmlMode) { rebuildHtml('colors'); return; }   // HTML 模式：文字色靠继承，不重排
     for (var i = 0; i < pages.length; i++) {
         for (var j = 0; j < pages[i].length; j++) {
             pages[i][j].color = color;
@@ -4079,7 +4756,7 @@ function setTextColor(color) {
 }
 
 function setBackgroundTexture(src) {
-    if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：纹理暂不适用，仅套用当前底色
+    if (htmlMode) { rebuildHtml('colors'); return; }   // HTML 模式：用户纹理不参与（正文自带底图），只刷配色
     // 如果 bgTextureImg 已经加载了同一张图，直接重绘（避免重复异步加载）
     if (bgTextureImg && bgTextureImg.complete && bgTextureImg.src && bgTextureImg.src.indexOf(src) !== -1) {
         if (currentContent && !_deferDraw) {
@@ -4116,7 +4793,7 @@ function setBackgroundTexture(src) {
 
 function clearBackgroundTexture() {
     bgTextureImg = null;
-    if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：仅套用当前底色
+    if (htmlMode) { rebuildHtml('colors'); return; }   // HTML 模式：同上，只刷配色
     // ✅ 仿真模式（占位/激活）：清除纹理只留纯色（样式表规则统一同步）
     if (_simulationPlaceholderActive) {
         $('#flipbook .page-div').css('background-image', 'none');
@@ -4140,7 +4817,7 @@ function setNightMode(enable) {
         bgColor = '#F5F5DC';
         textColor = '#333333';
     }
-    if (htmlMode) { applyHtmlTheme(); return; }   // HTML 模式：直接套用日/夜配色，跳过 canvas 重排
+    if (htmlMode) { rebuildHtml('colors'); return; }   // HTML 模式：日/夜只换配色（含快照页纸面），不重排
     // ✅ 夜间模式切换时立即更新仿真容器和 wrapper 背景（纹理已清除，样式表统一同步）
     if (_simulationPlaceholderActive || simulationActive) {
         $('#flipbook .page-div').css({
@@ -4253,12 +4930,21 @@ function applyHtmlThemeColors() {
     c.classList.toggle('html-night', !!isNightMode);
     c.style.backgroundColor = bgColor;
     c.style.color = textColor;
+    // 在途的快照页不吃上面这两行（它们各自带一份纸面底色），不逐张跟上就会「字已经入夜、纸还是日间」
+    var host = htmlTurnHost();
+    if (host && host.firstChild) {
+        var paper = htmlPaper();
+        var pages = host.querySelectorAll('.html-snap,.turn-back');
+        for (var i = 0; i < pages.length; i++) paintHtmlPaper(pages[i], paper);
+    }
+    // 仿真书本的折页层不在上面这个查询里（turn.js 自己造节点），跟着同一次配色重发规则
+    if (htmlSim) syncSimulationBackground();
 }
 
 // 设置页眉页脚显示
 function setShowHeaderFooter(show) {
     showHeaderFooter = show;
-    if (htmlMode) { applyHtmlFlow(true); return; }   // HTML 模式：重排版预留空间并刷新覆盖层
+    if (htmlMode) { rebuildHtml('layout'); return; }   // HTML 模式：页眉页脚的预留空间变了，重排
     if (!_deferDraw) {
         redrawCurrent();
         if (simulationActive) reinitSimulation();
@@ -4278,7 +4964,7 @@ function setAutoPageCountdown(sec) {
 // 设置页眉页脚字体大小
 function setHeaderFooterFontSize(size) {
     headerFooterFontSize = size;
-    if (htmlMode) { applyHtmlFlow(true); return; }   // HTML 模式：预留空间随字号变化，刷新覆盖层
+    if (htmlMode) { rebuildHtml('layout'); return; }   // HTML 模式：预留空间随字号变化，重排
     if (!_deferDraw) {
         redrawCurrent();
         if (simulationActive) reinitSimulation();
@@ -4312,6 +4998,7 @@ function beginSettingsBatch() {
 
 function finishSettingsBatch() {
     _deferDraw = false;
+    if (htmlMode) { flushHtmlRebuild(); return; }   // 纸带一路：整批只重建一次（配色档连在途快照页一起刷）
     if (currentContent) {
         drawPage(currentPage);
         notifyJavaPageChange();

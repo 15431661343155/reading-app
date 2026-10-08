@@ -237,6 +237,10 @@ public class ReadActivity extends BaseActivity {
     /** 本站章节加载失败覆盖层（插画 + 文案 + 「再试一次」按钮，透明底适配各种阅读底色） */
     private android.widget.LinearLayout layoutLoadFail;
     private TextView tvLoadFailMsg;
+    /** 进书遮罩：正文画到位前压住 WebView（初始空白文档的整屏白 / 上一本书的旧页面） */
+    private View entryCover;
+    /** 复用池里那份文档是否已经停在当前这本书上：是就秒开，不必再盖进书遮罩 */
+    private boolean pooledDocShowsThisBook;
 
     // ========== 电量时间 ==========
     final Handler timeUpdateHandler = new Handler(Looper.getMainLooper());
@@ -359,6 +363,41 @@ public class ReadActivity extends BaseActivity {
     //    较早的延迟重试通过比对代次被判定为「过期」并直接丢弃，避免用旧 index（如占位章的 0）
     //    覆盖 currentChapterIndex，导致用户被拉回第一章。
     private int renderGeneration = 0;
+
+    /** 等前端「正文过完一帧」回票的挂账代次；0 = 没在等。见 {@link #awaitPainted(int)} */
+    private int paintWaitGen = 0;
+    /** 挂账上限：拿不到帧（页面不可见 / rAF 被节流）也要把遮罩收掉，不能让加载动画永远转下去 */
+    private static final long PAINT_WAIT_MS = 900L;
+    private final Runnable paintWaitTimeout = () -> {
+        if (paintWaitGen == 0) return;
+        paintWaitGen = 0;
+        setChapterLoading(false);
+    };
+
+    /**
+     * HTML 一路的渲染发出后挂账：撤「加载中」与进书遮罩要等前端回票，而不是等脚本执行完。
+     *
+     * <p>脚本回来只代表正文已提交给 JS，HTML 一路的测量/分页/定位还排在 rAF 里，合成器手里仍是
+     * 上一本书那一帧 —— 抢在取帧前掀遮罩就是「换书先进到上一本书的那一页，再刷成本书」（真机实测
+     * 100~600ms）。回票由 reader.html 的 {@code notifyJavaPainted} 在双 rAF 之后发出。
+     */
+    private void awaitPainted(final int gen) {
+        mainHandler.post(() -> {
+            paintWaitGen = gen;
+            mainHandler.removeCallbacks(paintWaitTimeout);
+            mainHandler.postDelayed(paintWaitTimeout, PAINT_WAIT_MS);
+        });
+    }
+
+    /** 前端回票（JS 线程进来）：只认当前挂账的那一代，过期票与没挂账时的票一律作废。 */
+    void onContentPainted(int gen) {
+        mainHandler.post(() -> {
+            if (gen == 0 || paintWaitGen != gen) return;
+            paintWaitGen = 0;
+            mainHandler.removeCallbacks(paintWaitTimeout);
+            setChapterLoading(false);
+        });
+    }
 
     // ==================== Long/Book 安全工具（彻底消灭 Long->long 自动拆箱 NPE） ====================
     /** currentBook.getId() 统一安全入口：外站书为 null → 返回 0，绝不会自动拆箱 */
@@ -531,6 +570,7 @@ public class ReadActivity extends BaseActivity {
         // 再由 applyChromeTheme() 派生导航栏与浮窗配色，避免首帧按默认白色算错。
         effectiveBgBase = isNightMode ? Color.parseColor("#1A1A1A")
                 : resolveBaseForMode(currentBgColor);
+        primeEntryBackground();
         applyChromeTheme();
         // 应用阅读亮屏策略（跟随系统 / 定时 / 常亮）
         applyScreenKeepAlive();
@@ -652,6 +692,7 @@ public class ReadActivity extends BaseActivity {
         // 插到容器最底层（index 0），让布局里的左右点击区 / 加载层 / 重试层等仍处于其上方
         webContainer.addView(webView, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        clearPooledDocumentIfOtherBook();
         layoutTopNav = findViewById(R.id.layout_top_nav);
         layoutBottomNav = findViewById(R.id.layout_bottom_nav);
         tvToolbarTitle = findViewById(R.id.tv_toolbar_title);
@@ -671,6 +712,7 @@ public class ReadActivity extends BaseActivity {
 
         // 章节加载中动画 + 本站/外站统一的加载失败层
         loadingChapter = findViewById(R.id.loading_chapter);
+        entryCover = findViewById(R.id.entry_cover);
         layoutLoadFail = findViewById(R.id.layout_load_fail);
         tvLoadFailMsg = findViewById(R.id.tv_load_fail_msg);
         findViewById(R.id.btn_load_fail_retry).setOnClickListener(v -> {
@@ -679,6 +721,54 @@ public class ReadActivity extends BaseActivity {
             else fetchChapterContent(currentChapterIndex);
         });
     }
+
+    /**
+     * 换书清场。复用池的 WebView 跨 Activity 常驻，挂进来时文档还停在上一本书的那一页，
+     * 而新书要先拿到目录、再回源正文才谈得上渲染 —— 这段加载期用户先读到的是上一本书的正文
+     * （加载层是透明底，遮不住）。reader.html 的 clearReaderDocument 只清两路渲染与位置状态，
+     * 主题底色/字体/纹理不动，也不重载文档，所以复用池省下的冷启动不会还回去。
+     *
+     * <p>同一本书退出再进时，场上那一页恰好就是上次的落点，属于「秒开」的一部分，不清。
+     */
+    private void clearPooledDocumentIfOtherBook() {
+        String mine = bookRecordKey();
+        String shown = ReaderWebViewPool.displayedBookKey();
+        pooledDocShowsThisBook = ReaderWebViewPool.isLoaded() && mine.equals(shown);
+        if (ReaderWebViewPool.isLoaded() && shown != null && !shown.equals(mine)) {
+            webView.evaluateJavascript("clearReaderDocument()", null);
+        }
+        ReaderWebViewPool.markDisplayedBookKey(mine);
+    }
+
+    /**
+     * 进书第一帧的底色由 Android 侧垫好，正文没画到位前再用「进书遮罩」把 WebView 压住。
+     *
+     * <p>这段空窗（复用池文档就绪 + 目录 + 回源正文，真机 0.6~1s）里 WebView 画的是 Chromium 的
+     * 「初始空白文档」—— 一整屏白，{@code setBackgroundColor} 压不住它，透明底的「章节加载中」遮罩
+     * 也遮不住它，于是「进阅读器闪一下」。换书时空窗里露出的则是上一本书的正文。
+     * 所以窗口/容器/WebView 三处底色照垫（转场动画与遮罩边缘都靠它），遮罩本身再压一层纸色，
+     * 正文渲染回调到达时随「加载中」一起撤。同一本书退出再进（文档还停在这本书上）不压，秒开不受影响。
+     */
+    private void primeEntryBackground() {
+        View container = findViewById(R.id.webview_container);
+        if (container != null) container.setBackgroundColor(effectiveBgBase);
+        if (webView != null) webView.setBackgroundColor(effectiveBgBase);
+        getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(effectiveBgBase));
+        applyEntryCover();
+    }
+
+    /** 按「池里那份文档属于谁」决定进书遮罩亮不亮：异书或全新文档才压，同书秒开不挡。 */
+    private void applyEntryCover() {
+        if (entryCover == null) return;
+        entryCover.setBackgroundColor(effectiveBgBase);
+        entryCover.setVisibility(pooledDocShowsThisBook ? View.GONE : View.VISIBLE);
+    }
+
+    /** 进书这一趟收场：遮罩与「加载中」同时退场，之后换章不再动遮罩。 */
+    private final Runnable entryRevealRunnable = () -> {
+        if (entryCover != null) entryCover.setVisibility(View.GONE);
+        if (loadingChapter != null) loadingChapter.setVisibility(View.GONE);
+    };
 
     @SuppressLint("SetJavaScriptEnabled")
     private void setupWebView() {
@@ -923,6 +1013,18 @@ public class ReadActivity extends BaseActivity {
                     android.util.Log.w("ReadActivity", "onPageChanged 异常", t);
                 }
             });
+        }
+
+        /**
+         * 前端「正文真的过完一帧」回票（见 reader.html notifyJavaPainted）。
+         * JS 线程进来，{@link #onContentPainted(int)} 自己切主线程并按代次过滤，这里不再包一层。
+         */
+        @JavascriptInterface
+        @SuppressWarnings("unused")
+        public void onContentPainted(int gen) {
+            ReadActivity activity = getActivity();
+            if (activity == null) return;
+            activity.onContentPainted(gen);
         }
 
         @JavascriptInterface
@@ -2302,7 +2404,24 @@ public class ReadActivity extends BaseActivity {
         if (loadingChapter == null) return;
         Runnable r = () -> {
             int want = loading ? View.VISIBLE : View.GONE;
+            if (loading) {
+                // 新一轮加载开始：上一代的帧回票与超时兜底都不许再来撤这一轮的动画/遮罩
+                paintWaitGen = 0;
+                mainHandler.removeCallbacks(paintWaitTimeout);
+            }
+            if (!loading && entryCover != null
+                    && entryCover.getVisibility() == View.VISIBLE) {
+                // 进书这一趟：遮罩与「加载中」一起退。JS 渲染回调只代表内容已提交给合成器，不代表已经
+                // 画出来，立刻掀开就露出合成器里那一帧旧的白；而只掀遮罩留动画、或只留遮罩掀动画，
+                // 中间都会空出一段「既没正文也没转圈」的素纸。多压 60ms 看不出来，早掀一眼就闪一下。
+                entryCover.removeCallbacks(entryRevealRunnable);
+                entryCover.postDelayed(entryRevealRunnable, 60);
+                return;
+            }
             if (loadingChapter.getVisibility() != want) loadingChapter.setVisibility(want);
+            if (loading && entryCover != null) {
+                entryCover.removeCallbacks(entryRevealRunnable);   // 又开始加载 → 遮罩不许提前掀
+            }
         };
         if (Looper.myLooper() == Looper.getMainLooper()) r.run();
         else mainHandler.post(r);
@@ -2321,6 +2440,11 @@ public class ReadActivity extends BaseActivity {
         Runnable r = () -> {
             // 失败态要压在正文上，此时绝不能让「加载中」动画继续转
             if (loadingChapter != null) loadingChapter.setVisibility(View.GONE);
+            // 这条路径不走 setChapterLoading(false)，进书遮罩要自己收，否则失败层永远压在纸底下
+            if (entryCover != null) {
+                entryCover.removeCallbacks(entryRevealRunnable);
+                entryCover.postDelayed(entryRevealRunnable, 60);
+            }
             if (tvLoadFailMsg != null) {
                 tvLoadFailMsg.setText(msg != null && msg.length() > 0 ? msg : "加载出错，请稍后再试");
                 // 夜间底色（bgColor index 3）下用夜间正文色，其余底色用 iOS 次文字灰
@@ -2369,7 +2493,14 @@ public class ReadActivity extends BaseActivity {
         }
         if (isLocalBook) {
             // 本地书不应该走网络请求，直接尝试从本地缓存重新加载
-            if (pendingChapterIndex == chapterIndex) clearPendingChapterJump();   // 下面会同步渲染
+            // 在途跳转要的落点必须带到渲染里：向后跨章要的是「上一章末页」，清掉 pending 就等于
+            //    把用户丢回章首（邻章正文已被滑动窗口清出去时才走这条路，见 onChapterStart）。
+            int jumpPage = 1;
+            if (pendingChapterIndex == chapterIndex) {
+                jumpPage = pendingChapterPage > 0 ? pendingChapterPage
+                        : (pendingGoLastPage ? -1 : 1);
+                clearPendingChapterJump();   // 下面会同步渲染
+            }
             // 后台目录还在建：这一章读不出正文是必然的，不是「章节内容缺失」。
             //    加载动画继续转，索引发布那一刻 localIndexPoller 会重载精修目录并补发渲染。
             if (localCatalogBuilding()) {
@@ -2390,7 +2521,7 @@ public class ReadActivity extends BaseActivity {
                 //    否则翻章后进度、章节标题、上一章/下一章按钮仍停在旧章。
                 currentChapterIndex = chapterIndex;
                 updateChapterButtons();
-                renderChapterContent(chapterIndex, title, content == null ? "" : content);
+                renderChapterContent(chapterIndex, title, content == null ? "" : content, jumpPage);
                 if (!positionRestored) positionRestored = true;
             } else {
                 setChapterLoading(false);   // 既无正文也无 HTML → 不会触发渲染回调，别让动画一直转
@@ -2577,7 +2708,7 @@ public class ReadActivity extends BaseActivity {
                 js = "(function(){" +
                         "try{" +
                         "var r=loadHtmlContent(" + chapterIndex + "," + escapedTitle + "," + escapedHtml + "," +
-                        pageArg + "," + isLocalBook + "," + bookProgress + ");" +
+                        pageArg + "," + isLocalBook + "," + bookProgress + "," + myGen + ");" +
                         "return 'ok';" +
                         "}catch(e){" +
                         "return 'error:'+e.message;" +
@@ -2602,8 +2733,15 @@ public class ReadActivity extends BaseActivity {
                 // 本地书存在「纯文本是占位、但带保留样式的 HTML」（题图页等）：这种情况走 HTML 分支
                 //    照样渲染成功，纯文本却仍是占位 —— 只按纯文本判会让动画一直转下去，必须一并放行。
                 boolean htmlRendered = htmlForChapter != null && !htmlForChapter.isEmpty();
-                if (!pendingContent || htmlRendered) setChapterLoading(false);
-                if (value != null && value.startsWith("\"error:")) {
+                boolean jsErrored = value != null && value.startsWith("\"error:");
+                if (htmlRendered && !jsErrored) {
+                    // HTML 一路：撤遮罩改由前端「正文过完一帧」的回票收（见 awaitPainted 为什么不能在这里收）
+                    awaitPainted(myGen);
+                } else if (!pendingContent) {
+                    // 脚本报错时回票永远不会来，按老路子直接收，别让兜底超时拖着失败层
+                    setChapterLoading(false);
+                }
+                if (jsErrored) {
                     String errMsg = value.substring(8, value.length() - 1);
                     android.util.Log.e("ReadActivity", "JS render error: " + errMsg);
                     if (isLocalBook && htmlForChapter != null && !htmlForChapter.isEmpty()) {
@@ -2770,59 +2908,86 @@ public class ReadActivity extends BaseActivity {
 
     /**
      * 跨章无缝翻页（JS 桥）：解析邻章已就绪正文，供边界翻页复用换页动画。
-     * 返回 JSON {"index":N,"title":"...","content":"..."}；未就绪 / 异常一律返回空串。
+     * 返回 JSON {"index":N,"title":"...","content":"..."}；本地 EPUB 改回 {"index","title","html"}
+     * （纯文本分页与纸带分页不同口径，见下）。未就绪 / 异常一律返回空串。
      * 运行在 WebView 桥线程：只做只读访问（ArrayList 按索引读不会 CME；SP / LruCache 线程安全）。
      */
     String resolveAdjacentChapterPayload(int dir) {
         int target = currentChapterIndex + (dir > 0 ? 1 : -1);
         if (target < 0 || target >= chapterList.size()) return "";
+        // 本地 EPUB：当前章正以「保留样式 HTML」渲染，JS 那边是多列纸带版式，按纯文本分页演出去
+        //    必然跳变 → 邻章也只认同一模式的 HTML（连同它一起回送，由 JS 排成首/末页做无缝动画）。
+        //    邻章 HTML 拿不到（纯文本回退章）就返回空串，走原有换章加载链路。
+        String html = "";
+        if (isLocalBook && hasChapterHtml(currentChapterIndex)) {
+            html = adjacentLocalChapterHtml(target);
+            if (html.isEmpty()) return "";
+        }
         String content = null;
-        if (target < chapterContents.size()) {
-            String c = chapterContents.get(target);
-            if (!isChapterContentPending(c)) content = c;
-        }
-        if (content == null && isLocalBook) {
-            // 本地书正文：一律回源重建（与 reloadLocalChapterContent 同源）
-            try {
-                String t = chapterList.get(target).getTitle();
-                String c = localChapterText(safeBookId(), target, t);
-                if (c != null && !c.trim().isEmpty()) content = c;
-            } catch (Throwable ignored) { }
-        }
-        if (content == null && isExternalBook) {
-            // 外站书：内存 Lru → 磁盘 SP（与 tryPreloadExternalChapter 同一套缓存与 key）
-            try {
-                if (externalChapters != null && target < externalChapters.length
-                        && externalChapters[target] != null) {
-                    String[] p = externalChapters[target];
-                    String url = p.length > 1 ? p[1] : "";
-                    if (!url.isEmpty()) {
-                        String key = target + "|" + url;
-                        String c = externalContentCache.get(key);
-                        if (c == null || c.isEmpty() || isExternalFailureContent(c)) {
-                            c = readExternalContentFromDisk(key);
+        if (html.isEmpty()) {
+            if (target < chapterContents.size()) {
+                String c = chapterContents.get(target);
+                if (!isChapterContentPending(c)) content = c;
+            }
+            if (content == null && isLocalBook) {
+                // 本地书正文：一律回源重建（与 reloadLocalChapterContent 同源）
+                try {
+                    String t = chapterList.get(target).getTitle();
+                    String c = localChapterText(safeBookId(), target, t);
+                    if (c != null && !c.trim().isEmpty()) content = c;
+                } catch (Throwable ignored) { }
+            }
+            if (content == null && isExternalBook) {
+                // 外站书：内存 Lru → 磁盘 SP（与 tryPreloadExternalChapter 同一套缓存与 key）
+                try {
+                    if (externalChapters != null && target < externalChapters.length
+                            && externalChapters[target] != null) {
+                        String[] p = externalChapters[target];
+                        String url = p.length > 1 ? p[1] : "";
+                        if (!url.isEmpty()) {
+                            String key = target + "|" + url;
+                            String c = externalContentCache.get(key);
+                            if (c == null || c.isEmpty() || isExternalFailureContent(c)) {
+                                c = readExternalContentFromDisk(key);
+                            }
+                            if (c != null && !c.isEmpty() && !isExternalFailureContent(c)) content = c;
                         }
-                        if (c != null && !c.isEmpty() && !isExternalFailureContent(c)) content = c;
                     }
-                }
-            } catch (Throwable ignored) { }
+                } catch (Throwable ignored) { }
+            }
         }
         // 服务器书：内存 chapterContents 未就绪不再兜底（fetchChapterContent 的 pending 路径走网络，
         // SP 兜底会让 JS 先进新章而 Java 滞留旧章）→ 返回空串走原有加载流程。
-        if (content == null) return "";
-        // 本地书邻章带保留样式 HTML：渲染会切到 HTML 模式（版式与纯文本分页完全不同），不做动画
-        if (isLocalBook && target < chapterHtmlContents.size()
-                && chapterHtmlContents.get(target) != null && !chapterHtmlContents.get(target).isEmpty()) {
-            return "";
-        }
+        if (content == null && html.isEmpty()) return "";
+        // 当前章按纯文本渲染、邻章却带保留样式 HTML：两种版式对不上，交回加载链路
+        // （判据只查内存：TXT 懒解析永远不写 chapterHtmlContents，纯文本书因此零额外开销）
+        if (html.isEmpty() && isLocalBook && hasChapterHtml(target)) return "";
         try {
             org.json.JSONObject o = new org.json.JSONObject();
             o.put("index", target);
             String t = chapterList.get(target).getTitle();
             o.put("title", t == null ? "" : t);
-            o.put("content", content == null ? "" : content);
+            if (content != null) o.put("content", content);
+            if (!html.isEmpty()) o.put("html", html);
             return o.toString();
         } catch (Throwable t2) {
+            return "";
+        }
+    }
+
+    /** 该章是否已有「保留样式 HTML」在手 —— JS 侧 htmlMode 的同源判据（本章 HTML 非空即走纸带版式） */
+    private boolean hasChapterHtml(int index) {
+        return index >= 0 && index < chapterHtmlContents.size()
+                && chapterHtmlContents.get(index) != null && !chapterHtmlContents.get(index).isEmpty();
+    }
+
+    /** 跨章无缝用：邻章的保留样式 HTML。内存命中优先，未加载则回源重建；只读，不写回缓存列表（桥线程） */
+    private String adjacentLocalChapterHtml(int index) {
+        if (hasChapterHtml(index)) return chapterHtmlContents.get(index);
+        try {
+            String h = localChapterHtml(safeBookId(), index);
+            return h == null ? "" : h;
+        } catch (Throwable ignored) {
             return "";
         }
     }
@@ -5527,6 +5692,8 @@ public class ReadActivity extends BaseActivity {
             if (!isSameBookInstance(newBook, newIsExternal)) {
                 // 防御：正常路径书籍详情只会启动同一本书；若真的换了书，清空旧书状态整体重载
                 applyNewBookExtras(intent, newBook, newIsExternal);
+                clearPooledDocumentIfOtherBook();   // 场上还是旧书那一页，先清再等新书正文
+                applyEntryCover();                  // 清场是异步的 JS，这一段由遮罩兜住，不靠它抢时序
                 setChapterLoading(true);
                 loadChaptersFromServer();
                 return;

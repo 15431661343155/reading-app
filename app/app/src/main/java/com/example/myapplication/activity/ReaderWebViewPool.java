@@ -25,6 +25,8 @@ public final class ReaderWebViewPool {
 
     private static WebView sWebView;
     private static boolean sLoaded; // reader.html 是否已加载完成
+    /** 池里这份文档当前显示的是哪本书（{@code ReadActivity#bookRecordKey()}）；null = 还没渲染过正文 */
+    private static String sBookKey;
     private static final Object LOCK = new Object();
 
     private ReaderWebViewPool() {
@@ -83,6 +85,7 @@ public final class ReaderWebViewPool {
                 //    current 为 null 只可能是「首帧预加载还没提交」，那时 sLoaded 本就是 false，别重复加载。
                 if (current != null && !isReaderDocument(current)) {
                     sLoaded = false;
+                    sBookKey = null;        // 文档已换掉，场上不再显示任何一本书
                     try {
                         sWebView.loadUrl(READER_URL);
                     } catch (Exception e) {
@@ -122,7 +125,22 @@ public final class ReaderWebViewPool {
                 }
                 sWebView = null;
                 sLoaded = false;
+                sBookKey = null;
             }
+        }
+    }
+
+    /** 池里这份文档现在显示的是哪本书；null 表示还没渲染过任何正文（首帧预加载后就是这种状态）。 */
+    public static String displayedBookKey() {
+        synchronized (LOCK) {
+            return sBookKey;
+        }
+    }
+
+    /** 记下「这本书即将占用池里的文档」，由挂接 WebView 的 ReadActivity 调用。 */
+    public static void markDisplayedBookKey(String key) {
+        synchronized (LOCK) {
+            sBookKey = key;
         }
     }
 }

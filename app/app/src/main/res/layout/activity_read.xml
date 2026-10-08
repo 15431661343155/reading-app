@@ -14,6 +14,16 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
+        <!-- 进书遮罩：正文真正画到位之前把 WebView 整个盖住。
+             复用池刚挂上来时 Chromium 还在渲染「初始空白文档」，那是一整屏白（setBackgroundColor 也压不住），
+             换书时文档又还停在上一本书的那一页 —— 两种情况都由这一层垫成纸色，「加载中」压在它上面。
+             底色与显隐由 ReadActivity.primeEntryBackground 按当前偏好决定：同一本书秒开时不亮，不挡秒开。
+             放在 WebView（动态插到 index 0）之后、点击热区与加载层之前，只压正文，不吃点击。 -->
+        <View
+            android:id="@+id/entry_cover"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
         <!-- 左右点击翻页区域 -->
         <View
             android:id="@+id/view_left_tap"
