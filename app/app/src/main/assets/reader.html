@@ -2638,7 +2638,7 @@ function simBookEl() {
 
 /** 此刻有没有折页真正在途（turn.js 只在这种情况下才会发 released） */
 function simFoldBusy() {
-    var el = htmlSim ? document.getElementById('htmlFlipbook') : null;
+    var el = simBookEl();
     if (!el || !window.$) return false;
     try {
         var d = $(el).data();
@@ -2857,14 +2857,12 @@ document.addEventListener('touchstart', function (e) {
     _simFling = null;
     var b = pagerBackend();
     if (b.simOn()) {                             // 仿真书本自己跟手，这里只留起点给章界判定
-        if (htmlSim) {
-            // 书本会在邻页进range时临时把它们重新装进折页包装盒，搬一次清一次节点事件，
-            // addPage 时绑的那次可能已经被抹掉。手势起手补一遍，此后到松手之前不会再搬。
-            htmlSimBindRelease();
-            _simTrack = { x: t.clientX, ts: Date.now(), v: 0 };
-        } else {
-            _simTrack = null;
-        }
+        // 书本会在邻页进range时临时把它们重新装进折页包装盒，搬一次清一次节点事件，
+        // addPage 时绑的那次可能已经被抹掉。手势起手补一遍，此后到松手之前不会再搬。
+        simBindRelease();
+        // 滑行量度两本书都要：松手时折页在途，就靠这份量度按 DRAG_COMMIT_RATIO / 甩动速度
+        // 判翻不翻（见 simTakeRelease），不再只认 turn.js 原样的「折过页宽中线」。
+        _simTrack = { x: t.clientX, ts: Date.now(), v: 0 };
         // 两个方向都归书本自己跟手：左向是正向卷页，右向是同一卷页的时间倒放（turn.min.js 的
         // _dragCorner 对右向给出 rev 折角，折的是上一页那张纸，折点按手指位置反向映射）。本章首页
         // 右滑时书本卷不起来，那一侧的横向滑动仍归首页的章界换章判定
@@ -2924,9 +2922,23 @@ document.addEventListener('touchend', function (e) {
         // canvas 仿真书本的手势不归本状态机管：折页由 turn.js 自己跟手，中间区滑动与章界换章由上面
         // 那段 _simTapStart 专门收尾（旧版 canvas 触摸处理开头就有同一道闸）。这里再补一次翻页，
         // 就是 turn.js 已卷一页、我们又逼它卷第二页 —— 真机观感「滑动一下翻两页」。
+        if (simulationActive) {
+            // 折页在途时只把这份滑行量度交给它自己的 released 收尾（见 simTakeRelease），
+            // 翻不翻的阈值与 EPUB、另外四档同口径；没有折页就完全归 turn.js，这里不补翻页。
+            if (st && ct && swipeEnabled && simFoldBusy()) {
+                var sdx = ct.clientX - touchStartX;
+                if (sdx < -50 || sdx > 50) {
+                    var fbEl = document.getElementById('flipbook');
+                    lastDragActivityTs = Date.now();
+                    _simFling = { dir: sdx < 0 ? 1 : -1,
+                                  ratio: Math.abs(sdx) / ((fbEl && fbEl.offsetWidth) || window.innerWidth || 1),
+                                  velocity: st.v };
+                }
+            }
+            return;
+        }
         // htmlSim 与 simulationActive 互斥（一进 HTML 模式 destroySimulation 就把后者置 false），
-        // 故这道闸只挡得住 canvas 那一路，EPUB 仿真的兜底翻页照常可达。
-        if (simulationActive) return;
+        // 所以上面那道闸只挡 canvas 那一路，EPUB 仿真的兜底翻页照常可达。
         // 未形成跟手拖拽（不支持的模式 / 位移过小 / 方向不符）：沿用简单滑动判定
         // 注意要尊重「滑动翻页」开关，否则关闭开关后仍能滑动翻页
         if (isAnimating || !ct || !swipeEnabled) return;
@@ -4420,23 +4432,28 @@ function htmlSimPage(p) {
  * （见 simTakeRelease）。先前绑在节点上等于没绑：turn.js 给折页做包装盒时要把节点搬进盒子，
  * 这一搬把节点上的 jQuery 事件数据整个清掉（真机查书本内 .page 节点，released 绑定数恒为 0），
  * 于是接管从没赶上松手，松手那一帧白丢 100ms 布局、折页冻住再重卷。
- * canvas 那一路的 #flipbook 不走这里，不受影响。
+ * 两本书都扫：canvas 那本（#flipbook）原先一张都没绑，松手只能按 turn.js 原样的「折过页宽中线」
+ * 判（真机实测：拖 30% 页宽不翻页、只翘个小角，800ms 后弹回；拖 45% 才翻），
+ * 与 EPUB 及另外四档的 DRAG_COMMIT_RATIO 口径不一致。
  */
-function htmlSimBindRelease() {
-    var host = document.getElementById('htmlFlipbook');
-    if (!host) return;
-    var nodes = host.querySelectorAll('.html-snap');
-    for (var i = 0; i < nodes.length; i++) {
-        var ev = $._data(nodes[i], 'events');
-        if (ev && ev.released) continue;
-        $(nodes[i]).on('released', simTakeRelease);
+function simBindRelease() {
+    var hosts = [['htmlFlipbook', '.html-snap'], ['flipbook', '.page-div']];
+    for (var h = 0; h < hosts.length; h++) {
+        var host = document.getElementById(hosts[h][0]);
+        if (!host) continue;
+        var nodes = host.querySelectorAll(hosts[h][1]);
+        for (var i = 0; i < nodes.length; i++) {
+            var ev = $._data(nodes[i], 'events');
+            if (ev && ev.released) continue;
+            $(nodes[i]).on('released', simTakeRelease);
+        }
     }
 }
 
 /** 交一页进书本：addPage 会把节点搬进包装盒，搬完才绑得住 */
 function htmlSimAddPage(fb, el, n) {
     fb.turn('addPage', el, n);
-    htmlSimBindRelease();
+    simBindRelease();
 }
 
 /** 预置当前页前后的书纸：turn.js 拖拽折页阶段不触发 missing，缺页会露出空白 */
@@ -4523,7 +4540,7 @@ function htmlInitSim() {
             }
         }
     });
-    htmlSimBindRelease();     // 首叶也是 addPage 之前就绑的，搬过之后同样作废，统一在这里补
+    simBindRelease();           // 首叶也是 addPage 之前就绑的，搬过之后同样作废，统一在这里补
     setTimeout(function () { htmlSimEnsure(htmlPage); }, 0);
     // 记下这本是按哪个签名建的：下一次重排若签名全等，就原样留着它（见 htmlLayerSignature）
     _htmlLayerSig = htmlLayerSignature();
