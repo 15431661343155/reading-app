@@ -61,6 +61,7 @@ main{padding:64px 0 40px}
 }
 .dl-btn svg{width:19px;height:19px}
 .dl-btn:hover{background:var(--cinnabar-deep);transform:translateY(-2px);box-shadow:0 12px 26px rgba(168,66,46,.32)}
+.dl-btn[aria-disabled="true"]{background:var(--ink-3);box-shadow:none;pointer-events:none}
 .dl-note{font-size:12.5px;color:var(--ink-3);margin-top:14px;display:flex;align-items:center;gap:8px}
 .dl-note svg{width:14px;height:14px;color:var(--cinnabar);flex:none}
 .dl-err{font-size:12.5px;color:var(--cinnabar);margin-top:10px;display:none}
@@ -114,24 +115,24 @@ footer{border-top:1px solid var(--line);background:var(--paper-deep);margin-top:
     <p class="page-desc">本页为书阁阅读唯一官方下载渠道。下方安装包信息由后端接口实时获取，始终为最新版本。</p>
 
     <div class="dl-panel">
-      <div class="apk-name" id="apkName">书阁阅读_v2.0.21_20260925.apk</div>
+      <div class="apk-name" id="apkName">正在获取安装包信息…</div>
       <div class="specs">
-        <div class="spec"><div class="m">版本</div><div class="v" id="specVersion">v2.0.21 <small>versionCode 4</small></div></div>
-        <div class="spec"><div class="m">大小</div><div class="v" id="specSize">约 11.8 MB</div></div>
-        <div class="spec"><div class="m">更新时间</div><div class="v" id="specDate">2026-09-25</div></div>
+        <div class="spec"><div class="m">版本</div><div class="v" id="specVersion">—</div></div>
+        <div class="spec"><div class="m">大小</div><div class="v" id="specSize">—</div></div>
+        <div class="spec"><div class="m">更新时间</div><div class="v" id="specDate">—</div></div>
         <div class="spec"><div class="m">最低系统</div><div class="v">Android 7.0 <small>API 24</small></div></div>
       </div>
       <div class="dl-row">
-        <a class="dl-btn" id="dlBtn" href="/api/app/apk/download/%E4%B9%A6%E9%98%81%E9%98%85%E8%AF%BB_v2.0.21_20260925.apk" download="书阁阅读_v2.0.21_20260925.apk">
+        <a class="dl-btn" id="dlBtn" role="button" aria-disabled="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 17v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
-          <span class="dl-label">下载 APK（11.8 MB）</span>
+          <span class="dl-label">下载 APK</span>
         </a>
       </div>
       <p class="dl-note">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5m0 3h.01"/></svg>
         安装时如提示未知来源，按系统引导允许后即可继续
       </p>
-      <p class="dl-err" id="dlErr">接口获取失败，已显示最近已知版本；如需最新安装包请联系管理员。</p>
+      <p class="dl-err" id="dlErr">安装包信息获取失败，请刷新页面重试；仍无法获取请联系管理员。</p>
     </div>
 
     <div class="section" id="install">
@@ -233,9 +234,10 @@ document.querySelectorAll('.faq-q').forEach(q=>{
   });
 });
 
-// 实时从后端公开接口获取最新安装包信息与下载地址（失败则保留页面硬编码兜底值）
+// 安装包信息与下载地址全部来自后端公开接口；接口不可用时保持占位，不展示可能过期的旧数据
 (async function loadApk(){
   const API='/api/app/apk/latest';
+  const btn=document.getElementById('dlBtn');
   try{
     const r=await fetch(API,{headers:{'Accept':'application/json'}});
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -247,15 +249,16 @@ document.querySelectorAll('.faq-q').forEach(q=>{
     if(d.fileSize)        document.getElementById('specSize').textContent=d.fileSize;
     if(d.date)            document.getElementById('specDate').textContent=d.date;
     if(d.downloadUrl){
-      const btn=document.getElementById('dlBtn');
       btn.href=d.downloadUrl;
       btn.setAttribute('download', d.fileName||'app.apk');
+      btn.removeAttribute('aria-disabled');
       const sizeTxt=d.fileSize?('（'+d.fileSize.replace(/^约\s*/,'')+'）'):'';
       btn.querySelector('.dl-label').textContent='下载 APK'+sizeTxt;
     }
     document.getElementById('dlErr').style.display='none';
   }catch(e){
-    document.getElementById('dlErr').style.display='';
+    document.getElementById('apkName').textContent='未能获取安装包信息';
+    document.getElementById('dlErr').style.display='block';
   }
 })();
 </script>
