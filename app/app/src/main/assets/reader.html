@@ -2719,6 +2719,89 @@ function simTakeRelease(e, p) {
     }
 }
 
+// ============ 仿真折页孤儿清扫 ============
+// 折页画在屏幕上却再也等不到收尾，turn.js 自己有三条够不着的缝：回弹动画被下一次拖拽掐掉
+// （animatef 取消时不跑 complete，point/visible 就停在原地）、pageMv 被清空后 turn('stop')
+// 整体空转（它开头就是 if(turn('animating'))）、倒放折页被 _eventEnd 的 revBy 早退跳过。
+// 系统边缘返回吞掉这次手势时 up/cancel 根本不发进 WebView，所以 simScheduleFoldCleanup
+// 那道靠 touchend/touchcancel 武装的闸也一起失效，EPUB 那本书更是连这道闸都没有。
+// 这里不看事件看状态：新手势落下的瞬间先扫一趟（上一折只要没有还在跑的动画就地归位，
+// 用户就看不见残角），平时 300ms 一趟；判据是「手指抬起 300ms 纸还折着」，手指仍按着
+// （up 被系统吞了的那种）才等 2500ms——那是真的捏着纸在看，宁可慢一点也别抢。
+// 收法一律走「取消回弹」的原路：hideFoldedPage 无参 = 立即归位并补发 end(false)，书本自清 pageMv。
+var _simTouchTs = 0;    // 最后一次触摸动作（按下/移动/抬起都算）
+var _simTouchDown = 0;  // 那一次事件里还在屏上的手指数
+var _simFoldSig = {};   // 页号 -> 上趟看到的折点，用来分辨「动画还在跑」和「帧已经断了」
+
+function simNoteTouch(e) {
+    _simTouchTs = Date.now();
+    _simTouchDown = e.touches ? e.touches.length : 0;
+}
+
+function simSweepFoldOrphans(fast) {
+    var el = simBookEl();
+    if (!el || !window.$ || _xCrossFlipping) return;   // 跨章临时书本自带有界兜底，别去搅它
+    if (!fast) {
+        var idle = Date.now() - _simTouchTs;
+        if (idle < 300 || (_simTouchDown > 0 && idle < 2500)) return;
+    }
+    var d;
+    try {
+        d = $(el).data();
+    } catch (e) {
+        return;
+    }
+    if (!d || !d.pages) return;
+    var folded = 0;
+    for (var k in d.pages) {
+        var pg = d.pages[k], fd = pg && pg.data && pg.data();
+        var f = fd && fd.f;
+        if (!f) continue;
+        if (!f.visible && !f.point && !(f.fwrapper && f.fwrapper[0].style.display !== 'none')) continue;
+        folded++;
+        var pt = f.point;
+        // 折点这趟和上趟一个像素都没挪 = 动画对象还挂着但帧已经断了（rAF 被节流、complete 再也不会跑），
+        // 这种「亮着 effect 的僵尸」不能只认 eff 就放过，否则正是要治的那种卡住。
+        var sig = pt ? Math.round(pt.x) + ',' + Math.round(pt.y) : '-';
+        var moved = _simFoldSig[k] !== sig;
+        _simFoldSig[k] = sig;
+        var eff = fd.effect;
+        // 翻页动画（turning）：定时趟只在它断帧时才收，新手势落下的那一趟一律不碰——
+        // 半路把它收了就等于「滑了却没翻页」，正是要治的那个 bug。
+        if (eff && eff.turning && (fast || moved)) continue;
+        // 回弹（hiding）：新手势落下时 turn.js 自己也会掐，所以 fast 趟直接收；
+        // 定时趟要等它断帧（moved=false）才收，免得把还在跑的回弹抢成急停。
+        if (!fast && eff && eff.hiding && moved) continue;
+        // _simFoldActive 不在这儿动：它记的是「最新那一折」，可能属于另一页还在途的动画，
+        // 抢着置 false 会让那折的 end(false) 早退，反而把书页背面残留留下来。
+        try {
+            // hideFoldedPage 在 point 已空时整段空转，那种残留只能按 sheet 直接归位
+            if (pt) pg.flip('hideFoldedPage');
+            else pg.flip('hide');
+        } catch (e) {}
+    }
+    if (!folded) _simFoldSig = {};
+    // 折页 DOM 随页面重建被摘走、只剩 fparent 的计数没归零：整层收掉，否则它一直亮着
+    // （书本刚 destroy/重建时 fparent 与其 data 都可能还没挂上，这一趟整段都要防着抛）
+    try {
+        var fpe = d.fparent && d.fparent[0];
+        if (!folded && fpe && fpe.style.display !== 'none') {
+            var fpd = d.fparent.data();
+            if (fpd) fpd.flips = 0;
+            d.fparent.hide();
+        }
+    } catch (e) {}
+}
+
+document.addEventListener('touchstart', function (e) {
+    simNoteTouch(e);
+    simSweepFoldOrphans(true);
+}, true);
+document.addEventListener('touchmove', simNoteTouch, true);
+document.addEventListener('touchend', simNoteTouch, true);
+document.addEventListener('touchcancel', simNoteTouch, true);
+setInterval(function () { simSweepFoldOrphans(false); }, 300);
+
 /** 把指定页渲染到离屏 canvas（直接复用 drawPage，省去 getImageData 的开销） */
 function renderPageTo(cvs, pageIndex) {
     if (!cvs) cvs = document.createElement('canvas');
