@@ -208,13 +208,32 @@
     }
     /* 覆盖翻页：移动页的前缘投一道投影。两个方向掠过后层的那条边都是它的右边缘，故只需一条规则 */
     .turn-page.cover { box-shadow: 14px 0 26px rgba(0, 0, 0, .26); }
+    /* ===== 仿真档右向拖拽：「书页翻回来」（见 turnApply 的 flipback）=====
+       上一页的正面从左侧按手指铺开（.turn-page 裁右缘），前缘立一道竖向纸卷 .fb-tube，
+       卷在本页上投一道 .fb-shadow。卷宽 = B0 + B1·进度（与前翻真帧同一条曲线，随进度加宽，
+       越到后段越被右缘挤窄），剖面取前翻实测色标（见 fbTubeGradient），两道都是 transform 驱动：
+       带宽 = scaleX，位置 = translateX，transform-origin 锁左缘，所以逐帧只改合成属性不碰布局。
+       挂在各自的动画宿主里（canvas 一路 #turnLayer 抬到书本之上，HTML 一路 #htmlTurn 本就在书本之上、
+       页眉页脚之下），底色随主题，见 fbTubeGradient。 */
+    .fb-tube, .fb-shadow {
+        position: absolute;
+        top: 0; left: 0; height: 100%;
+        transform-origin: 0 0;
+        will-change: transform;
+        pointer-events: none;
+    }
     /* 快照自带夜间底图暗纱：真视口层那条在本层之下，长章图页翻页时才不会一亮一暗 */
     #htmlContent.html-night #htmlTurn .html-snap.fs-bleed::before {
         content: ""; position: absolute; left: 0; top: 0; right: 0; bottom: 0;
         background: rgba(0, 0, 0, .52); pointer-events: none;
     }
-    /* 仿真卷页的书本容器（与 canvas 路径的 #flipbook 各一只，结构样式按 .fbk 共用） */
-    #htmlFlipbook { position: absolute; left: 0; top: 0; background-color: transparent; }
+    /* 仿真卷页的书本容器（与 canvas 路径的 #flipbook 各一只，结构样式按 .fbk 共用）。
+       z-index 必须显式给：turn.js 把书本内联成 position:relative 且不给 z，于是它内部的
+       .page-wrapper（就地内联 z，实测到 13）会直接参与 #htmlTurn 这一层的层序，把同层里
+       我们的翻页动画层（垫底 z1／移动页 z2／投影 z4／卷边 z5）整个盖住 —— 「书页翻回来」
+       在 EPUB 一路演成一片空白。给它一个 z 就是让它自成一个层叠上下文，书本那套 z 收在书里，
+       书本自己压在动画层之下（canvas 一路同效，靠 #turnLayer 抬到 #flipbookContainer 之上）。 */
+    #htmlFlipbook { position: absolute; left: 0; top: 0; z-index: 0; background-color: transparent; }
     #flipbookContainer {
         position: absolute;
         top: 0;
@@ -934,6 +953,7 @@ var TextPaging = {
     // 书本会经 turning/turned 回调自己上报页码，这里再 notify 就是同页重复上报（刷进度）
     simGoto: function (i) { $('#flipbook').turn('page', i + 1); },
     simStep: function (dir) { $('#flipbook').turn(dir > 0 ? 'next' : 'previous'); },
+    simPlace: simPlaceCanvas,
     scrollGoto: function (i) {
         cancelScrollAnim();
         animateScrollTo(i * (scrollViewH || window.innerHeight));
@@ -1049,6 +1069,7 @@ var HtmlPaging = {
     },
     // 快照书本的「卷一步」与「翻到第 i 页」在 HTML 一路是同一件事：纸带位置由 turn.js 说了算
     simStep: function (dir, to) { htmlTurnTo(to, true); },
+    simPlace: htmlSimPlace,
     scrollGoto: function (i) {
         var c = document.getElementById('htmlContent');
         if (!c) return;
@@ -1091,7 +1112,7 @@ function pagerNotifyChapter(dir) {
  * 同步拆书本容器会打断它内部的数据链，只能下一拍再动。
  */
 function pagerBoundary(dir, defer) {
-    if (_xCrossFlipping) return;                       // 临时双页卷页在途，书本容器已被它占用
+    if (_xCrossFlipping) return;                       // 跨章翻页在途（临时书本 / flipback），再套一层就是把两章叠着演
     var b = pagerBackend();
     var xt = b.fetchAdjacent ? b.fetchAdjacent(dir) : null;
     if (xt) {
@@ -1133,6 +1154,26 @@ function pagerTapZone(frac) {
 }
 
 // ============ 翻页控制 ============
+/**
+ * 仿真档的「往后走一整页」改演书页翻回来，不再交给 turn.js 卷一次。
+ * 为什么以前不对：书本那套折页卷的是「当前页的左缘」—— 纸翻出去、露出的是下一页；向后跳时
+ * 用户看见的却是上一页盖过来，动的方向和内容对不上。这里直接复用右向拖拽那一份（C2：目标页
+ * 按进度从左侧铺开，前缘一道随进度收窄的纸卷，落位那一下靠 simPlace 摆而不是翻），
+ * 于是点按、音量键、进度条与跟手拖拽四种「往后」观感完全一致。
+ * 目标页不要求与当前页相邻：进度条/目录跳页铺过来的就是它要去的那一页，几何里没有相邻这件事。
+ * 返回 false 表示没接（在途 / 页码越界 / 动画层搭不起来），调用方退回原来的 simStep / simGoto。
+ */
+function simFlipBack(b, to) {
+    if (isAnimating || _xCrossFlipping) return false;
+    var from = b.pos();
+    if (to < 0 || to >= b.count() || to === from) return false;
+    // boundary 显式传 false 是给 HTML 一路兜底（flipback 自己按 to 有效就不演章界），越界已在上面挡掉
+    if (!turnBegin({ base: b, from: from, to: to, dir: -1, mode: pageTurnMode,
+                     boundary: false, flip: true })) return false;
+    turnRun(0, 1, SIM_JUMP_DURATION);
+    return true;
+}
+
 function goToPage(page) {
     var b = pagerBackend();
     if (b.flow() === 'scroll') { b.scrollGoto(page); return; }   // 长卷按屏跳，不参与分页钳制
@@ -1142,7 +1183,11 @@ function goToPage(page) {
     if (page < 0) page = 0;
     if (page > n - 1) page = n - 1;
     if (page === b.pos()) return;
-    if (b.simOn()) { b.simGoto(page); return; }
+    if (b.simOn()) {
+        if (page < b.pos() && simFlipBack(b, page)) return;
+        b.simGoto(page);
+        return;
+    }
     if (b.animateJump) b.turnTo(page);
     else b.show(page);
 }
@@ -1155,7 +1200,12 @@ function pagerStep(dir) {
     if (b.flow() === 'scroll') { b.scrollStep(dir); return; }
     var to = b.pos() + dir;
     if (to < 0 || to > b.count() - 1) { pagerBoundary(dir, false); return; }
-    if (b.simOn()) { b.simStep(dir, to); return; }
+    if (b.simOn()) {
+        // 向后一步演「书页翻回来」，向前仍是 turn.js 的真卷页（那才是书纸离手的观感）
+        if (dir < 0 && simFlipBack(b, to)) return;
+        b.simStep(dir, to);
+        return;
+    }
     b.turnTo(to);
 }
 
@@ -1315,6 +1365,10 @@ function crossChapterTurn(xt) {
 
 // ============ 翻页动画系统 ============
 var ANIM_DURATION = 280;
+// 仿真档的整页动作（点按左/右侧、音量键、进度条与目录跳页）另给一档时长：书本自己的卷页是 500ms
+// （见 initSimulation），非仿真档的跳页沿用 280。两条路径并排比的时候，观感差该只剩「折叠 vs 翻回来」，
+// 不该再多出将近一倍的时长差。
+var SIM_JUMP_DURATION = 500;
 
 function setPageTurnMode(mode) {
     var prev = pageTurnMode;
@@ -1331,16 +1385,36 @@ function setPageTurnMode(mode) {
 // 后端只回答五件事：turnHost() 容器 / pageW() 一页平移距离 / putPage(i) 静止层落位 /
 // pageNode(i) 交出某页的独立节点 / turnSettled(i) 收尾时对齐「当前页」与页码上报。
 // cover / slide / fade / 章界阻尼四种动效都写成「静止层 + 移动节点」的组合，只有一份实现；
+// 仿真档的右向拖拽是第五种（flipback）：没有静止层可搬（书本自己就是静止层），只有铺过来的
+// 上一页 + 前缘那道纸卷，落位时才把书本无声摆到新页（见 turnBegin 的 spec.flip 分支）。
 // 旧版每翻一页做四次全屏 getImageData/putImageData 的位图合成整条链路就此退役。
 // trackSlide=true 的后端（HTML 纸带）在 slide 与章界两处分文不出节点：平移真纸带就是动画。
 // 淡入淡出是唯一要两张节点的一种：底下垫一层页面纯色，两页各按 alpha 叠，才淡得出去也淡得进来。
 var _turn = null;         // { base, host, mode, dir, from, to, boundary, W, kind, mover, a, b, nodes }
+                          // kind=flipback 另带 { FW, B0, B1, K0, SH0, tube, shadow }（见 turnBegin 那一支）
 var _turnRaf = 0;
 var _turnWatchdog = 0;
 var _turnNodePool = [];   // canvas 一路的页节点回收池（见 TextPaging.pageNode）
 
 function turnClearWatchdog() {
     if (_turnWatchdog) { clearTimeout(_turnWatchdog); _turnWatchdog = 0; }
+}
+
+/**
+ * 跟手在途的保命拍：拖拽期间没有 rAF 动画，turnRun 那道 2s 兜底要等松手才装上，
+ * 而手势可能被系统整个吞掉（下拉通知栏、息屏、调试器摘掉），既没有 touchend 也没有 touchcancel
+ * —— isAnimating 就此锁死，翻页/音量键/进度条全废，只能重进书。
+ * 到点按「回弹」收尾而不是落地：手指真实位置已经无从得知，退回原页最坏只是白滑一次。
+ * 定时动画那一路会自己 turnClearWatchdog 后重装更短的一拍，这里装早了也不冲突。
+ */
+function turnGuard(t, ms) {
+    turnClearWatchdog();
+    _turnWatchdog = setTimeout(function () {
+        if (_turn !== t) return;
+        drag = null;          // 手势已经被吞掉，状态机里那一拍再收尾就是二次收尾
+        turnApply(t, 0);
+        turnFinish(t, false);
+    }, ms || 8000);
 }
 
 /**
@@ -1406,9 +1480,70 @@ function turnCalmPushCard(card) {
 }
 
 /**
- * 搭起一次翻页。spec = { base, from, to, dir, mode, boundary, nodes, preLand }，
+ * 「书页翻回来」的两条起势层：卷边本体与它压在当前页上的投影。
+ * 基准宽度一次定死，逐帧只改 transform —— 位移 = translateX，带宽 = scaleX（origin 锁左缘），
+ * 于是捏窄与挪位置都不碰布局（覆盖档推卡片实测 0 掉帧靠的就是同一套，见 turnArmPushCard）。
+ */
+function fbLayerNode(cls, w, image, color) {
+    var n = document.createElement('div');
+    n.className = cls;
+    n.style.width = Math.round(w) + 'px';
+    n.style.backgroundImage = image;
+    if (color) n.style.backgroundColor = color;
+    return n;
+}
+
+/** 卷边本体 = 前翻那道纸卷的实测剖面（真帧列亮度 ÷ 纸色，换算成 alpha）。
+ *  日间：全程只压黑、不描白 —— 前翻那道卷最亮处也不超过纸色，卷是靠「比纸面暗」显形的；
+ *  旧版自造的那道白高光正是「回翻看着像另一张纸」的来源。
+ *  夜间：同一位置量到的却是反的 —— 前翻的卷比墨底*亮*（带内 1.3~1.5 倍，折线处冲到 3.1 倍），
+ *  再跟一道 .73 倍的暗线。所以夜间改用提亮色标，压黑会让卷在墨底上整个看不见。
+ *  色标全用百分比：带宽随进度加宽，定宽描边会在窄带下糊成一片。 */
+function fbTubeGradient() {
+    if (isNightMode) {
+        // 剖面取自 cm1_night_fwd_p35/p65 两帧（带左界→折线→暗线→回纸，两档归一后重合）
+        return 'linear-gradient(to right,' +
+                'rgba(255,255,255,0) 0,' +
+                'rgba(255,255,255,.07) 6.6%,rgba(255,255,255,.061) 21%,' +
+                'rgba(255,255,255,.052) 39%,rgba(255,255,255,.039) 56%,' +
+                'rgba(255,255,255,.035) 65%,rgba(255,255,255,.096) 71%,' +
+                'rgba(255,255,255,.15) 74.5%,rgba(255,255,255,.25) 79%,' +
+                'rgba(0,0,0,.27) 82%,rgba(0,0,0,.27) 85.5%,rgba(0,0,0,.19) 89%,' +
+                'rgba(0,0,0,.15) 93%,rgba(0,0,0,.04) 97.5%,' +
+                'rgba(0,0,0,0) 100%)';
+    }
+    return 'linear-gradient(to right,' +
+            'rgba(0,0,0,0) 0,' +
+            'rgba(0,0,0,.09) 7.7%,rgba(0,0,0,.05) 15.4%,rgba(0,0,0,.08) 23.1%,' +
+            'rgba(0,0,0,.10) 30.8%,rgba(0,0,0,.13) 38.5%,rgba(0,0,0,.16) 46.2%,' +
+            'rgba(0,0,0,.19) 53.8%,rgba(0,0,0,.21) 61.5%,rgba(0,0,0,.21) 69.2%,' +
+            'rgba(0,0,0,.08) 76.9%,rgba(0,0,0,.28) 84.6%,rgba(0,0,0,.15) 92.3%,' +
+            'rgba(0,0,0,0) 100%)';
+}
+
+/** 卷边压在当前页上的投影：前翻真帧里卷的右缘之后几乎没有落影（那道暗线在卷自己内部），
+ *  所以这一道只补一点点，重了就把「一张纸」又演回「一条阴影」。
+ *  夜间量得更干净：前翻带右界之后直接回到墨底（25/26），所以那一点点也要跟着收。 */
+function fbShadowGradient() {
+    if (isNightMode) {
+        return 'linear-gradient(to right, rgba(0,0,0,.05) 0, rgba(0,0,0,0) 60%)';
+    }
+    return 'linear-gradient(to right, rgba(0,0,0,.18) 0, rgba(0,0,0,.06) 50%, rgba(0,0,0,0) 100%)';
+}
+
+/** 卷边的纸色要跟着当下这一页的纸面走：canvas 一路就是主题底色，HTML 一路得抄视口层那一张
+ *  （长章的出血底图挂在视口层上，写死 bgColor 会在宣纸页上卷出一道色差）。 */
+function fbPaperColor() {
+    if (!htmlMode) return bgColor;
+    var p = htmlPaper();
+    return (p && p[0]) || bgColor;
+}
+
+/**
+ * 搭起一次翻页。spec = { base, from, to, dir, mode, boundary, nodes, preLand, flip }，
  * nodes 可带 { from, to } 现成节点 —— 跨章翻页时邻章那一页只有节点可用，静止层帮不上；
- * boundary 由撞章界的调用方（跟手拖拽）明说，跳页那一类按 to 越界自行推导。
+ * boundary 由撞章界的调用方（跟手拖拽）明说，跳页那一类按 to 越界自行推导；
+ * flip=true 只由仿真档的右向拖拽给出，走 flipback 那一支（静止层完全不参与）。
  * 返回 null 表示搭不起来（容器缺失 / 已有在途翻页 / 节点取不到），调用方退回无动画跳页。
  */
 function turnBegin(spec) {
@@ -1435,7 +1570,37 @@ function turnBegin(spec) {
     var card = (t.dir && !t.boundary && !forced && base.pushCard) ? base.pushCard(t.dir) : null;
     host.style.display = 'block';
 
-    if ((t.boundary || t.mode === 'slide') && track && !forced) {
+    if (spec.flip) {
+        // 仿真档右向（上一页）不演折叠，演「上一页翻回来盖住本页」。turn.js 的折页是沿
+        // 「角↔手指」垂直平分线的平面镜像，移动层最宽只到页宽一半，铺不满整屏，改值也改不出来
+        // —— 所以右向由这一层自己铺：静止层一动不动，书本原样停在当前页，右侧露出的就是它，
+        // 落位那一刻才把书本无声摆到新页（见 turnFinish 的 flipback 分支）。
+        t.kind = 'flipback';
+        t.FW = Math.max(1, window.innerWidth || 1);      // 一张纸 = 整个视口宽（快照本就铺满视口）
+        t.B0 = FLIPBACK_BAND0 * t.FW;                    // 卷宽 = B0 + B1·p，与前翻同源（随进度加宽）
+        t.B1 = FLIPBACK_BAND1 * t.FW;
+        t.K0 = t.B0 + t.B1;                              // 节点按最宽带宽铺，逐帧只 scaleX 不碰布局
+        t.SH0 = t.K0 * 0.06 + 8;                         // 卷外那道接触影，跟着卷一起收放
+        t.b = turnGrab(t, t.from, null, false);          // 当前页也攥一张垫底：仿真档的 pageNode 会把
+        if (t.b) t.b.style.zIndex = '1';                 // 静止层摆到上一页（EPUB 一路实测），不留底
+                                                         // 就演成「上一页盖在上一页上」，看不出翻回来
+        t.a = turnGrab(t, t.to, null, false);            // 要盖过来的那一页 = 上一页
+        if (t.a) {
+            t.a.style.zIndex = '2';
+            // HTML 一路的宿主在仿真档是开触摸的（.html-sim），落地的收尾动画还有 ~280ms：
+            // 这期间新按下来的手指要落在书本上，不能落在盖过来的纸上。
+            t.a.style.pointerEvents = 'none';
+            t.shadow = fbLayerNode('fb-shadow', t.SH0, fbShadowGradient());
+            t.tube = fbLayerNode('fb-tube', t.K0, fbTubeGradient(), fbPaperColor());
+            t.shadow.style.zIndex = '4';
+            t.tube.style.zIndex = '5';
+            host.appendChild(t.shadow);
+            host.appendChild(t.tube);
+            // canvas 一路的宿主 #turnLayer 与书本容器同为 z10 且排在它前面，抬一档才盖得住书本；
+            // HTML 一路的 #htmlTurn 本就在书本（#htmlFlipbook，无 z）之上、页眉页脚（35）之下，不动。
+            if (host.id === 'turnLayer') { host.style.zIndex = '12'; t.hostZ = true; }
+        }
+    } else if ((t.boundary || t.mode === 'slide') && track && !forced) {
         // 多列纸带自己就是轨道：平移与章界阻尼都只搬它，不必克隆出节点（也搬不出节点）
         base.putPage(t.from);
         t.kind = 'strip';
@@ -1501,14 +1666,16 @@ function turnBegin(spec) {
     }
     turnPlaceInPlace(t);
     var ok = t.kind === 'strip' ? true
-            : (t.kind === 'push' ? (!!t.a && !!t.mover)
-              : (t.kind === 'track' || t.kind === 'fade' ? (!!t.a && !!t.b) : !!t.mover));
+            : (t.kind === 'flipback' ? !!t.a
+              : (t.kind === 'push' ? (!!t.a && !!t.mover)
+              : (t.kind === 'track' || t.kind === 'fade' ? (!!t.a && !!t.b) : !!t.mover)));
     if (!ok) {
         turnDrop(t);
         base.putPage(t.from);   // putBlank 已让静止层让位，搭不起来就得把当前页画回去（HTML 一路还要它解除隐藏）
         return null;
     }
     _turn = t;
+    if (spec.drag) turnGuard(t);   // 只有跟手挂这一拍：定时动画起手就进 turnRun，那里有自己的 2s 兜底
     turnApply(t, 0);
     return t;
 }
@@ -1531,6 +1698,20 @@ function turnApply(t, p) {
         case 'push':          // 正文卡片往左让位（只有向前走这条），底下那张按露出的宽度才画
             t.mover.style.transform = 'translate3d(' + (-p * W) + 'px,0,0)';
             return;
+        case 'flipback': {    // 上一页正面按手指铺开的宽度盖过来，前缘立一道与前翻同宽的纸卷
+            var fw = t.FW, e = p * fw;
+            var kk = t.B0 + t.B1 * p;                        // 前翻实测：卷随进度加宽，不是收窄
+            if (e + kk > fw) kk = fw - e;                    // 卷边不许越过右缘
+            if (kk < 0) kk = 0;
+            var cut = 'inset(0 ' + Math.max(0, fw - e).toFixed(1) + 'px 0 0)';
+            t.a.style.clipPath = cut;
+            t.a.style.webkitClipPath = cut;
+            t.tube.style.transform = 'translate3d(' + e.toFixed(1) + 'px,0,0) scaleX(' +
+                    (kk / t.K0).toFixed(4) + ')';
+            t.shadow.style.transform = 'translate3d(' + (e + kk).toFixed(1) + 'px,0,0) scaleX(' +
+                    ((kk * 0.06 + 8) / t.SH0).toFixed(4) + ')';
+            return;
+        }
         default:            // mover：章界朝手势方向挪，覆盖按方向滑入 / 滑出
             x = t.boundary ? -t.dir * p * W : (t.dir > 0 ? -p * W : -(1 - p) * W);
             t.mover.style.transform = 'translate3d(' + x + 'px,0,0)';
@@ -1540,6 +1721,13 @@ function turnApply(t, p) {
 /** 摘掉本层挂上去的节点，能回收的交回后端池子 */
 function turnRelease(t) {
     var b = t.base;
+    if (t.kind === 'flipback') {
+        // 裁切是一次性的：canvas 节点要回复用池、快照要回镜像池，留着 clip 下次借出去就少半页
+        if (t.a) { t.a.style.clipPath = ''; t.a.style.webkitClipPath = ''; }
+        if (t.tube && t.tube.parentNode) t.tube.parentNode.removeChild(t.tube);
+        if (t.shadow && t.shadow.parentNode) t.shadow.parentNode.removeChild(t.shadow);
+        t.tube = t.shadow = null;
+    }
     for (var i = 0; i < t.nodes.length; i++) {
         var n = t.nodes[i];
         if (!n) continue;
@@ -1551,11 +1739,17 @@ function turnRelease(t) {
     }
     t.nodes.length = 0;
     t.mover = t.a = t.b = null;
+    // canvas 一路为盖住书本抬的那一档还回去：宿主用完还悬在 #flipbookContainer 之上的话，
+    // 下一本仿真书的折页会被空层压着（层是空的，但 z 是实的）。
+    if (t.hostZ) { t.host.style.zIndex = ''; t.hostZ = 0; }
 }
 
-/** 动画层用完要不要关容器：warmNodes 后端要它一直开着 —— display:none 会把池内节点的布局一起丢掉 */
+/** 动画层用完要不要关容器：warmNodes 后端要它一直开着 —— display:none 会把池内节点的布局一起丢掉。
+ *  canvas 一路没有池（节点是游离的 <canvas>），用完就关：flipback 为了盖住书本把这一层抬上来过，
+ *  留着 display:block 就是给下一本书留一层空壳。 */
 function turnHideHost(t) {
-    if (t.host && !t.base.simOn() && !t.base.warmNodes) t.host.style.display = 'none';
+    if (!t.host || t.base.warmNodes) return;
+    if (!t.base.simOn() || t.host.id === 'turnLayer') t.host.style.display = 'none';
 }
 
 /** 只拆本层挂上去的节点，不动后端自己的静止层（跨章落地前要先单独拆，故与 turnFinish 分开） */
@@ -1574,16 +1768,21 @@ function turnFinish(t, commit) {
     var landed = commit !== false;
     var land = landed ? t.to : t.from;
     var card = t.kind === 'push' ? t.mover : null;   // turnRelease 会把 mover 抹平，先攥住
+    // flipback 落位：整屏还被上一页盖着的那一刻把书本「摆」到新页，撤掉纸面底下就是新页。
+    // 摆而不是翻 —— 书本这一路从没被拖起来过（turn.min.js 右向不起卷），再演一次卷页就是翻两页。
+    // 摆成功时书本的 turned 回调已经做完页码与上报，这里再 turnSettled 就是同页重复上报（刷进度）；
+    // 摆失败或回弹照旧由 turnSettled 对齐。回弹不用动书本：它一直停在当前页，纸面撤掉就回到原样。
+    var flipped = t.kind === 'flipback' && landed && t.base.simPlace(t.to);
     turnRelease(t);
     // 跨章落地：先把全局分页换成邻章，静止层才画得到新章那页
     // （否则 putPage 画出旧章的同名页，闪一下才被 Java 回送的正文纠正）
     if (landed && t.preLand) t.preLand();
-    t.base.putPage(land);
+    if (t.kind !== 'flipback') t.base.putPage(land);   // flipback 的静止层归书本自己管，putPage 画不到它
     // 卡片推走档收势放在 putPage 之后：卡片就是活动页自己，静止层还没落位就撤 z-index
     // 会让底下那张快照（演的是目标页）在回弹时露一脸。同一拍里改完，绘不出来先后。
     if (card) turnCalmPushCard(card);
     turnHideHost(t);
-    t.base.turnSettled(land);
+    if (!flipped) t.base.turnSettled(land);
     isAnimating = false;
 }
 
@@ -1828,8 +2027,8 @@ document.addEventListener('click', function (e) {
 // 再回调 Android.onChapterEnd/onChapterStart，Java 回送的 loadContent 结果一致。
 // 注意：前向在起飞前就把全局分页切到下一章（swapToAdjacentChapter），后向在落地时才切换。
 var _xCrossFlipping = false;   // 临时 flipbook 跨章卷页在途（含 500ms 动画与落地重建）
-var _xflipArmed = false;       // ✅ turn('next'/'previous') 已发出；armed 之后的 turned 才是真正落点
-var _xflipInitPage = 0;        // ✅ 临时 flipbook 初始页号；turned(page===初始页) 是 turn() 初始化误触发
+var _xflipArmed = false;       // ✅ 临时书本的 turn('next') 已发出；armed 之后的 turned 才是真正落点
+var _xflipInitPage = 0;        // ✅ 临时书本初始页号；turned(page===初始页) 是 turn() 初始化误触发
 
 /** ✅ 跨章在途延迟器：跨章卷页期间，任何会 paginate/重绘/重建仿真层的异步回调
  *  （字体加载回调、setFontSize/setFontFamily 的 reinitSimulation 防抖定时器等）若此刻执行，
@@ -1921,22 +2120,15 @@ function simStartCrossFlip(xt) {
     flipbook.turn({
         width: W, height: H, display: 'single', duration: 500,
         gradients: true, acceleration: true, elevation: 60,
-        page: initPage, pages: 2,
+        page: 1, pages: 2,
         when: {
             start: function (event, opts) {
-                // 底层静止区保险：用「落点页」位图铺 wrapper 背景（与 simOnFlipStart 同理）。
-                // ⚠️ 落点页随方向而异：前向落点 = underEl（下一章第 1 页）；
-                //    后向落点 = frontEl（上一章末页 = frontUrl）。后向若沿用 underEl 的位图
-                //    （它是当前章第 1 页，单页模式 p1 被 turn.js 隐藏、露出的正是这层背景），
-                //    卷页全程露出的仍是原章内容，落地重建后才跳变成上一章末页（已踩坑）。
+                // 底层静止区保险：用「落点页」（下一章第 1 页 = underEl）位图铺 wrapper 背景
+                // （与 simOnFlipStart 同理）。单页模式 p1 被 turn.js 隐藏、露出的正是这层背景，
+                // 铺错就演成「卷完还停在原页」→ 落地重建才跳变。
                 try {
-                    var url;
-                    if (forward) {
-                        var uimg = underEl.find('img')[0];
-                        url = (uimg && uimg.src) || frontUrl;
-                    } else {
-                        url = frontUrl;
-                    }
+                    var uimg = underEl.find('img')[0];
+                    var url = (uimg && uimg.src) || frontUrl;
                     var styleEl = document.getElementById('simUnderPageStyle');
                     if (!styleEl) {
                         styleEl = document.createElement('style');
@@ -2269,6 +2461,31 @@ function ensureSimulationPages(centerIdx) {
 }
 
 /**
+ * 无动画把 canvas 的书本摆到第 i 页（0 起）—— 与 htmlSimPlace 同一口径：turn.js 的 page()
+ * 只在「初始化那趟（done=false）」或目标已在当前视图里才走 _fitPage（原地摆），否则一律
+ * _turnPage 演一次卷页。「书页翻回来」落位那一下要的是摆不是翻（flipback 的纸面此刻已经
+ * 整屏盖住，摆页藏在纸面之下，撤掉纸面时底下就是新页）。
+ * _fitPage 只发 turned 不发 turning，而本路的 turned 不上报页码，所以这里补一次 notify。
+ */
+function simPlaceCanvas(i) {
+    var fb = $('#flipbook');
+    var d = fb.length && fb.data();
+    if (!d) return false;
+    var wasDone = d.done;
+    d.done = false;
+    try {
+        fb.turn('page', i + 1);
+    } catch (e) {
+        d.done = wasDone;
+        return false;
+    }
+    d.done = wasDone;
+    currentPage = Math.max(0, Math.min((pages ? pages.length : 1) - 1, i));
+    notifyJavaPageChange();
+    return true;
+}
+
+/**
  * 立即按当前配色重建仿真书页（不走防抖）。
  * 供「日夜渐变收尾」这类必须精确定时的场景使用：仿真页的内容是「整页渲染位图」，
  * 只能靠重建来换色，防抖会把它推迟到调用结束后 80ms 才执行。
@@ -2558,6 +2775,9 @@ var DRAG_COMMIT_RATIO = 0.2;      // 松手完成翻页所需的最小滑动比�
 var DRAG_BOUNDARY_RATIO = 0.2;    // 章节边界触发换章的最小滑动比例
 var DRAG_FLICK_MIN_RATIO = 0.08;  // 按速度判定甩动时的最小滑动比例（防点击抖动误翻）
 var DRAG_COMMIT_VELOCITY = 0.45;  // px/ms：快速甩动时降低距离要求
+var FLIPBACK_BAND0 = 0.163;       // 「书页翻回来」那道卷在 p=0 的带宽 = 视口宽的 16.3%
+var FLIPBACK_BAND1 = 0.367;       // 随进度线性加宽的那一档：带宽 = BAND0 + BAND1·p（p=1 时 53%）
+                                  // 两档都取自前翻真帧的实测带宽 176→572px ÷ 1080，两向共用同一条曲线
 
 var touchStartX = 0;
 
@@ -2710,6 +2930,7 @@ function beginDrag(d, dir) {
     var b = d.base;
     var target = d.from + dir;
     var boundary = (target < 0 || target >= b.count());
+    if (d.flip) boundary = false;      // 右向起手已保证本章还有上一页（见 touchstart 的 flip 闸）
     var xt = null;
     if (boundary && b.fetchAdjacent) {
         // ✅ 邻章已预加载：拖拽直接跟手展示邻章首/末页（与普通翻页观感一致），不再做橡皮筋
@@ -2725,7 +2946,9 @@ function beginDrag(d, dir) {
     d.xt = xt;
     d.active = true;
     isAnimating = true;                 // 拖拽期间屏蔽外部翻页（音量键 / 进度条 / 自动翻页）
-    var spec = { base: b, from: d.from, to: target, dir: dir, mode: d.mode, boundary: d.boundary };
+    var spec = { base: b, from: d.from, to: target, dir: dir, mode: d.mode, boundary: d.boundary,
+                 drag: true };
+    if (d.flip) spec.flip = true;      // 仿真档右向：动画层走 flipback，不起书本的卷（见 turnBegin）
     if (xt) {
         // 邻章那一页还不在全局分页里，静止层画不到 —— 两页都只认现成节点
         spec.nodes = { from: b.pageNode(d.from), to: xt.node(target) };
@@ -2802,6 +3025,16 @@ document.addEventListener('touchstart', function (e) {
         } else {
             _simTrack = null;
         }
+        // 书本只接左向（下一页）—— turn.min.js 的 _dragCorner 对右向返回 false，卷不起来。
+        // 右向（上一页）改由动画层 flipback 演「书页翻回来」，所以这里也要立一个拖拽状态，
+        // 只是打上 flip 标记（方向分流在 touchmove）。本章首页没有上一页，不立：那一侧的横向
+        // 滑动仍归首页的章界换章判定（canvas 见 _simTapStart，HTML 见 _htmlSimSwipe）。
+        if (swipeEnabled && !isAnimating && b.count() > 1 && b.pos() > 0) {
+            drag = { base: b, mode: pageTurnMode, from: b.pos(), start: t.clientX, cross: t.clientY,
+                     active: false, failed: false, dir: 0, target: -1, boundary: false, xt: null,
+                     turn: null, raw: 0, progress: 0, lastMagn: 0, lastTs: Date.now(), velocity: 0,
+                     flip: true };
+        }
         return;
     }
     if (b.flow() === 'scroll') {                 // 连续滚动：canvas 自绘滚动，HTML 用原生滚动
@@ -2816,9 +3049,10 @@ document.addEventListener('touchstart', function (e) {
 
 document.addEventListener('touchmove', function (e) {
     if (scrollTouch) { handleScrollTouchMove(e); return; }
-    if (_simTrack) { simTrackMove(e.touches && e.touches[0]); return; }   // 仿真档只记量度，拖拽由书本自己做
     var d = drag;
-    if (!d) return;
+    // 仿真档的滑行量度照常记：flip 状态机只吃右向，左向仍归书本，松手判定要用这份量度
+    if (_simTrack) simTrackMove(e.touches && e.touches[0]);
+    if (!d) return;                                    // 除 flip 外，仿真档的拖拽不由本状态机管
     var t = e.touches && e.touches[0];
     if (!t) return;
     var delta = t.clientX - d.start;
@@ -2826,7 +3060,15 @@ document.addEventListener('touchmove', function (e) {
         if (d.failed) return;
         // 方向判定：横向位移要明显大于纵向，且越过起手势阈值
         if (Math.abs(delta) < DRAG_SLOP || Math.abs(delta) <= Math.abs(t.clientY - d.cross)) return;
-        if (isAnimating || !d.base.count() || !dragMode() || !swipeEnabled) { drag = null; return; }
+        if (d.flip) {
+            // 左向（delta<0，下一页）交回书本起卷，本状态机退出这一手势：书本那套 _pressPoint
+            // 一直没被消费，它在同一帧自己起卷，两边不抢。右向（上一页）才由 flipback 演「书页翻回来」。
+            if (delta < 0) { drag = null; return; }
+            if (isAnimating || !d.base.count() || !swipeEnabled) { drag = null; return; }
+        } else if (isAnimating || !d.base.count() || !dragMode() || !swipeEnabled) {
+            drag = null;
+            return;
+        }
         beginDrag(d, delta < 0 ? 1 : -1);
         if (!d.active) return;
     }
